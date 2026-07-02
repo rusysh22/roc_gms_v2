@@ -157,8 +157,8 @@ Tasks:
 
 - [x] Event Admin Workspace with readiness checklist.
 - [x] Scheduler Workspace with match queue.
-- [ ] Scheduler calendar integration.
-- [ ] Scheduler conflict warning foundation.
+- [x] Scheduler calendar/list lane foundation.
+- [x] Scheduler conflict warning foundation.
 - [x] Match Officer Workspace for mobile.
 - [x] Content Admin Workspace shell.
 

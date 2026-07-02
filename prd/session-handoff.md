@@ -3,7 +3,7 @@
 Last updated: 2026-07-02  
 Branch: `codex/phase-0-1-baseline`  
 Current phase: Phase 3 operational workspace foundation complete  
-Current status: Custom workspace shells for Event Admin, Scheduler, Match Officer, and Content Admin are implemented and verified locally; Payload Admin remains the backoffice/fallback  
+Current status: Custom workspace shells for Event Admin, Scheduler, Match Officer, and Content Admin are implemented and verified locally. Scheduler now has a calendar/list lane foundation and a non-blocking conflict warning summary. Payload Admin remains the backoffice/fallback. Ready to start Phase 4 (match detail + match operations).  
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -20,68 +20,95 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added a minimal custom Event Admin Workspace at `/workspaces/event-admin`.
-- Added a minimal custom Scheduler Workspace at `/workspaces/scheduler` using the existing scheduled/unscheduled match queue.
-- Added Scheduler filters by sport, category, venue, court, and status using URL query parameters.
-- Added a minimal mobile-first Match Officer Workspace at `/workspaces/match-officer` with large match-day focus areas and assigned match list.
-- Added a minimal Content Admin Workspace shell at `/workspaces/content-admin`.
-- Added shared workspace display helpers for match cards, stats, date formatting, relationship labels, and navigation.
-- Updated the foundation home page with clear links to all operational workspaces, public schedule, Payload backoffice, and health check.
-- Redirected the older `/scheduler/queue` path to the new Scheduler Workspace.
-- Kept Payload Admin as the backoffice/fallback only; workspace pages are custom frontend routes.
-- Did not implement drag-and-drop calendar, advanced conflict detection, score input, uploads, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or email/calendar invite.
+- Added a minimal calendar/list lane foundation to the Scheduler Workspace: scheduled matches are
+  grouped by local (Asia/Bangkok) calendar day, then by venue lane, and shown as scannable time-
+  ordered cards. No drag-and-drop or mutation, matching the phase scope.
+- Added a Conflict Warnings summary panel to the Scheduler Workspace covering:
+  - Same venue/court at overlapping time.
+  - Same participant at overlapping time, matched by entry id and by underlying player/team/club id
+    so the same person/team/club entered under a different `CompetitionEntry` (e.g. singles vs.
+    doubles) is still caught.
+  - Missing venue/court/start time for matches whose status implies scheduling should already be
+    set (`scheduled`, `published`, `check_in_open`, `ready_to_start`, `ongoing`, `paused`,
+    `under_review`, `finished`, `result_published`, `disputed`).
+  - `scheduled_end_at` before `scheduled_start_at`.
+- Conflict detection runs against the full match dataset (up to 300 docs, unfiltered) so an active
+  filter never hides a real conflict; the queue/calendar view underneath still respects filters.
+  Conflicts are informational only and never block any action (there is no scheduling mutation yet
+  to block).
+- Extended shared workspace helpers (`workspaceComponents.tsx`) with `EntryDoc` (entry with
+  `club_id`/`team_id`/`player_id`), `formatTimeOnly`, `formatDateLabel`, and `getDateKey` to support
+  lane grouping and participant identity matching.
+- Added `src/app/(frontend)/workspaces/scheduler/conflicts.ts` with a pure `detectScheduleConflicts`
+  function and `ConflictWarning` type, kept separate from the page component.
+- Verified the conflict detector against a synthetic multi-match scenario (all four conflict types
+  plus a clean control match) using a throwaway `tsx`-executed script, then deleted the script.
+- Kept URL-based filters (sport/category/venue/court/status) working unchanged.
+- Did not implement drag-and-drop calendar, a real scheduling mutation workflow, advanced conflict
+  detection (match officer overlap, rest time, category-specific rules), score input, documentation
+  upload, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public
+  edit mode, or email/calendar invite.
 
 Changed files:
 
-- `src/app/(frontend)/page.tsx`
-- `src/app/(frontend)/scheduler/queue/page.tsx`
-- `src/app/(frontend)/styles.css`
-- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
-- `src/app/(frontend)/workspaces/event-admin/page.tsx`
 - `src/app/(frontend)/workspaces/scheduler/page.tsx`
-- `src/app/(frontend)/workspaces/match-officer/page.tsx`
-- `src/app/(frontend)/workspaces/content-admin/page.tsx`
+- `src/app/(frontend)/workspaces/scheduler/conflicts.ts` (new)
+- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
+- `src/app/(frontend)/styles.css`
 - `prd/implementation-plan.md`
+- `prd/decision-log.md`
 - `prd/session-handoff.md`
 
 Decisions:
 
-- Workspace routes live under `/workspaces/*` to make role pages easy to find and keep Payload Admin visually separate as fallback/backoffice.
-- Scheduler filtering is server-rendered and URL-based for this foundation phase; no client-side calendar, drag-and-drop, or mutation workflow was added.
-- Match Officer UI is read-only for now and prioritizes mobile readability with large cards and future action placeholders.
-- Content Admin remains a shell backed by existing event/match data because Article and Announcement collections are intentionally deferred.
-- Did not update `prd/decision-log.md`; no new durable product or architecture decision was needed.
+- Recorded D010 in `prd/decision-log.md`: Scheduler conflict warnings are advisory-only for this
+  phase, computed across the full match dataset regardless of the active filter, and never block
+  scheduling actions since no scheduling mutation workflow exists yet.
+- Calendar lanes are grouped by venue name (not court) within each calendar day; this keeps the
+  lane count readable for the current demo data size. Court-level detail still shows on each match
+  card and in the conflict messages.
+- Marked "Scheduler calendar integration" and "Scheduler conflict warning foundation" as complete
+  in `prd/implementation-plan.md` Phase 3 at the foundation level described in this session's task
+  (list/lane view + advisory warnings), not the full FullCalendar drag-and-drop experience described
+  in PRD section 14.2 — that remains a later-phase upgrade.
 
 Tests / Verification:
 
-- `npm.cmd run typecheck` passed.
-- `npm.cmd run build` passed.
-- Direct `npm.cmd run seed` failed because local shell environment does not provide `PAYLOAD_SECRET`; Docker seed path is the supported local verification path.
-- `docker compose run --rm app npm run seed` passed.
-- Reran `docker compose run --rm app npm run seed` successfully; seed remained duplicate-safe.
-- `docker compose up -d app` started the app service.
-- Public/custom routes returned HTTP 200:
+- `npm run typecheck` passed.
+- `npm run build` passed; all routes compiled, including the four workspace routes.
+- `docker compose run --rm app npm run seed` passed twice in a row with no errors, confirming the
+  seed remains duplicate-safe after this session's changes.
+- `docker compose restart app` picked up the new code (dev container mounts source directly).
+- HTTP 200 verified for all required routes:
   - `/`
   - `/schedule`
   - `/workspaces/event-admin`
   - `/workspaces/scheduler`
   - `/workspaces/match-officer`
   - `/workspaces/content-admin`
-- Scheduler filter route returned HTTP 200:
-  - `/workspaces/scheduler?status=published`
-- Legacy queue route redirects:
-  - `/scheduler/queue` returned HTTP 307 to `/workspaces/scheduler`
+- Confirmed `/workspaces/scheduler` renders both new sections ("Conflict Warnings", "Calendar
+  Lanes") and that the calendar lane items render for the 4 seeded scheduled matches.
+- Confirmed the conflict panel correctly shows the empty state ("No conflicts detected across
+  current matches") against the current clean demo seed data.
+- Ran a throwaway `tsx` script against `detectScheduleConflicts` with synthetic overlapping matches
+  and confirmed all four conflict types fire correctly (venue/court overlap, participant/team
+  overlap via shared `team_id`, missing schedule fields on a `published` match, and an inverted
+  end/start time), with zero false positives on a non-overlapping control match. Script was deleted
+  after verification; it is not part of the committed change set.
 
 Pending:
 
-- Scheduler calendar integration.
-- Conflict warning foundation.
+- Drag-and-drop calendar editing.
+- Real scheduling mutation workflow (create/update schedule assignments from the workspace UI).
+- Advanced conflict detection: match officer overlap, minimum rest time between matches,
+  category-specific constraints.
 - Public schedule filters by sport/category/venue/club/team/player/status.
 - Public match detail page.
-- Match Officer score input and match lifecycle actions.
+- Match Officer score input and match lifecycle actions (start/pause/finish/postpone/etc).
 - Event Admin setup wizard and richer participant management workflow.
 - Content Admin Article and Announcement collections/UI.
-- Standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and advanced conflict detection remain intentionally out of scope.
+- Standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit
+  mode, email/calendar invite remain intentionally out of scope.
 
 Blockers:
 
@@ -90,7 +117,7 @@ Blockers:
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Continue Phase 3 only: add a minimal Scheduler calendar/list lane foundation and basic conflict warning summary if clean, but do not implement drag-and-drop calendar, advanced conflict detection, score input, uploads, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or email/calendar invite yet. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 3 operational workspaces are now complete. Start Phase 4 - Match Operations: add a match detail page (public read-only view plus an admin panel reachable from the Scheduler/Match Officer workspaces) using existing match, participant, venue, court, and schedule fields. Keep it read-focused for this session; do not implement score input, match lifecycle mutations, documentation upload, or audit logging yet unless explicitly asked. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template

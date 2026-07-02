@@ -183,6 +183,31 @@ Impact:
 
 Avoid overengineering the editor in MVP.
 
+### D010 - Scheduler conflict warnings are advisory-only in the foundation phase
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+The Scheduler Workspace conflict warning foundation checks venue/court overlap, participant
+(entry/player/team/club) overlap, missing venue/court/time on scheduled-like matches, and inverted
+schedule end/start times. Conflicts are computed across all matches regardless of the active filter
+bar, but are shown only as warnings and never block scheduling actions.
+
+Reason:
+
+The PRD documents conflict detection as required for the Scheduler Workspace, but drag-and-drop
+scheduling and a real scheduling mutation workflow are out of scope for this phase, so there is no
+write action to block yet. Computing conflicts across the full dataset (not just the filtered view)
+avoids hiding real conflicts behind an active filter.
+
+Impact:
+
+A later phase must decide whether conflicts should block publish/reschedule actions once a
+scheduling mutation workflow exists, and whether advanced constraints (match officer overlap, rest
+time, category-specific rules) are added to the same detector or a new one.
+
 ## 3. Pending Decisions
 
 - Decide whether public comments require login.

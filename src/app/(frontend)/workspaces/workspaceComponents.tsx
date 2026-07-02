@@ -4,6 +4,12 @@ export type RelationshipDoc = {
   display_name?: string
 }
 
+export type EntryDoc = RelationshipDoc & {
+  club_id?: RelationshipDoc | string | number | null
+  team_id?: RelationshipDoc | string | number | null
+  player_id?: RelationshipDoc | string | number | null
+}
+
 export type WorkspaceMatch = {
   id: string | number
   match_number: string
@@ -16,8 +22,8 @@ export type WorkspaceMatch = {
   documentation_status?: string | null
   sport_id?: RelationshipDoc | string | number | null
   category_id?: RelationshipDoc | string | number | null
-  participant_a_entry_id?: RelationshipDoc | string | number | null
-  participant_b_entry_id?: RelationshipDoc | string | number | null
+  participant_a_entry_id?: EntryDoc | string | number | null
+  participant_b_entry_id?: EntryDoc | string | number | null
   venue_id?: RelationshipDoc | string | number | null
   court_id?: RelationshipDoc | string | number | null
 }
@@ -66,6 +72,43 @@ export const formatDateTime = (value?: string | null) => {
 
 export const formatStatus = (value?: string | null) =>
   value ? value.replaceAll('_', ' ') : 'not set'
+
+export const formatTimeOnly = (value?: string | null) => {
+  if (!value) {
+    return '--:--'
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    timeStyle: 'short',
+    timeZone: 'Asia/Bangkok',
+  }).format(new Date(value))
+}
+
+export const formatDateLabel = (value?: string | null) => {
+  if (!value) {
+    return 'Unscheduled'
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Asia/Bangkok',
+  }).format(new Date(value))
+}
+
+export const getDateKey = (value?: string | null) => {
+  if (!value) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
 
 export const toOptions = (docs: unknown[]): WorkspaceOption[] =>
   docs

@@ -8,8 +8,13 @@ import {
   WorkspaceMatch,
   WorkspaceNav,
   WorkspaceOption,
+  formatDateLabel,
+  formatTimeOnly,
+  getDateKey,
+  getRelationshipLabel,
   toOptions,
 } from '../workspaceComponents'
+import { ConflictWarning, detectScheduleConflicts } from './conflicts'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +71,7 @@ export default async function SchedulerWorkspacePage({
   if (status) filterClauses.push({ status: { equals: status } })
 
   const where = filterClauses.length > 0 ? { and: filterClauses } : undefined
-  const [matches, sports, categories, venues, courts] = await Promise.all([
+  const [matches, sports, categories, venues, courts, allMatches] = await Promise.all([
     payload.find({
       collection: 'matches',
       depth: 2,
@@ -78,6 +83,12 @@ export default async function SchedulerWorkspacePage({
     payload.find({ collection: 'competition-categories', limit: 100, sort: 'name' }),
     payload.find({ collection: 'venues', limit: 100, sort: 'name' }),
     payload.find({ collection: 'courts', limit: 100, sort: 'name' }),
+    payload.find({
+      collection: 'matches',
+      depth: 2,
+      limit: 300,
+      sort: 'scheduled_start_at',
+    }),
   ])
 
   const queueMatches = matches.docs as WorkspaceMatch[]
@@ -90,6 +101,37 @@ export default async function SchedulerWorkspacePage({
     }),
   )
 
+  const conflicts = detectScheduleConflicts(allMatches.docs as WorkspaceMatch[])
+  const alertConflicts = conflicts.filter((conflict) => conflict.severity === 'alert')
+
+  const dayKeys = Array.from(
+    new Set(
+      scheduledMatches
+        .map((match) => getDateKey(match.scheduled_start_at))
+        .filter((key): key is string => Boolean(key)),
+    ),
+  ).sort()
+
+  const dayLanes = dayKeys.map((dayKey) => {
+    const dayMatches = scheduledMatches.filter(
+      (match) => getDateKey(match.scheduled_start_at) === dayKey,
+    )
+    const laneLabels = Array.from(
+      new Set(dayMatches.map((match) => getRelationshipLabel(match.venue_id, 'Unassigned venue'))),
+    )
+
+    return {
+      dayKey,
+      dateLabel: formatDateLabel(dayMatches[0]?.scheduled_start_at),
+      lanes: laneLabels.map((label) => ({
+        label,
+        matches: dayMatches.filter(
+          (match) => getRelationshipLabel(match.venue_id, 'Unassigned venue') === label,
+        ),
+      })),
+    }
+  })
+
   return (
     <main className="workspace-shell">
       <WorkspaceNav />
@@ -98,8 +140,9 @@ export default async function SchedulerWorkspacePage({
         <p className="eyebrow">Scheduler Workspace</p>
         <h1 id="scheduler-title">Schedule Command Queue</h1>
         <p className="summary">
-          A practical queue for generated unscheduled matches and scheduled demo matches. Calendar
-          drag-and-drop and advanced conflict checks are intentionally left for a later phase.
+          A practical queue and calendar lane view for generated unscheduled matches and scheduled
+          demo matches. Conflict warnings are informational only for this phase; drag-and-drop
+          calendar editing and advanced conflict checks are left for a later phase.
         </p>
         <div className="actions">
           <a href="/admin/collections/matches">Backoffice Matches</a>
@@ -111,7 +154,67 @@ export default async function SchedulerWorkspacePage({
         <StatBlock label="Visible Matches" value={queueMatches.length} />
         <StatBlock label="Unscheduled" value={unscheduledMatches.length} tone="warn" />
         <StatBlock label="Scheduled" value={scheduledMatches.length} tone="good" />
-        <StatBlock label="Filters" value={filterClauses.length} />
+        <StatBlock
+          label="Conflicts"
+          value={conflicts.length}
+          tone={alertConflicts.length > 0 ? 'alert' : conflicts.length > 0 ? 'warn' : 'good'}
+        />
+      </section>
+
+      <section className="conflict-panel" aria-label="Conflict warnings">
+        <div className="queue-heading">
+          <h2>Conflict Warnings</h2>
+          <span>{conflicts.length}</span>
+        </div>
+        <p className="conflict-panel__note">
+          Warnings only. Nothing is blocked from being scheduled yet. Checked across all matches,
+          not just the current filter.
+        </p>
+        {conflicts.length === 0 ? (
+          <p className="empty-state">No conflicts detected across current matches.</p>
+        ) : (
+          <ul className="conflict-list">
+            {conflicts.map((conflict: ConflictWarning) => (
+              <li key={conflict.id} className={`conflict-item conflict-item--${conflict.severity}`}>
+                {conflict.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="workspace-panel calendar-lane-panel" aria-label="Calendar lane view">
+        <h2>Calendar Lanes</h2>
+        {dayLanes.length === 0 ? (
+          <p className="empty-state">No scheduled matches yet to display on the calendar.</p>
+        ) : (
+          dayLanes.map((day) => (
+            <div className="calendar-day" key={day.dayKey}>
+              <h3>{day.dateLabel}</h3>
+              <div className="calendar-lanes">
+                {day.lanes.map((lane) => (
+                  <div className="calendar-lane" key={lane.label}>
+                    <p className="calendar-lane__label">{lane.label}</p>
+                    <div className="calendar-lane__items">
+                      {lane.matches.map((match) => (
+                        <div className="calendar-lane__item" key={match.id}>
+                          <span className="calendar-lane__time">
+                            {formatTimeOnly(match.scheduled_start_at)}
+                          </span>
+                          <strong>{match.match_number}</strong>
+                          <span>
+                            {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                            {getRelationshipLabel(match.participant_b_entry_id)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
       </section>
 
       <form className="filter-bar" action="/workspaces/scheduler">
