@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 2 match generation and schedule queue foundations complete  
+Status: Phase 3 operational workspace foundation complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -155,19 +155,19 @@ Build the first custom admin workspaces.
 
 Tasks:
 
-- [ ] Event Admin Workspace with readiness checklist.
-- [ ] Scheduler Workspace with match queue.
+- [x] Event Admin Workspace with readiness checklist.
+- [x] Scheduler Workspace with match queue.
 - [ ] Scheduler calendar integration.
 - [ ] Scheduler conflict warning foundation.
-- [ ] Match Officer Workspace for mobile.
-- [ ] Content Admin Workspace shell.
+- [x] Match Officer Workspace for mobile.
+- [x] Content Admin Workspace shell.
 
 Acceptance criteria:
 
-- [ ] Event Admin can see event setup progress.
-- [ ] Scheduler can see scheduled and unscheduled matches.
-- [ ] Match Officer can open assigned match list on mobile.
-- [ ] Workspaces are more visual than generic CRUD.
+- [x] Event Admin can see event setup progress.
+- [x] Scheduler can see scheduled and unscheduled matches.
+- [x] Match Officer can open assigned match list on mobile.
+- [x] Workspaces are more visual than generic CRUD.
 
 Suggested commit:
 

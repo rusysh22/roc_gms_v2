@@ -1,9 +1,9 @@
 # ROC GMS V2 - Session Handoff
 
 Last updated: 2026-07-02  
-Branch: `master`  
-Current phase: Phase 2 match generation and schedule queue foundations complete  
-Current status: Payload scheduling collections, deterministic match generation, seeded demo matches, public schedule, and minimal scheduler queue are implemented and verified locally  
+Branch: `codex/phase-0-1-baseline`  
+Current phase: Phase 3 operational workspace foundation complete  
+Current status: Custom workspace shells for Event Admin, Scheduler, Match Officer, and Content Admin are implemented and verified locally; Payload Admin remains the backoffice/fallback  
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -20,83 +20,67 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added a reusable match generation module at `src/lib/matchGeneration.ts`.
-- Added deterministic round-robin/group-stage pairing generation.
-- Added deterministic single-elimination first-round pairing generation with byes handled by seeding.
-- Added `generation_source` and `generation_key` fields to `matches` so generated matches can be traced and seeded without duplication.
-- Updated the demo seed to create generated match queue items after manual demo matches.
-- Seed generation now skips pairings that already exist in the same stage/group, so manual demo matches are not duplicated.
-- Expanded ROC Olympic 2026 generated demo matches:
-  - 1 generated Badminton Men Single first-round match.
-  - 4 generated Futsal Men group-stage round-robin matches.
-  - 0 generated Badminton Mixed Double duplicates because the only pair already exists as a manual scheduled match.
-- Added a minimal custom queue page at `/scheduler/queue` that splits matches into unscheduled and scheduled columns.
-- Kept Payload Admin as the backoffice/fallback and kept the queue page intentionally small for Phase 3 Scheduler Workspace reuse.
+- Added a minimal custom Event Admin Workspace at `/workspaces/event-admin`.
+- Added a minimal custom Scheduler Workspace at `/workspaces/scheduler` using the existing scheduled/unscheduled match queue.
+- Added Scheduler filters by sport, category, venue, court, and status using URL query parameters.
+- Added a minimal mobile-first Match Officer Workspace at `/workspaces/match-officer` with large match-day focus areas and assigned match list.
+- Added a minimal Content Admin Workspace shell at `/workspaces/content-admin`.
+- Added shared workspace display helpers for match cards, stats, date formatting, relationship labels, and navigation.
+- Updated the foundation home page with clear links to all operational workspaces, public schedule, Payload backoffice, and health check.
+- Redirected the older `/scheduler/queue` path to the new Scheduler Workspace.
+- Kept Payload Admin as the backoffice/fallback only; workspace pages are custom frontend routes.
+- Did not implement drag-and-drop calendar, advanced conflict detection, score input, uploads, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or email/calendar invite.
 
 Changed files:
 
-- `src/lib/matchGeneration.ts`
-- `src/collections/Matches.ts`
-- `src/seed/index.ts`
-- `src/seed/data/demoScenario.ts`
-- `src/app/(frontend)/scheduler/queue/page.tsx`
 - `src/app/(frontend)/page.tsx`
+- `src/app/(frontend)/scheduler/queue/page.tsx`
 - `src/app/(frontend)/styles.css`
+- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
+- `src/app/(frontend)/workspaces/event-admin/page.tsx`
+- `src/app/(frontend)/workspaces/scheduler/page.tsx`
+- `src/app/(frontend)/workspaces/match-officer/page.tsx`
+- `src/app/(frontend)/workspaces/content-admin/page.tsx`
 - `prd/implementation-plan.md`
 - `prd/session-handoff.md`
 
-Also still present from the previous Phase 2A work in the uncommitted worktree:
-
-- `payload.config.ts`
-- `src/access/roles.ts`
-- `src/collections/Rulesets.ts`
-- `src/collections/Stages.ts`
-- `src/collections/Groups.ts`
-- `src/collections/MatchSets.ts`
-- `src/collections/Sports.ts`
-- `src/collections/CompetitionCategories.ts`
-- `src/app/(frontend)/schedule/page.tsx`
-- `src/app/(payload)/admin/importMap.js`
-
 Decisions:
 
-- Kept generation simple: pairings are deterministic seeds for match creation, not bracket state, standings, or winner advancement.
-- Round-robin generation creates all unique entry pairings for a category/group.
-- Single-elimination generation creates only first-round playable matches; byes are implicit and do not create bracket advancement.
-- Generated matches are seeded as `ready_for_scheduling`, `is_public: false`, and without venue/court/time so they naturally appear in the unscheduled queue.
+- Workspace routes live under `/workspaces/*` to make role pages easy to find and keep Payload Admin visually separate as fallback/backoffice.
+- Scheduler filtering is server-rendered and URL-based for this foundation phase; no client-side calendar, drag-and-drop, or mutation workflow was added.
+- Match Officer UI is read-only for now and prioritizes mobile readability with large cards and future action placeholders.
+- Content Admin remains a shell backed by existing event/match data because Article and Announcement collections are intentionally deferred.
 - Did not update `prd/decision-log.md`; no new durable product or architecture decision was needed.
 
 Tests / Verification:
 
 - `npm.cmd run typecheck` passed.
 - `npm.cmd run build` passed.
+- Direct `npm.cmd run seed` failed because local shell environment does not provide `PAYLOAD_SECRET`; Docker seed path is the supported local verification path.
 - `docker compose run --rm app npm run seed` passed.
-- Reran `docker compose run --rm app npm run seed` successfully; no new generated matches were created on the second run.
-- Payload Admin match collection route returned HTTP 200:
-  - `/admin/collections/matches`
+- Reran `docker compose run --rm app npm run seed` successfully; seed remained duplicate-safe.
+- `docker compose up -d app` started the app service.
 - Public/custom routes returned HTTP 200:
+  - `/`
   - `/schedule`
-  - `/scheduler/queue`
-- Public API counts verified:
-  - `matches`: 9
-  - `unscheduled matches`: 5
-  - `round_robin generated matches`: 4
-  - `single_elimination generated matches`: 1
-- Database counts verified:
-  - `manual`: 4
-  - `round_robin`: 4
-  - `single_elimination`: 1
-  - `scheduled`: 4
-  - `unscheduled`: 5
+  - `/workspaces/event-admin`
+  - `/workspaces/scheduler`
+  - `/workspaces/match-officer`
+  - `/workspaces/content-admin`
+- Scheduler filter route returned HTTP 200:
+  - `/workspaces/scheduler?status=published`
+- Legacy queue route redirects:
+  - `/scheduler/queue` returned HTTP 307 to `/workspaces/scheduler`
 
 Pending:
 
-- Full Scheduler Workspace UI.
 - Scheduler calendar integration.
 - Conflict warning foundation.
 - Public schedule filters by sport/category/venue/club/team/player/status.
 - Public match detail page.
-- Match Officer workspace and score input.
+- Match Officer score input and match lifecycle actions.
+- Event Admin setup wizard and richer participant management workflow.
+- Content Admin Article and Announcement collections/UI.
 - Standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and advanced conflict detection remain intentionally out of scope.
 
 Blockers:
@@ -106,7 +90,7 @@ Blockers:
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Start Phase 3 only: build a minimal custom Scheduler Workspace shell using the existing generated match queue, with filters by sport/category/venue/court/status if clean, but do not implement drag-and-drop calendar, advanced conflict detection, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or email/calendar invite yet. Run typecheck, production build, seed duplicate-safety verification, relevant route/API checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Continue Phase 3 only: add a minimal Scheduler calendar/list lane foundation and basic conflict warning summary if clean, but do not implement drag-and-drop calendar, advanced conflict detection, score input, uploads, standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or email/calendar invite yet. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template

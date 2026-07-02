@@ -4,19 +4,21 @@ const foundationItems = [
   'PostgreSQL adapter',
   'Docker Compose services',
   'Admin auth and roles',
-  'Site config collection',
-  'Seed command structure',
+  'Event structure collections',
+  'Scheduling foundations',
+  'Operational workspace shells',
 ]
 
 export default function HomePage() {
   return (
     <main className="page-shell">
       <section className="status-panel" aria-labelledby="page-title">
-        <p className="eyebrow">Phase 0 Foundation</p>
+        <p className="eyebrow">ROC GMS Foundation</p>
         <h1 id="page-title">ROC Game Management System V2</h1>
         <p className="summary">
-          The project foundation is ready for local development. Payload Admin is available
-          as the backoffice base while custom operational workspaces are planned for later phases.
+          The project foundation now has custom operational workspaces for event setup,
+          scheduling, match-day officers, and content operations. Payload Admin remains available
+          as the backoffice fallback.
         </p>
 
         <div className="status-grid" aria-label="Foundation status">
@@ -29,9 +31,12 @@ export default function HomePage() {
         </div>
 
         <div className="actions">
-          <a href="/admin">Open Admin</a>
+          <a href="/workspaces/event-admin">Event Admin</a>
+          <a href="/workspaces/scheduler">Scheduler</a>
+          <a href="/workspaces/match-officer">Match Officer</a>
+          <a href="/workspaces/content-admin">Content Admin</a>
           <a href="/schedule">Public Schedule</a>
-          <a href="/scheduler/queue">Match Queue</a>
+          <a href="/admin">Backoffice</a>
           <a href="/api/health">Health Check</a>
         </div>
       </section>
