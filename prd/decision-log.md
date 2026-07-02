@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D013 added)
+Last updated: 2026-07-02 (D014 added)
 
 ## 1. Purpose
 
@@ -332,6 +332,47 @@ still-open workspace authentication gap (D011) before audit logs are trustworthy
 accountability. `documentation-assets` also inherits the same "collection read access does not
 enforce visibility" gap already accepted for `matches` in D011 — a direct `/api/documentation-assets`
 query still returns internal-visibility rows; only the Next.js pages respect the split.
+
+### D014 - Comments are generic entity comments; Phase 4D writes only internal comments and official notes from match detail
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+`Comment` (`comments`) is a generic Payload collection with `entity_type`, text `entity_id`,
+`comment_type` (`public`, `internal`, `official_note`), `author_name`, optional `author_user_id`,
+`body`, `status` (`pending`, `approved`, `hidden`, `resolved`, `deleted`), `is_pinned`,
+`resolved_at`, and optional self-referencing `parent_comment_id`. For Phase 4D, match comments target
+`entity_type = "matches"` and `entity_id = String(match.id)`. The admin match detail page at
+`/workspaces/matches/[matchNumber]` can create only `internal` comments and `official_note` comments
+through a Server Action. Internal comments default to `pending`; official notes default to
+`approved`. Both are shown in the admin page's Internal Comments panel, with status and pinned state.
+
+Public comment submission was intentionally deferred. The public match detail page only renders
+comments where `comment_type === "public"` and `status === "approved"`. The seed adds one
+duplicate-safe approved public comment for `ROC-BMS-001` so this visibility rule can be verified
+without implementing public submission or moderation UI.
+
+Creating an internal comment or official note writes a best-effort audit row via the existing
+`recordAuditLog` helper using `action = "comment.<type>.create"` and `entity_type = "comments"`.
+The admin match audit history includes audit rows for match comments in addition to match and
+match-set changes.
+
+Reason:
+
+The generic comment target model matches the PRD's future targets (match, article, announcement,
+documentation asset, event) without adding per-target collections. Keeping public submission out of
+Phase 4D avoids building an incomplete moderation flow while still proving that approved public
+comments can render safely.
+
+Impact:
+
+Future public comment submission and moderation can build on the same collection, but must add
+anti-spam, moderation workflow, and public write access deliberately. Like earlier workspace
+mutations, comment creation can resolve `author_user_id` only when a Payload session exists; until
+workspace authentication is added, manual workspace comments may still have no authenticated user
+actor in audit logs.
 
 ## 3. Pending Decisions
 

@@ -1013,6 +1013,125 @@ h1 {
   font: inherit;
 }
 
+.comment-list {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.comment-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.comment-item--pinned {
+  border-color: #b8d5c2;
+  background: #eef7f0;
+}
+
+.comment-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.comment-item__type,
+.comment-item__pin,
+.comment-item__status {
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.comment-item__type {
+  color: var(--teal);
+}
+
+.comment-item__pin,
+.comment-item__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--soft-teal);
+  color: var(--teal);
+}
+
+.comment-item__status--pending,
+.comment-item__status--hidden,
+.comment-item__status--deleted {
+  background: var(--soft-red);
+  color: var(--red);
+}
+
+.comment-item__body {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.comment-item__footer {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.comment-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.comment-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.comment-form span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.comment-form input,
+.comment-form select,
+.comment-form textarea {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  font: inherit;
+}
+
+.comment-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.comment-form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.comment-form__checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-form__checkbox input {
+  min-height: auto;
+}
+
 .audit-log-list {
   display: grid;
   gap: 10px;
@@ -1146,6 +1265,10 @@ h1 {
   }
 
   .match-set-form__row {
+    grid-template-columns: 1fr;
+  }
+
+  .comment-form__row {
     grid-template-columns: 1fr;
   }
 

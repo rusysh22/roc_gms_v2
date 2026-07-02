@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 4C match documentation and audit log complete  
+Status: Phase 4D match comments complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -186,7 +186,7 @@ Tasks:
 - [x] Score input.
 - [x] Match result confirmation.
 - [x] Match documentation upload.
-- [ ] Internal comments.
+- [x] Internal comments.
 - [x] Match audit log.
 - [ ] Reschedule reason workflow.
 

@@ -324,6 +324,60 @@ export type AuditLogSummary = {
   createdAt?: string
 }
 
+export type CommentSummary = {
+  id: string | number
+  comment_type: string
+  author_name: string
+  author_user_id?: RelationshipDoc | string | number | null
+  body: string
+  status: string
+  is_pinned?: boolean | null
+  resolved_at?: string | null
+  parent_comment_id?: RelationshipDoc | string | number | null
+  createdAt?: string
+}
+
+export const CommentList = ({
+  comments,
+  showStatus = false,
+}: {
+  comments: CommentSummary[]
+  showStatus?: boolean
+}) => {
+  if (comments.length === 0) {
+    return <p className="empty-state">No comments yet.</p>
+  }
+
+  return (
+    <ul className="comment-list">
+      {comments.map((comment) => (
+        <li
+          key={comment.id}
+          className={comment.is_pinned ? 'comment-item comment-item--pinned' : 'comment-item'}
+        >
+          <div className="comment-item__meta">
+            <span className="comment-item__type">{formatStatus(comment.comment_type)}</span>
+            {comment.is_pinned ? <span className="comment-item__pin">Pinned</span> : null}
+            {showStatus ? (
+              <span className={`comment-item__status comment-item__status--${comment.status}`}>
+                {formatStatus(comment.status)}
+              </span>
+            ) : null}
+          </div>
+          <p className="comment-item__body">{comment.body}</p>
+          <p className="comment-item__footer">
+            {comment.author_name || getRelationshipLabel(comment.author_user_id, 'System / Unknown')}
+            {comment.createdAt ? <> &middot; {formatDateTime(comment.createdAt)}</> : null}
+            {comment.resolved_at ? (
+              <> &middot; Resolved {formatDateTime(comment.resolved_at)}</>
+            ) : null}
+          </p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
   if (entries.length === 0) {
     return <p className="empty-state">No audited changes yet.</p>

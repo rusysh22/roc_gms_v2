@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 
 import { AuditLogs } from './src/collections/AuditLogs'
 import { Clubs } from './src/collections/Clubs'
+import { Comments } from './src/collections/Comments'
 import { CompetitionCategories } from './src/collections/CompetitionCategories'
 import { CompetitionEntries } from './src/collections/CompetitionEntries'
 import { Courts } from './src/collections/Courts'
@@ -55,6 +56,7 @@ export default buildConfig({
     Matches,
     MatchSets,
     DocumentationAssets,
+    Comments,
     AuditLogs,
     Clubs,
     Players,

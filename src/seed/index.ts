@@ -26,6 +26,7 @@ type CollectionName =
   | 'courts'
   | 'matches'
   | 'match-sets'
+  | 'comments'
 
 type SeedPayload = Awaited<ReturnType<typeof getPayload>>
 type SeedId = string | number
@@ -199,6 +200,45 @@ const findMatchSet = async (
         {
           set_number: {
             equals: setNumber,
+          },
+        },
+      ],
+    },
+  })
+
+  return result.docs[0]
+}
+
+const findComment = async (
+  payload: SeedPayload,
+  entityType: string,
+  entityId: SeedId,
+  commentType: string,
+  body: string,
+) => {
+  const result = await payload.find({
+    collection: 'comments',
+    limit: 1,
+    where: {
+      and: [
+        {
+          entity_type: {
+            equals: entityType,
+          },
+        },
+        {
+          entity_id: {
+            equals: String(entityId),
+          },
+        },
+        {
+          comment_type: {
+            equals: commentType,
+          },
+        },
+        {
+          body: {
+            equals: body,
           },
         },
       ],
@@ -850,6 +890,28 @@ const seed = async () => {
         },
       })
     }
+  }
+
+  const publicCommentBody =
+    'Reminder from the committee: please arrive 10 minutes before warm-up for this match.'
+  const publicCommentMatchId = matchIds.get('ROC-BMS-001')
+  const existingPublicComment = publicCommentMatchId
+    ? await findComment(payload, 'matches', publicCommentMatchId, 'public', publicCommentBody)
+    : undefined
+
+  if (!existingPublicComment && publicCommentMatchId) {
+    await payload.create({
+      collection: 'comments',
+      data: {
+        entity_type: 'matches',
+        entity_id: String(publicCommentMatchId),
+        comment_type: 'public',
+        author_name: 'ROC Sports Committee',
+        body: publicCommentBody,
+        status: 'approved',
+        is_pinned: true,
+      },
+    })
   }
 
   payload.logger.info('ROC Olympic 2026 demo event structure is ready')

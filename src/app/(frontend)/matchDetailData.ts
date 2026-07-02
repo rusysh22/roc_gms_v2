@@ -70,10 +70,26 @@ export type AuditLogEntry = {
   createdAt?: string
 }
 
+export type CommentDetail = {
+  id: string | number
+  entity_type: string
+  entity_id: string
+  comment_type: string
+  author_name: string
+  author_user_id?: RelationshipDoc | string | number | null
+  body: string
+  status: string
+  is_pinned?: boolean | null
+  resolved_at?: string | null
+  parent_comment_id?: RelationshipDoc | string | number | null
+  createdAt?: string
+}
+
 export type MatchDetailResult = {
   match: MatchDetail
   matchSets: MatchSetDetail[]
   documentationAssets: DocumentationAssetDetail[]
+  comments: CommentDetail[]
 }
 
 export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailResult | null> => {
@@ -112,16 +128,32 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
     },
   })
 
+  const comments = await payload.find({
+    collection: 'comments',
+    depth: 1,
+    limit: 100,
+    sort: ['-is_pinned', '-createdAt'],
+    where: {
+      and: [
+        { entity_type: { equals: 'matches' } },
+        { entity_id: { equals: String(match.id) } },
+        { status: { in: ['pending', 'approved', 'hidden', 'resolved'] } },
+      ],
+    },
+  })
+
   return {
     match,
     matchSets: matchSets.docs as MatchSetDetail[],
     documentationAssets: documentationAssets.docs as DocumentationAssetDetail[],
+    comments: comments.docs as CommentDetail[],
   }
 }
 
 export const getMatchAuditLog = async (
   matchId: string | number,
   matchSetIds: (string | number)[],
+  commentIds: (string | number)[] = [],
 ): Promise<AuditLogEntry[]> => {
   const payload = await getPayload({ config })
 
@@ -131,6 +163,9 @@ export const getMatchAuditLog = async (
     },
     ...matchSetIds.map((setId) => ({
       and: [{ entity_type: { equals: 'match-sets' } }, { entity_id: { equals: String(setId) } }],
+    })),
+    ...commentIds.map((commentId) => ({
+      and: [{ entity_type: { equals: 'comments' } }, { entity_id: { equals: String(commentId) } }],
     })),
   ]
 

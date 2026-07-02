@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 
 import { getMatchDetail } from '../../matchDetailData'
 import {
+  CommentList,
   DocumentationAssetList,
   MatchSetsTable,
   formatDateTime,
@@ -21,9 +22,12 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
     notFound()
   }
 
-  const { match, matchSets, documentationAssets } = result
+  const { match, matchSets, documentationAssets, comments } = result
   const publicDocumentationAssets = documentationAssets.filter(
     (asset) => asset.visibility === 'public',
+  )
+  const publicComments = comments.filter(
+    (comment) => comment.comment_type === 'public' && comment.status === 'approved',
   )
 
   return (
@@ -108,6 +112,11 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
         <article className="workspace-panel">
           <h2>Documentation</h2>
           <DocumentationAssetList assets={publicDocumentationAssets} />
+        </article>
+
+        <article className="workspace-panel">
+          <h2>Comments</h2>
+          <CommentList comments={publicComments} />
         </article>
       </section>
     </main>

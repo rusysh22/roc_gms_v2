@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getMatchAuditLog, getMatchDetail } from '../../../matchDetailData'
 import {
   AuditLogPanel,
+  CommentList,
   DocumentationAssetList,
   MatchSetsTable,
   WorkspaceNav,
@@ -16,6 +17,8 @@ import { addMatchSetAction, transitionMatchStatusAction, updateMatchSetScoreActi
 import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../matchLifecycle'
 import { addDocumentationAssetAction } from '../documentationActions'
 import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../documentationErrors'
+import { addMatchCommentAction } from '../commentActions'
+import { COMMENT_ACTION_ERROR_MESSAGES } from '../commentErrors'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +38,8 @@ export default async function AdminMatchDetailPage({
   const matchErrorCode = typeof query.matchError === 'string' ? query.matchError : ''
   const docUpdated = query.docUpdated === '1'
   const docErrorCode = typeof query.docError === 'string' ? query.docError : ''
+  const commentUpdated = query.commentUpdated === '1'
+  const commentErrorCode = typeof query.commentError === 'string' ? query.commentError : ''
 
   const result = await getMatchDetail(matchNumber)
 
@@ -42,11 +47,15 @@ export default async function AdminMatchDetailPage({
     notFound()
   }
 
-  const { match, matchSets, documentationAssets } = result
+  const { match, matchSets, documentationAssets, comments } = result
   const allowedTransitions = getAllowedTransitions(match.status)
   const auditLogEntries = await getMatchAuditLog(
     match.id,
     matchSets.map((set) => set.id),
+    comments.map((comment) => comment.id),
+  )
+  const internalComments = comments.filter((comment) =>
+    ['internal', 'official_note'].includes(comment.comment_type),
   )
 
   return (
@@ -60,8 +69,8 @@ export default async function AdminMatchDetailPage({
         <h1 id="match-detail-title">{match.match_number}</h1>
         <p className="summary">
           {match.round_name || 'Match'} &middot; {formatStatus(match.status)}. Score input,
-          lifecycle actions, documentation upload, and audit history are available below. Internal
-          comments and the reschedule workflow arrive in a later phase.
+          lifecycle actions, documentation upload, internal comments, official notes, and audit
+          history are available below. The reschedule workflow arrives in a later phase.
         </p>
         <div className="actions">
           <a href="/workspaces/scheduler">Scheduler Workspace</a>
@@ -84,6 +93,14 @@ export default async function AdminMatchDetailPage({
         <p className="match-banner match-banner--error">
           {DOCUMENTATION_ACTION_ERROR_MESSAGES[docErrorCode] ||
             'The documentation upload could not be completed.'}
+        </p>
+      ) : null}
+      {commentUpdated ? (
+        <p className="match-banner match-banner--success">Comment saved.</p>
+      ) : null}
+      {commentErrorCode ? (
+        <p className="match-banner match-banner--error">
+          {COMMENT_ACTION_ERROR_MESSAGES[commentErrorCode] || 'The comment could not be saved.'}
         </p>
       ) : null}
 
@@ -290,7 +307,6 @@ export default async function AdminMatchDetailPage({
           <DocumentationAssetList assets={documentationAssets} showVisibility />
           <form
             action={addDocumentationAssetAction}
-            encType="multipart/form-data"
             className="documentation-upload-form"
           >
             <input type="hidden" name="matchNumber" value={match.match_number} />
@@ -321,6 +337,38 @@ export default async function AdminMatchDetailPage({
             </label>
             <button type="submit" className="match-action-button">
               Upload Documentation
+            </button>
+          </form>
+        </article>
+
+        <article className="workspace-panel match-detail-grid__wide">
+          <h2>Internal Comments</h2>
+          <CommentList comments={internalComments} showStatus />
+          <form action={addMatchCommentAction} className="comment-form">
+            <input type="hidden" name="matchNumber" value={match.match_number} />
+            <div className="comment-form__row">
+              <label>
+                <span>Type</span>
+                <select name="commentType" defaultValue="internal">
+                  <option value="internal">Internal Comment</option>
+                  <option value="official_note">Official Note</option>
+                </select>
+              </label>
+              <label>
+                <span>Author Name</span>
+                <input type="text" name="authorName" defaultValue="Match Desk" maxLength={120} />
+              </label>
+            </div>
+            <label>
+              <span>Body</span>
+              <textarea name="body" rows={4} maxLength={2000} required />
+            </label>
+            <label className="comment-form__checkbox">
+              <input type="checkbox" name="isPinned" />
+              <span>Pin this note</span>
+            </label>
+            <button type="submit" className="match-action-button">
+              Save Comment
             </button>
           </form>
         </article>
