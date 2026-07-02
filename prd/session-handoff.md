@@ -2,11 +2,14 @@
 
 Last updated: 2026-07-02  
 Branch: `codex/phase-0-1-baseline`  
-Current phase: Phase 4A match operations foundation complete (match detail pages)  
-Current status: Public and admin match detail pages are live, linked from the public schedule and
-from the Scheduler and Match Officer workspaces. Everything remains read-only; no score input,
-lifecycle mutation, documentation upload, or audit logging exists yet. Ready to continue Phase 4B
-(score input / match lifecycle) or Phase 4C (documentation/comments/audit) next.  
+Current phase: Phase 4B match lifecycle and score input complete  
+Current status: The admin match detail page (`/workspaces/matches/[matchNumber]`) now has working
+score input for match sets, "add set", and a whitelisted set of match lifecycle transitions with
+confirm-before-submit for destructive actions. The Match Officer Workspace has quick one-tap status
+actions for the next assigned match. All mutations were verified end-to-end (score update, one
+lifecycle transition, and public-page reflection) and the demo data was restored to its seeded state
+afterward. Still no documentation upload, comments, or audit log. Ready to continue Phase 4C
+(documentation/comments/audit) or move toward Phase 5 (standings/brackets).  
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -23,50 +26,76 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added a public match detail page at `/matches/[matchNumber]` showing participants, winner (if
-  set), schedule (start/end, venue/court), competition context (event/stage/group/round), score
-  summary text, and a match sets table. Gated on `match.is_public === true`; returns Next.js 404
-  (`notFound()`) otherwise, matching the existing public schedule's `is_public` filter.
-- Added an admin-oriented match detail page at `/workspaces/matches/[matchNumber]` with the same
-  core information plus an "Operational Status" panel (status, documentation status, generation
-  source, public/internal visibility) and actual start/end times. No visibility gating — any match
-  by number is viewable. Includes links to the Scheduler Workspace, Match Officer Workspace, the
-  Payload backoffice edit page for that match, and (when public) the public detail page. Explicitly
-  states in the page copy that score input, lifecycle actions, documentation upload, and comments
-  are not available yet.
-- Added `src/app/(frontend)/matchDetailData.ts`: a single shared server-side loader
-  (`getMatchDetail(matchNumber)`) used by both pages, fetching the match (depth 2, so participant
-  entries resolve their club/team/player, and stage/group/venue/court/category resolve as objects)
-  and its `match-sets` docs (sorted by `set_number`) in two Payload queries.
-- Added `MatchSetsTable` (set number, participant A/B score, winner, notes) and a
-  `match-card__details-link` styled anchor to `workspaceComponents.tsx`, shared by both new pages
-  and by `MatchCard`.
-- Linked to match detail pages from:
-  - `/schedule` (public): each schedule item now has a "View match details" link to
-    `/matches/{match_number}`.
-  - `/workspaces/scheduler`: `MatchCard` (used in the Unscheduled/Scheduled queue columns) now
-    renders a "Match details" link, and each Calendar Lane item is now itself a link, both pointing
-    to `/workspaces/matches/{match_number}`.
-  - `/workspaces/match-officer`: the "Next Match" focus card gained a "Match details" link, and its
-    assigned match list (`MatchCard`, compact) inherited the same link automatically.
-- Added CSS for the new detail-page layout (`match-detail-shell`, `match-detail-grid`,
-  `match-detail-grid__wide`, `match-participants--detail`, `match-winner`, `match-sets-table`) and
-  for the new link affordances, including a mobile stack for the two-column detail grid and a
-  horizontally scrollable match-sets table on small screens.
-- Did not implement score input, match lifecycle mutations (start/pause/finish/postpone/etc.),
-  documentation upload, internal comments, audit log, reschedule mutation workflow, standings,
-  brackets, winner advancement, live score, article CMS, announcement CMS, public edit mode, or
-  email/calendar invite.
+- Added `src/app/(frontend)/workspaces/matches/matchLifecycle.ts`: a data-driven whitelist of
+  allowed match status transitions (`MATCH_TRANSITIONS`), each with a `from` list, `to` status,
+  button `label`, and optional `requiresConfirm` / `requiresWinnerSelection` flags. Covers
+  `ready_to_start -> ongoing`, `ongoing -> paused`, `paused -> ongoing`, `ongoing -> finished`,
+  `finished -> result_published`, `scheduled/published -> postponed`,
+  `scheduled/published -> cancelled`, and `scheduled/published/ready_to_start -> walkover`. Also
+  exports `getAllowedTransitions(status)`, `isValidTransition(from, to)`, and a friendly
+  `MATCH_ACTION_ERROR_MESSAGES` map.
+- Added `src/app/(frontend)/workspaces/matches/matchActions.ts` (`'use server'`) with three Server
+  Actions backed by Payload's local API:
+  - `transitionMatchStatusAction` — re-validates the target status against the current status using
+    `isValidTransition` before writing (never trusts the submitted status alone); sets
+    `actual_start_at` when entering `ongoing` and `actual_end_at` when entering `finished` if not
+    already set; resolves `winnerSide` (`'a' | 'b' | ''`) to the match's real
+    `participant_a_entry_id` / `participant_b_entry_id` for `result_published` and `walkover`.
+  - `updateMatchSetScoreAction` — validates both scores are non-negative integers, resolves
+    `winnerSide` the same way for the match set's `winner_entry_id`, and updates notes.
+  - `addMatchSetAction` — creates a new `match-sets` doc with the next `set_number` (existing max +
+    1) and 0/0 starting scores.
+  - All three redirect back to `/workspaces/matches/{matchNumber}` with `?matchUpdated=1` on success
+    or `?matchError=<code>` on failure (missing data, invalid transition, invalid score, or match
+    not found), after calling `revalidatePath` on both the admin and public detail routes.
+- Added `src/app/(frontend)/workspaces/matches/ConfirmSubmitButton.tsx` (`'use client'`): a small
+  submit button that runs `window.confirm(...)` and calls `event.preventDefault()` if declined, used
+  only for the four transitions flagged `requiresConfirm`.
+- Added `getSetWinnerSide(match, set)` to `workspaceComponents.tsx`: resolves a match set's
+  `winner_entry_id` back to `'a' | 'b' | ''` for pre-selecting the winner `<select>`.
+- Rebuilt `/workspaces/matches/[matchNumber]/page.tsx`:
+  - Reads `searchParams` for `matchUpdated` / `matchError` and renders a success or error banner.
+  - Added a "Match Actions" panel that renders one `<form>` per currently-allowed transition (from
+    `getAllowedTransitions(match.status)`), each posting straight to `transitionMatchStatusAction`;
+    transitions needing a winner get an inline `<select>`, and destructive transitions render through
+    `ConfirmSubmitButton`.
+  - Added a "Score Input" panel: one editable form per existing match set (participant A/B score
+    number inputs, winner select, notes textarea, "Save Set N" button posting to
+    `updateMatchSetScoreAction`), plus an "Add Set N+1" form posting to `addMatchSetAction`.
+  - Kept the existing read-only "Score Summary" panel (`MatchSetsTable`) below the new editable
+    panel so the public-style summary view is still visible on the admin page.
+- Updated `/workspaces/match-officer/page.tsx`: the "Next Match" focus card's placeholder
+  `<span>Check-in later</span>` row was replaced with real one-tap quick-action buttons, computed as
+  `getAllowedTransitions(nextMatch.status)` filtered to the non-confirm transitions only (destructive
+  ones stay on the full admin detail page, reachable via the existing "Match details" link).
+- Added CSS for banners (`match-banner`, `--success`, `--error`), the actions panel
+  (`match-actions`, `match-action-form`, `match-action-form__winner`, `match-action-button`,
+  `--muted`), the score-input forms (`match-set-forms`, `match-set-form`, `match-set-form__row`,
+  `match-set-form__label`, `--add`), and real officer quick-action buttons
+  (`.officer-actions form { display: contents }`, `.officer-action-button`), plus mobile stacking
+  rules for the new forms.
+- Verified all three mutation paths against the running dev stack by reproducing the exact
+  progressive-enhancement form POST Next.js Server Actions render (multipart/form-data with the
+  page's `$ACTION_ID_...` hidden field), since no browser automation tool is installed in this
+  environment: updated `ROC-BMS-001`'s match set to 21-15 with a winner and a note, transitioned the
+  match `published -> postponed`, confirmed both changes appeared on the admin page immediately and
+  on the public page (`/matches/ROC-BMS-001`) since it stayed public throughout, then reset the match
+  and match set back to their original seeded values (status `published`, score 0/0, no winner,
+  original placeholder note) using a throwaway cleanup script that was deleted afterward — the
+  project's seed script only creates missing records, so it cannot undo mutations to existing ones.
+- Did not implement full live score, a full-screen score counter, realtime updates, match
+  documentation upload, internal comments, audit logging, the reschedule workflow, standings,
+  brackets, winner advancement, article CMS, announcement CMS, public edit mode, or email/calendar
+  invite.
 
 Changed files:
 
-- `src/app/(frontend)/matchDetailData.ts` (new)
-- `src/app/(frontend)/matches/[matchNumber]/page.tsx` (new)
-- `src/app/(frontend)/workspaces/matches/[matchNumber]/page.tsx` (new)
-- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
-- `src/app/(frontend)/workspaces/scheduler/page.tsx`
+- `src/app/(frontend)/workspaces/matches/matchLifecycle.ts` (new)
+- `src/app/(frontend)/workspaces/matches/matchActions.ts` (new)
+- `src/app/(frontend)/workspaces/matches/ConfirmSubmitButton.tsx` (new)
+- `src/app/(frontend)/workspaces/matches/[matchNumber]/page.tsx`
 - `src/app/(frontend)/workspaces/match-officer/page.tsx`
-- `src/app/(frontend)/schedule/page.tsx`
+- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
 - `src/app/(frontend)/styles.css`
 - `prd/implementation-plan.md`
 - `prd/decision-log.md`
@@ -74,53 +103,63 @@ Changed files:
 
 Decisions:
 
-- Recorded D011 in `prd/decision-log.md`: match detail routes are keyed by the unique
-  `match_number` field (not the internal Payload id) for shareable, human-readable URLs; the public
-  route 404s for non-public matches; the admin route has no visibility gating; both share one data
-  loader to avoid duplicating match/match-set fetch logic.
-- Kept the admin match detail route free of authentication/authorization checks, consistent with
-  every other workspace page built so far in this project (none currently check `req.user`). Session
-  gating across all workspace routes remains an open item for a future phase rather than being
-  added piecemeal to just this page.
-- Marked "Match detail public page" and "Match detail admin panel" as complete in
-  `prd/implementation-plan.md` Phase 4, and checked the "Match detail page is shareable" acceptance
-  criterion. Score input, result confirmation, documentation upload, comments, audit log, and
-  reschedule workflow remain unchecked/pending in Phase 4.
+- Recorded D012 in `prd/decision-log.md`: mutations are Next.js Server Actions (not a REST route),
+  the transition whitelist is the single source of truth re-checked server-side on every write,
+  winner selection is resolved from the match's own participant fields rather than trusting a raw
+  entry id from the client, and destructive/terminal transitions require a confirm dialog while the
+  rest are single-tap. Also notes the still-open gap: there is no audit log yet, so every mutation
+  currently overwrites state with no history of who changed what — flagged as required before this
+  is safe for concurrent multi-officer use.
+- Kept mutations free of authentication/authorization checks, consistent with every workspace page
+  built so far (D011) — still an open item for a future phase, not added piecemeal here either.
+- Match-set editing only supports editing existing sets and appending a new one with an
+  auto-incrementing `set_number`; there is no delete/reorder capability in this phase.
+- Marked "Score input" and "Match result confirmation" complete in `prd/implementation-plan.md`
+  Phase 4, and checked the "Match Officer can start and finish a match" / "Match Officer can input
+  score" acceptance criteria. Documentation upload, audit logging, comments, and the reschedule
+  workflow remain unchecked.
 
 Tests / Verification:
 
-- `npm run typecheck` passed.
-- `npm run build` passed; route list now includes `/matches/[matchNumber]` and
-  `/workspaces/matches/[matchNumber]` alongside all previously existing routes.
+- `npm run typecheck` passed (checked again after removing the temporary verification-cleanup
+  script, to confirm no dangling references were left behind).
+- `npm run build` passed; route list is unchanged from last session (Server Actions do not appear as
+  separate routes in the build output — they are bundled as RPC endpoints under the existing pages).
 - `docker compose run --rm app npm run seed` passed twice in a row with no errors (duplicate-safe).
 - `docker compose restart app` picked up the new code (dev container mounts source directly).
 - HTTP 200 verified for all required routes:
   - `/`
   - `/schedule`
-  - `/matches/ROC-BMS-001` (sample public match from the demo seed)
-  - `/workspaces/scheduler`
   - `/workspaces/match-officer`
-  - `/workspaces/matches/ROC-BMS-001` (sample admin match detail)
-- Confirmed `/matches/ROC-FUT-GA-002` (a seeded match with `is_public: false`) returns HTTP 404 on
-  the public route, while `/workspaces/matches/ROC-FUT-GA-002` still returns HTTP 200 on the admin
-  route, proving the visibility gate is working as intended on only the public page.
-- Confirmed rendered HTML for `/matches/ROC-BMS-001` includes the Participants, Competition Context,
-  and Score Summary sections and both seeded participant names (Andi Pratama, Budi Santoso).
-- Confirmed rendered HTML for `/workspaces/matches/ROC-BMS-001` includes the Operational Status
-  panel, the "View Public Page" link, and the "Edit in Backoffice" link.
-- Confirmed `/schedule`, `/workspaces/scheduler`, and `/workspaces/match-officer` each render at
-  least one link matching `/matches/ROC-...` or `/workspaces/matches/ROC-...` respectively.
+  - `/workspaces/matches/ROC-BMS-001`
+- Verified score update end-to-end: submitted a real multipart/form-data POST (reproducing the exact
+  fields and `$ACTION_ID_...` hidden input Next.js renders for progressive enhancement) to update
+  `ROC-BMS-001`'s match set to participant A 21 / participant B 15, winner "Andi Pratama", with a
+  note; got a `303` redirect to `?matchUpdated=1`; confirmed the new values rendered on
+  `/workspaces/matches/ROC-BMS-001` (inputs pre-filled, winner `<option selected>`, textarea text).
+- Verified one lifecycle transition end-to-end: submitted `published -> postponed` for
+  `ROC-BMS-001`, got a `303` redirect to `?matchUpdated=1`, and confirmed the admin page's
+  "Operational Status" panel showed `postponed` and no longer offered any transition buttons (since
+  no whitelist entry has `postponed` as a `from` status), proving the whitelist gate works both ways.
+- Verified public reflection: `/matches/ROC-BMS-001` (public, unaffected by the status change since
+  `is_public` was untouched) showed both the updated score/winner/notes in its match-sets table and
+  the `postponed` status text, confirming the public route has no caching that would hide an admin
+  mutation.
+- Reset `ROC-BMS-001` and its match set back to the original seeded values (status `published`,
+  score 0/0, no winner, original placeholder note, no `actual_start_at`/`actual_end_at`) via a
+  one-off script run through `docker compose run --rm app npx payload run
+  src/seed/_verification-cleanup.ts`, then deleted that script. Re-checked the admin page afterward
+  and confirmed the demo match matches the original seed exactly.
 
 Pending:
 
-- Score input and match result confirmation.
-- Match lifecycle mutations (start/pause/resume/finish/postpone/cancel/walkover) with large
-  mobile-friendly buttons on the Match Officer workspace and/or the admin match detail page.
 - Match documentation upload (no `DocumentationAsset` collection exists yet).
 - Internal comments (no `Comment` collection exists yet).
-- Match audit log (no `AuditLog` collection exists yet).
+- Match audit log (no `AuditLog` collection exists yet) — flagged in D012 as needed before mutations
+  are safe under concurrent multi-officer use.
 - Reschedule reason workflow / real scheduling mutation from the Scheduler Workspace.
-- Session/authentication gating for workspace routes (tracked as an open item via D011, not yet
+- Match-set delete/reorder (only edit-existing and append-new exist today).
+- Session/authentication gating for workspace routes and mutations (open since D011, still not
   scheduled to a specific phase).
 - Standings, brackets, winner advancement, live score, article CMS, announcement CMS, public edit
   mode, email/calendar invite remain intentionally out of scope.
@@ -132,7 +171,7 @@ Blockers:
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Match detail pages (public and admin) are now live. Start Phase 4B - Match Lifecycle and Score Input: add a `MatchAuditLog`-free, minimal score input flow for MatchSet participant_a_score/participant_b_score plus basic match status transitions (e.g. ready_to_start -> ongoing -> finished) reachable from the admin match detail page and/or the Match Officer workspace, using a Next.js Server Action or route handler backed by Payload's local API. Keep mutations simple and confirm-before-submit; do not implement full live score, documentation upload, comments, or audit logging yet unless explicitly asked. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Match lifecycle transitions and score input are now live on the admin match detail page. Start Phase 4C - Match Documentation and Audit: add a minimal `DocumentationAsset` collection (photo/video/file/score_sheet/other, public/internal visibility, caption) with basic upload support reachable from the admin match detail page, and add a minimal `AuditLog` collection that records actor, action, entity_type/entity_id, and before/after snapshots for the existing match lifecycle and score-input Server Actions from this session (matchActions.ts) so those mutations are no longer unaudited. Keep internal comments and the reschedule workflow out of scope unless explicitly asked. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template

@@ -707,6 +707,26 @@ h1 {
   text-align: center;
 }
 
+.officer-actions form {
+  display: contents;
+}
+
+.officer-action-button {
+  width: 100%;
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  background: var(--teal);
+  color: #ffffff;
+  font-weight: 850;
+  text-align: center;
+  cursor: pointer;
+}
+
 .match-card__details-link {
   display: inline-flex;
   align-items: center;
@@ -772,6 +792,137 @@ h1 {
   font-size: 0.75rem;
   font-weight: 750;
   text-transform: uppercase;
+}
+
+.match-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-weight: 750;
+}
+
+.match-banner--success {
+  border: 1px solid #b8d5c2;
+  background: #eef7f0;
+  color: var(--green);
+}
+
+.match-banner--error {
+  border: 1px solid #edc0ba;
+  background: var(--soft-red);
+  color: var(--red);
+}
+
+.match-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.match-action-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.match-action-form__winner {
+  display: grid;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.match-action-form__winner span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.match-action-form__winner select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  font: inherit;
+}
+
+.match-action-button {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  background: var(--teal);
+  color: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.match-action-button--muted {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.match-set-forms {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 14px;
+}
+
+.match-set-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.match-set-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.match-set-form span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.match-set-form input,
+.match-set-form select,
+.match-set-form textarea {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #ffffff;
+  font: inherit;
+}
+
+.match-set-form textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.match-set-form__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.match-set-form__label {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 800;
 }
 
 @media (max-width: 640px) {
@@ -841,11 +992,25 @@ h1 {
     overflow-x: auto;
   }
 
+  .match-action-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .match-action-form__winner {
+    min-width: 0;
+  }
+
+  .match-set-form__row {
+    grid-template-columns: 1fr;
+  }
+
   .officer-actions {
     grid-template-columns: 1fr;
   }
 
-  .officer-actions span {
+  .officer-actions span,
+  .officer-action-button {
     min-height: 58px;
   }
 }

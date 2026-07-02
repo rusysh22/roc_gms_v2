@@ -9,6 +9,8 @@ import {
   formatDateTime,
   getRelationshipLabel,
 } from '../workspaceComponents'
+import { transitionMatchStatusAction } from '../matches/matchActions'
+import { getAllowedTransitions } from '../matches/matchLifecycle'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +34,9 @@ export default async function MatchOfficerWorkspacePage() {
     matchDayStatuses.includes(match.status),
   )
   const nextMatch = scheduledMatches[0]
+  const quickTransitions = nextMatch
+    ? getAllowedTransitions(nextMatch.status).filter((transition) => !transition.requiresConfirm)
+    : []
 
   return (
     <main className="workspace-shell workspace-shell--officer">
@@ -41,8 +46,9 @@ export default async function MatchOfficerWorkspacePage() {
         <p className="eyebrow">Match Officer Workspace</p>
         <h1 id="match-officer-title">Match-Day Flow</h1>
         <p className="summary">
-          Mobile-first match list for officers on venue duty. Score input, documentation upload, and
-          live scoring are not enabled in this foundation shell.
+          Mobile-first match list for officers on venue duty. Quick status actions for the next
+          match are available below; open Match Details for score input and the full lifecycle
+          action set. Documentation upload and live scoring are not enabled yet.
         </p>
       </section>
 
@@ -79,10 +85,20 @@ export default async function MatchOfficerWorkspacePage() {
             Match details
           </a>
 
-          <div className="officer-actions" aria-label="Match officer pending actions">
-            <span>Check-in later</span>
-            <span>Start later</span>
-            <span>Score later</span>
+          <div className="officer-actions" aria-label="Match officer quick actions">
+            {quickTransitions.length === 0 ? (
+              <span>No quick actions for this status</span>
+            ) : (
+              quickTransitions.map((transition) => (
+                <form key={transition.to} action={transitionMatchStatusAction}>
+                  <input type="hidden" name="matchNumber" value={nextMatch.match_number} />
+                  <input type="hidden" name="targetStatus" value={transition.to} />
+                  <button type="submit" className="officer-action-button">
+                    {transition.label}
+                  </button>
+                </form>
+              ))
+            )}
           </div>
         </section>
       ) : null}

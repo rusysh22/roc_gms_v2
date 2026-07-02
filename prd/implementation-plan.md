@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 4A match detail foundation complete  
+Status: Phase 4B match lifecycle and score input complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -183,8 +183,8 @@ Tasks:
 
 - [x] Match detail public page.
 - [x] Match detail admin panel.
-- [ ] Score input.
-- [ ] Match result confirmation.
+- [x] Score input.
+- [x] Match result confirmation.
 - [ ] Match documentation upload.
 - [ ] Internal comments.
 - [ ] Match audit log.
@@ -192,8 +192,8 @@ Tasks:
 
 Acceptance criteria:
 
-- [ ] Match Officer can start and finish a match.
-- [ ] Match Officer can input score.
+- [x] Match Officer can start and finish a match.
+- [x] Match Officer can input score.
 - [ ] Match Officer can upload documentation.
 - [ ] Score/result changes are audited.
 - [x] Match detail page is shareable.

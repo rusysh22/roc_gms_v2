@@ -237,6 +237,51 @@ The admin match detail route currently has no authentication/authorization gate,
 every other workspace page added so far in this project — a future phase must decide when to add
 session-based access control across all workspace routes at once rather than piecemeal per page.
 
+### D012 - Match lifecycle and score mutations use Next.js Server Actions with a hardcoded transition whitelist
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+Match status transitions, match-set score edits, and adding a new match set are implemented as
+Next.js Server Actions (`src/app/(frontend)/workspaces/matches/matchActions.ts`, `'use server'`)
+backed by Payload's local API, not a REST/route-handler API and not a client-side fetch. Allowed
+status transitions are defined once as a data-driven whitelist
+(`src/app/(frontend)/workspaces/matches/matchLifecycle.ts`): `ready_to_start -> ongoing`,
+`ongoing -> paused`, `paused -> ongoing`, `ongoing -> finished`, `finished -> result_published`,
+`scheduled/published -> postponed`, `scheduled/published -> cancelled`, and
+`scheduled/published/ready_to_start -> walkover`. The server action re-checks the match's current
+status against this whitelist before writing (never trusts the submitted target status alone), and
+silently no-ops other than redirecting with a `matchError` query param when a transition is invalid,
+a match cannot be found, or a submitted score is not a valid non-negative integer. Winner selection
+for `result_published` and `walkover` is submitted as `winnerSide` (`'a' | 'b' | ''`) and resolved
+server-side to the match's actual `participant_a_entry_id`/`participant_b_entry_id`, rather than
+trusting a raw entry id from the client. Transitioning into `ongoing` sets `actual_start_at` (if
+unset) and into `finished` sets `actual_end_at` (if unset). Destructive/terminal transitions
+(`postponed`, `cancelled`, `walkover`, `result_published`) require a client-side confirm dialog via a
+small `'use client'` `ConfirmSubmitButton`; the rest submit on a single tap/click. Forms use native
+`<form action={serverAction}>` submission (Payload progressive enhancement), so they work without
+client JavaScript.
+
+Reason:
+
+Server Actions avoid hand-rolling a separate REST endpoint and keep validation colocated with the
+mutation instead of splitting it across a client fetch call and an API route. Re-validating the
+transition server-side (rather than only disabling invalid buttons in the UI) prevents a stale page,
+a replayed form, or a hand-crafted request from forcing an illegal status change. Resolving the
+winner from the match's own participant fields (instead of accepting an arbitrary entry id) prevents
+a winner being set to an entry that was never part of the match.
+
+Impact:
+
+Any new lifecycle transition must be added to the `MATCH_TRANSITIONS` whitelist in
+`matchLifecycle.ts`, not just to the UI, or the server action will reject it. There is still no
+audit log — every mutation currently overwrites state with no history of who changed what, which
+Phase 4C (or a dedicated audit phase) must address before this is safe for multi-officer concurrent
+use. Match-set editing in this phase only supports editing existing sets and appending a new one
+(auto-incrementing `set_number`); there is no delete/reorder capability yet.
+
 ## 3. Pending Decisions
 
 - Decide whether public comments require login.

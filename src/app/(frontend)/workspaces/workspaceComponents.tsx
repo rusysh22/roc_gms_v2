@@ -119,6 +119,29 @@ export const getDateKey = (value?: string | null) => {
   }).format(new Date(value))
 }
 
+export const getSetWinnerSide = (
+  match: {
+    participant_a_entry_id?: EntryDoc | string | number | null
+    participant_b_entry_id?: EntryDoc | string | number | null
+  },
+  set: { winner_entry_id?: EntryDoc | string | number | null },
+): '' | 'a' | 'b' => {
+  const winnerId = getRelationshipId(set.winner_entry_id)
+  if (!winnerId) {
+    return ''
+  }
+
+  if (winnerId === getRelationshipId(match.participant_a_entry_id)) {
+    return 'a'
+  }
+
+  if (winnerId === getRelationshipId(match.participant_b_entry_id)) {
+    return 'b'
+  }
+
+  return ''
+}
+
 export const toOptions = (docs: unknown[]): WorkspaceOption[] =>
   docs
     .map((doc) => {
