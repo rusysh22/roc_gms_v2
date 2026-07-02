@@ -1312,6 +1312,35 @@ h1 {
   white-space: nowrap;
 }
 
+.champion-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid #ead4a4;
+  border-radius: 8px;
+  background: var(--soft-gold);
+}
+
+.champion-banner--decided {
+  border-color: #b8d5c2;
+  background: #eef7f0;
+}
+
+.champion-banner h3 {
+  margin: 4px 0 0;
+  font-size: 1.25rem;
+}
+
+.champion-banner p:last-child {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .bracket-scroll {
   overflow-x: auto;
   padding-bottom: 6px;
@@ -1357,6 +1386,11 @@ h1 {
 
 .bracket-match-card:hover {
   border-color: var(--teal);
+}
+
+.bracket-match-card--champion {
+  border-color: #b8d5c2;
+  box-shadow: inset 4px 0 0 var(--green);
 }
 
 .bracket-match-card__topline {
@@ -1418,6 +1452,27 @@ h1 {
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+.champion-list {
+  display: grid;
+  gap: 14px;
+}
+
+.champion-card {
+  display: grid;
+  gap: 12px;
+}
+
+.champion-card--decided {
+  border-color: #b8d5c2;
+  background: #eef7f0;
+}
+
+.champion-card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
 }
 
 @media (max-width: 640px) {
@@ -1515,6 +1570,11 @@ h1 {
 
   .bracket-heading {
     display: grid;
+  }
+
+  .champion-banner {
+    display: grid;
+    gap: 10px;
   }
 
   .bracket-scroll {

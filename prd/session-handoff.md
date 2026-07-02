@@ -2,11 +2,11 @@
 
 Last updated: 2026-07-02  
 Branch: `codex/phase-0-1-baseline`  
-Current phase: Phase 5D single elimination winner advancement foundation complete  
-Current status: Single-elimination result publishing now attempts safe winner advancement before
-refreshing the bracket cache. Match remains the source of truth; bracket data remains a cached
-layout. Advancement is best-effort, audit-logged when triggered from match Server Actions, and
-skips with clear reasons when no safe deterministic target exists.
+Current phase: Phase 5E single elimination champion display foundation complete  
+Current status: Single-elimination bracket caches now include non-authoritative champion metadata
+derived from the published last-round match winner. Public brackets, workspace brackets, admin match
+detail, and a minimal public champions route show decided or pending champion states. Match remains
+the source of truth.
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -23,28 +23,32 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added `src/lib/winnerAdvancement.ts`, a reusable single-elimination advancement foundation.
-- The module can preview or attempt advancement for a published single-elimination match with a
-  winner, using round order and match index to find the next target match.
-- Advancement writes only to an empty/TBD target slot and never overwrites an occupied participant.
-- If the winner is already in the next match, the target is missing, the match is not published, the
-  winner is missing, or the target is unsafe, the module returns a clear skipped outcome.
-- Updated match Server Actions so single-elimination result-state mutations attempt advancement
-  before recalculating the bracket cache. Failures are logged and do not block the original mutation.
-- Added `winner_advancement.advance` / `winner_advancement.skip` audit entries when advancement is
-  triggered from match Server Actions.
-- Revalidation now also covers the target next-match detail pages when an advancement attempt has a
-  deterministic target.
-- Added an Advancement panel to the workspace match detail page for single-elimination matches,
-  showing outcome, winner, next match, target slot, and skip/advance reason.
-- Updated `prd/implementation-plan.md` for Phase 5D progress.
-- Added D018 to `prd/decision-log.md`.
+- Added champion detection to `src/lib/brackets.ts` for single-elimination bracket layouts.
+- Champion detection reads the final/last-round match from bracket layout data and marks a champion
+  only when that match is `result_published` and has a winner.
+- The bracket cache now stores `bracket_data.champion` as display/cache metadata only; Match remains
+  the source of truth.
+- Updated `/brackets` with a compact Champion banner and pending empty state.
+- Updated bracket match cards so a decided champion's final/last-round match can be visually
+  highlighted.
+- Updated `/workspaces/brackets` with a champions-decided stat and champion summary in cached
+  bracket listings.
+- Added champion context to `/workspaces/matches/[matchNumber]` for single-elimination matches.
+- Added minimal public `/champions` route that lists decided champions or pending champion states
+  from bracket caches.
+- Linked `/champions` from home, public brackets, and workspace brackets.
+- Updated `prd/implementation-plan.md` for Phase 5E progress.
+- Added D019 to `prd/decision-log.md`.
 
 Changed files:
 
-- `src/lib/winnerAdvancement.ts`
-- `src/app/(frontend)/workspaces/matches/matchActions.ts`
+- `src/lib/brackets.ts`
+- `src/app/(frontend)/brackets/page.tsx`
+- `src/app/(frontend)/champions/page.tsx`
 - `src/app/(frontend)/matchDetailData.ts`
+- `src/app/(frontend)/page.tsx`
+- `src/app/(frontend)/styles.css`
+- `src/app/(frontend)/workspaces/brackets/page.tsx`
 - `src/app/(frontend)/workspaces/matches/[matchNumber]/page.tsx`
 - `prd/implementation-plan.md`
 - `prd/decision-log.md`
@@ -52,40 +56,36 @@ Changed files:
 
 Decisions:
 
-- Recorded D018: single-elimination winner advancement is safe, deterministic, and best-effort.
-  It only runs for `result_published` matches with a winner, does not overwrite occupied slots, and
-  keeps Match as the source of truth.
+- Recorded D019: champion display is derived from the published last-round single-elimination match
+  winner, cached only as display metadata, and never treated as result truth.
 
 Tests / Verification:
 
 - `npm.cmd run typecheck` passed.
-- `npm.cmd run build` passed.
+- Recalculated the seeded Badminton Men Single bracket cache for stage `1`.
+- `npm.cmd run build` passed and includes the new `/champions` route.
 - `docker compose run --rm app npm run seed` passed twice, verifying seed duplicate-safety.
-- Restarted the app container so the dev server picked up the Phase 5D Server Action changes.
-- Verified a real workspace publish flow for seeded Badminton first-round match
-  `ROC-BMS-GEN-R1-001`: temporarily set it to `finished`, submitted the workspace publish form with
-  Budi Santoso as winner, received HTTP `303` to `?matchUpdated=1`, and confirmed
-  `winner_advancement.skip` with outcome `already_advanced` because Budi was already placed in
-  `ROC-BMS-001`.
-- Confirmed bracket cache recalculated after the advancement attempt with a
-  `bracket.cache_recalculate` audit row for `ROC-BMS-GEN-R1-001`.
-- Restored `ROC-BMS-GEN-R1-001` to seeded `ready_for_scheduling` with no winner and recalculated
-  bracket cache for stage `1`.
-- Verified `/brackets` renders seeded Badminton match links for `ROC-BMS-001` and
-  `ROC-BMS-GEN-R1-001`.
-- Verified the workspace match detail page for `ROC-BMS-GEN-R1-001` shows the Advancement panel and
-  clear skipped/pending context.
-- Verified Payload Admin collection routes return HTTP 200 for `/admin/collections/brackets` and
-  `/admin/collections/matches`.
-- HTTP 200 verified for `/`, `/brackets`, `/workspaces/brackets`, and
-  `/workspaces/matches/ROC-BMS-001`.
+- Restarted the app container so the running server picked up the new route and UI.
+- HTTP 200 verified for `/`, `/brackets`, `/workspaces/brackets`,
+  `/workspaces/matches/ROC-BMS-001`, and `/champions`.
+- Verified current seeded empty/pending champion state on `/brackets` and `/champions`:
+  `Champion is pending until the last-round result is published.`
+- Verified the bracket cache stores pending champion metadata for `ROC-BMS-001` while the seeded
+  match remains `walkover`.
+- Temporarily set `ROC-BMS-001` to `result_published`, recalculated the bracket cache, and verified
+  `/champions` displayed `Andi Pratama` with reason
+  `Champion detected from the published last-round match winner.`
+- Restored `ROC-BMS-001` to the seeded `walkover` state and recalculated the bracket cache back to
+  pending champion metadata.
 
 Pending:
 
 - Full explicit bracket edge/source-to-target metadata for stronger advancement beyond the current
   round-order/index foundation.
 - Winner advancement for bracket shapes beyond the seeded Badminton single-elimination demo.
-- Champion display.
+- A durable seeded completed-final champion scenario. The current seeded Badminton match remains
+  `walkover`, so champion display naturally shows pending unless temporarily verified.
+- Full winners announcement CMS and archive/history pages.
 - Group-to-knockout promotion.
 - Double elimination support.
 - Bracket mutation UI, seeding/draw editor, and stronger bracket readiness/lock workflow.
@@ -102,14 +102,14 @@ Pending:
 
 Blockers:
 
-- None. Note: the current seeded Badminton bracket can demonstrate safe skip/already-advanced
-  behavior immediately. A true "new slot filled" advancement path needs seed data with an empty/TBD
-  next-round slot that is not already occupied by the winner.
+- None. The current seed does not include a completed final/last-round `result_published` champion
+  by default, so the permanent demo state shows the champion pending state. A decided champion can
+  be verified by temporarily publishing `ROC-BMS-001`, then restoring it.
 
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5D single elimination winner advancement foundation is complete. Next, start the champion display foundation for single elimination brackets, or add explicit bracket edge/source-to-target metadata to make winner advancement more robust. Keep group-to-knockout promotion, double elimination, bracket mutation UI, seeding/draw editor, manual standing override UI, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5E single elimination champion display foundation is complete. Next, start a small Phase 5F bracket/standing impact polish pass, or add explicit bracket edge/source-to-target metadata to make winner advancement more robust. Keep group-to-knockout promotion, double elimination, bracket mutation UI, seeding/draw editor, manual standing override UI, full winners announcement CMS, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template

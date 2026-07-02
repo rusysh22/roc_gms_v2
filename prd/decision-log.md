@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D018 added)
+Last updated: 2026-07-02 (D019 added)
 
 ## 1. Purpose
 
@@ -486,6 +486,33 @@ Impact:
 Future bracket generation can add explicit source-to-target metadata to make advancement stronger
 and less dependent on round order/index. Double elimination, group-to-knockout promotion, seeding
 edits, and manual bracket mutation remain out of scope.
+
+### D019 - Champion display is derived from published last-round match truth
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+Single-elimination champion display is detected from the final or last-round bracket match only when
+that match has `status = result_published` and a `winner_entry_id`. The bracket cache stores a
+non-authoritative `champion` object for public and workspace display, but Match remains the source
+of truth. If the last-round match is not published or has no winner, the champion state is pending
+with a clear reason.
+
+Reason:
+
+Public users need a compact winners/champions signal, but the project does not yet include a winner
+announcement CMS, archive system, or advanced bracket result model. Keeping champion display as
+derived metadata avoids duplicating result truth while making bracket and champions pages fast and
+easy to read.
+
+Impact:
+
+Any future winner announcement, archive, or awards feature should derive initial champion state from
+Match/bracket truth rather than editing the bracket cache directly. Double elimination,
+group-to-knockout promotion, manual champion overrides, and full winners announcement CMS remain out
+of scope.
 
 ## 3. Pending Decisions
 

@@ -49,6 +49,7 @@ export type BracketMatchCard = {
   match_number: string
   round_name: string
   status: string
+  winner_entry_id?: Id
   score_summary?: string
   set_score?: string
   detail_href: string
@@ -62,9 +63,21 @@ export type BracketRound = {
   matches: BracketMatchCard[]
 }
 
+export type BracketChampion = {
+  status: 'decided' | 'pending'
+  entry_id?: Id
+  label?: string
+  seed?: number
+  match_id?: Id
+  match_number?: string
+  round_name?: string
+  reason: string
+}
+
 export type SingleEliminationBracketData = {
   format: 'single_elimination'
   rounds: BracketRound[]
+  champion: BracketChampion
   generated_at: string
 }
 
@@ -166,6 +179,63 @@ const buildParticipant = (
   }
 }
 
+export const detectSingleEliminationChampion = (
+  rounds: BracketRound[],
+): BracketChampion => {
+  if (rounds.length === 0) {
+    return {
+      status: 'pending',
+      reason: 'No bracket rounds exist yet.',
+    }
+  }
+
+  const lastRound = rounds[rounds.length - 1]
+  const finalMatch = lastRound.matches[0]
+  if (!finalMatch) {
+    return {
+      status: 'pending',
+      round_name: lastRound.name,
+      reason: 'The last round has no match yet.',
+    }
+  }
+
+  if (finalMatch.status !== 'result_published') {
+    return {
+      status: 'pending',
+      match_id: finalMatch.id,
+      match_number: finalMatch.match_number,
+      round_name: finalMatch.round_name,
+      reason: 'Champion is pending until the last-round result is published.',
+    }
+  }
+
+  const winner =
+    finalMatch.participant_a.isWinner ? finalMatch.participant_a
+    : finalMatch.participant_b.isWinner ? finalMatch.participant_b
+    : null
+
+  if (!winner || !winner.id) {
+    return {
+      status: 'pending',
+      match_id: finalMatch.id,
+      match_number: finalMatch.match_number,
+      round_name: finalMatch.round_name,
+      reason: 'Champion is pending because the last-round match has no winner.',
+    }
+  }
+
+  return {
+    status: 'decided',
+    entry_id: winner.id,
+    label: winner.label,
+    seed: winner.seed,
+    match_id: finalMatch.id,
+    match_number: finalMatch.match_number,
+    round_name: finalMatch.round_name,
+    reason: 'Champion detected from the published last-round match winner.',
+  }
+}
+
 export const buildSingleEliminationBracketLayout = async (
   payload: Payload,
   stageId: Id,
@@ -234,6 +304,7 @@ export const buildSingleEliminationBracketLayout = async (
       match_number: match.match_number,
       round_name: roundName,
       status: match.status,
+      winner_entry_id: winnerId,
       score_summary: match.score_summary || undefined,
       set_score: buildSetScore(matchSets.docs as unknown as BracketMatchSet[]),
       detail_href: `/matches/${match.match_number}`,
@@ -266,6 +337,7 @@ export const buildSingleEliminationBracketLayout = async (
     bracketData: {
       format: 'single_elimination',
       rounds: bracketRounds,
+      champion: detectSingleEliminationChampion(bracketRounds),
       generated_at: new Date().toISOString(),
     },
     seedConfig: {

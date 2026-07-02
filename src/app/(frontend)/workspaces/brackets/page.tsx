@@ -30,6 +30,12 @@ type WorkspaceBracket = {
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
+const getChampion = (bracketData?: SingleEliminationBracketData | null) =>
+  bracketData?.champion || {
+    status: 'pending',
+    reason: 'Champion metadata has not been generated yet.',
+  }
+
 export default async function BracketsWorkspacePage({
   searchParams,
 }: {
@@ -76,6 +82,7 @@ export default async function BracketsWorkspacePage({
         </p>
         <div className="actions">
           <a href="/brackets">View Public Brackets</a>
+          <a href="/champions">View Champions</a>
           <a href="/admin/collections/brackets">Backoffice Brackets</a>
         </div>
       </section>
@@ -92,6 +99,14 @@ export default async function BracketsWorkspacePage({
       <section className="workspace-stats" aria-label="Bracket stats">
         <StatBlock label="Bracket caches" value={brackets.length} />
         <StatBlock label="Single elimination stages" value={stages.length} />
+        <StatBlock
+          label="Champions decided"
+          value={
+            brackets.filter((bracket) => getChampion(bracket.bracket_data).status === 'decided')
+              .length
+          }
+          tone="good"
+        />
         <StatBlock
           label="Cached matches"
           value={brackets.reduce(
@@ -150,6 +165,12 @@ export default async function BracketsWorkspacePage({
                   <span>
                     {getRelationshipLabel(bracket.category_id)} /{' '}
                     {getRelationshipLabel(bracket.stage_id)} / {bracket.status}
+                  </span>
+                  <span>
+                    Champion:{' '}
+                    {getChampion(bracket.bracket_data).status === 'decided' ?
+                      getChampion(bracket.bracket_data).label
+                    : 'Not decided'}
                   </span>
                 </li>
               ))}

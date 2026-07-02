@@ -47,7 +47,7 @@ export default async function AdminMatchDetailPage({
     notFound()
   }
 
-  const { match, matchSets, documentationAssets, comments, advancement } = result
+  const { match, matchSets, documentationAssets, comments, advancement, champion } = result
   const allowedTransitions = getAllowedTransitions(match.status)
   const auditLogEntries = await getMatchAuditLog(
     match.id,
@@ -223,6 +223,39 @@ export default async function AdminMatchDetailPage({
               </div>
             </dl>
             <p className="empty-state">{advancement.reason}</p>
+          </article>
+        ) : null}
+
+        {champion ? (
+          <article className="workspace-panel match-detail-grid__wide">
+            <h2>Champion Context</h2>
+            <dl className="workspace-facts">
+              <div>
+                <dt>Status</dt>
+                <dd>{formatStatus(champion.status)}</dd>
+              </div>
+              <div>
+                <dt>Champion</dt>
+                <dd>{champion.status === 'decided' ? champion.label || 'Champion' : 'Not decided'}</dd>
+              </div>
+              <div>
+                <dt>Deciding Match</dt>
+                <dd>
+                  {champion.match_number ? (
+                    <a href={`/workspaces/matches/${champion.match_number}`}>
+                      {champion.match_number}
+                    </a>
+                  ) : (
+                    'Not available'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Round</dt>
+                <dd>{champion.round_name || 'Not available'}</dd>
+              </div>
+            </dl>
+            <p className="empty-state">{champion.reason}</p>
           </article>
         ) : null}
 

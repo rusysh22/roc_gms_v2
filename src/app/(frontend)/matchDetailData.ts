@@ -1,6 +1,7 @@
 import { getPayload, type Where } from 'payload'
 
 import config from '@payload-config'
+import type { BracketChampion, SingleEliminationBracketData } from '@/lib/brackets'
 import {
   getSingleEliminationAdvancementPreview,
   type WinnerAdvancementResult,
@@ -95,6 +96,19 @@ export type MatchDetailResult = {
   documentationAssets: DocumentationAssetDetail[]
   comments: CommentDetail[]
   advancement?: WinnerAdvancementResult | null
+  champion?: BracketChampion | null
+}
+
+const getRelationshipId = (value: RelationshipDoc | string | number | null | undefined) => {
+  if (!value) {
+    return undefined
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    return value
+  }
+
+  return value.id
 }
 
 export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailResult | null> => {
@@ -147,6 +161,7 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
     },
   })
   let advancement: WinnerAdvancementResult | null = null
+  let champion: BracketChampion | null = null
   const stageType =
     match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
 
@@ -158,6 +173,34 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
         `Failed to load winner advancement preview for match ${match.match_number}: ${error}`,
       )
     }
+
+    const stageId = getRelationshipId(match.stage_id)
+    if (stageId) {
+      try {
+        const brackets = await payload.find({
+          collection: 'brackets',
+          depth: 0,
+          limit: 1,
+          where: {
+            stage_id: {
+              equals: stageId,
+            },
+          },
+        })
+        const bracketData = brackets.docs[0]?.bracket_data as
+          | SingleEliminationBracketData
+          | undefined
+        champion =
+          bracketData?.champion || {
+            status: 'pending',
+            reason: 'Champion metadata has not been generated yet.',
+          }
+      } catch (error) {
+        payload.logger.error(
+          `Failed to load champion context for match ${match.match_number}: ${error}`,
+        )
+      }
+    }
   }
 
   return {
@@ -166,6 +209,7 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
     documentationAssets: documentationAssets.docs as DocumentationAssetDetail[],
     comments: comments.docs as CommentDetail[],
     advancement,
+    champion,
   }
 }
 

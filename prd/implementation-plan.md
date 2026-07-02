@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 5D single elimination winner advancement foundation complete  
+Status: Phase 5E single elimination champion display foundation complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -219,7 +219,7 @@ Tasks:
 - [x] Add single elimination bracket view.
 - [x] Recalculate bracket cache after relevant match result mutations.
 - [x] Add single elimination winner advancement foundation.
-- [ ] Add champion display.
+- [x] Add champion display foundation.
 
 Acceptance criteria:
 
@@ -227,6 +227,7 @@ Acceptance criteria:
 - [x] Public can read standings on mobile.
 - [x] Bracket links to match detail.
 - [x] Winner advances in single elimination bracket when a deterministic safe target exists.
+- [x] Champion display shows decided or pending state from single-elimination bracket cache.
 
 Suggested commit:
 

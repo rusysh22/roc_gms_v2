@@ -38,6 +38,7 @@ export default function HomePage() {
           <a href="/schedule">Public Schedule</a>
           <a href="/standings">Public Standings</a>
           <a href="/brackets">Public Brackets</a>
+          <a href="/champions">Champions</a>
           <a href="/admin">Backoffice</a>
           <a href="/api/health">Health Check</a>
         </div>
