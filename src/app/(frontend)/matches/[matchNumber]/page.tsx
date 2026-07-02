@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 
 import { getMatchDetail } from '../../matchDetailData'
 import {
+  DocumentationAssetList,
   MatchSetsTable,
   formatDateTime,
   formatStatus,
@@ -20,7 +21,10 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
     notFound()
   }
 
-  const { match, matchSets } = result
+  const { match, matchSets, documentationAssets } = result
+  const publicDocumentationAssets = documentationAssets.filter(
+    (asset) => asset.visibility === 'public',
+  )
 
   return (
     <main className="match-detail-shell">
@@ -99,6 +103,11 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
           <h2>Score Summary</h2>
           <p>{match.score_summary || 'Score summary not published yet.'}</p>
           <MatchSetsTable sets={matchSets} />
+        </article>
+
+        <article className="workspace-panel">
+          <h2>Documentation</h2>
+          <DocumentationAssetList assets={publicDocumentationAssets} />
         </article>
       </section>
     </main>

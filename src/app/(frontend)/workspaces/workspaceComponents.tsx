@@ -82,6 +82,9 @@ export const formatDateTime = (value?: string | null) => {
 export const formatStatus = (value?: string | null) =>
   value ? value.replaceAll('_', ' ') : 'not set'
 
+export const formatAuditAction = (value?: string | null) =>
+  value ? value.replaceAll('.', ' ').replaceAll('_', ' ') : 'unknown action'
+
 export const formatTimeOnly = (value?: string | null) => {
   if (!value) {
     return '--:--'
@@ -247,6 +250,110 @@ export const MatchSetsTable = ({ sets }: { sets: WorkspaceMatchSet[] }) => {
         ))}
       </tbody>
     </table>
+  )
+}
+
+export type DocumentationAssetSummary = {
+  id: string | number
+  asset_type: string
+  caption?: string | null
+  visibility: string
+  url?: string | null
+  filename?: string | null
+  mimeType?: string | null
+  uploaded_by?: RelationshipDoc | string | number | null
+  createdAt?: string
+}
+
+export const DocumentationAssetList = ({
+  assets,
+  showVisibility = false,
+}: {
+  assets: DocumentationAssetSummary[]
+  showVisibility?: boolean
+}) => {
+  if (assets.length === 0) {
+    return <p className="empty-state">No documentation uploaded yet.</p>
+  }
+
+  return (
+    <ul className="documentation-list">
+      {assets.map((asset) => (
+        <li key={asset.id} className="documentation-item">
+          <div className="documentation-item__meta">
+            <span className="documentation-item__type">{formatStatus(asset.asset_type)}</span>
+            {showVisibility ? (
+              <span
+                className={`documentation-item__visibility documentation-item__visibility--${asset.visibility}`}
+              >
+                {asset.visibility}
+              </span>
+            ) : null}
+          </div>
+          {asset.url ? (
+            <a
+              href={asset.url}
+              target="_blank"
+              rel="noreferrer"
+              className="documentation-item__link"
+            >
+              {asset.filename || 'View file'}
+            </a>
+          ) : (
+            <span>{asset.filename || 'File unavailable'}</span>
+          )}
+          {asset.caption ? <p className="documentation-item__caption">{asset.caption}</p> : null}
+          <p className="documentation-item__footer">
+            {getRelationshipLabel(asset.uploaded_by, 'Unknown uploader')}
+            {asset.createdAt ? ` · ${formatDateTime(asset.createdAt)}` : ''}
+          </p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export type AuditLogSummary = {
+  id: string | number
+  action: string
+  entity_type: string
+  entity_id: string
+  actor_user_id?: RelationshipDoc | string | number | null
+  before_snapshot?: unknown
+  after_snapshot?: unknown
+  createdAt?: string
+}
+
+export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
+  if (entries.length === 0) {
+    return <p className="empty-state">No audited changes yet.</p>
+  }
+
+  return (
+    <ul className="audit-log-list">
+      {entries.map((entry) => (
+        <li key={entry.id} className="audit-log-item">
+          <div className="audit-log-item__meta">
+            <span className="audit-log-item__action">{formatAuditAction(entry.action)}</span>
+            <span className="audit-log-item__time">{formatDateTime(entry.createdAt)}</span>
+          </div>
+          <p className="audit-log-item__actor">
+            {getRelationshipLabel(entry.actor_user_id, 'System / Unknown')} &middot;{' '}
+            {entry.entity_type} #{entry.entity_id}
+          </p>
+          <details>
+            <summary>View before / after</summary>
+            <pre>
+              {JSON.stringify(
+                { before: entry.before_snapshot, after: entry.after_snapshot },
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        </li>
+      ))}
+    </ul>
   )
 }
 

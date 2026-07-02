@@ -5,10 +5,12 @@ import { buildConfig } from 'payload'
 import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 
+import { AuditLogs } from './src/collections/AuditLogs'
 import { Clubs } from './src/collections/Clubs'
 import { CompetitionCategories } from './src/collections/CompetitionCategories'
 import { CompetitionEntries } from './src/collections/CompetitionEntries'
 import { Courts } from './src/collections/Courts'
+import { DocumentationAssets } from './src/collections/DocumentationAssets'
 import { Events } from './src/collections/Events'
 import { Groups } from './src/collections/Groups'
 import { Matches } from './src/collections/Matches'
@@ -52,6 +54,8 @@ export default buildConfig({
     Groups,
     Matches,
     MatchSets,
+    DocumentationAssets,
+    AuditLogs,
     Clubs,
     Players,
     Teams,

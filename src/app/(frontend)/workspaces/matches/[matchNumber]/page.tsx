@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation'
 
-import { getMatchDetail } from '../../../matchDetailData'
+import { getMatchAuditLog, getMatchDetail } from '../../../matchDetailData'
 import {
+  AuditLogPanel,
+  DocumentationAssetList,
   MatchSetsTable,
   WorkspaceNav,
   formatDateTime,
@@ -12,6 +14,8 @@ import {
 import { ConfirmSubmitButton } from '../ConfirmSubmitButton'
 import { addMatchSetAction, transitionMatchStatusAction, updateMatchSetScoreAction } from '../matchActions'
 import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../matchLifecycle'
+import { addDocumentationAssetAction } from '../documentationActions'
+import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../documentationErrors'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +33,8 @@ export default async function AdminMatchDetailPage({
   const query = searchParams ? await searchParams : {}
   const matchUpdated = query.matchUpdated === '1'
   const matchErrorCode = typeof query.matchError === 'string' ? query.matchError : ''
+  const docUpdated = query.docUpdated === '1'
+  const docErrorCode = typeof query.docError === 'string' ? query.docError : ''
 
   const result = await getMatchDetail(matchNumber)
 
@@ -36,8 +42,12 @@ export default async function AdminMatchDetailPage({
     notFound()
   }
 
-  const { match, matchSets } = result
+  const { match, matchSets, documentationAssets } = result
   const allowedTransitions = getAllowedTransitions(match.status)
+  const auditLogEntries = await getMatchAuditLog(
+    match.id,
+    matchSets.map((set) => set.id),
+  )
 
   return (
     <main className="workspace-shell match-detail-shell">
@@ -49,9 +59,9 @@ export default async function AdminMatchDetailPage({
         </p>
         <h1 id="match-detail-title">{match.match_number}</h1>
         <p className="summary">
-          {match.round_name || 'Match'} &middot; {formatStatus(match.status)}. Score input and
-          lifecycle actions are available below. Documentation upload, comments, and audit logging
-          arrive in a later phase.
+          {match.round_name || 'Match'} &middot; {formatStatus(match.status)}. Score input,
+          lifecycle actions, documentation upload, and audit history are available below. Internal
+          comments and the reschedule workflow arrive in a later phase.
         </p>
         <div className="actions">
           <a href="/workspaces/scheduler">Scheduler Workspace</a>
@@ -65,6 +75,15 @@ export default async function AdminMatchDetailPage({
       {matchErrorCode ? (
         <p className="match-banner match-banner--error">
           {MATCH_ACTION_ERROR_MESSAGES[matchErrorCode] || 'The last action could not be completed.'}
+        </p>
+      ) : null}
+      {docUpdated ? (
+        <p className="match-banner match-banner--success">Documentation uploaded.</p>
+      ) : null}
+      {docErrorCode ? (
+        <p className="match-banner match-banner--error">
+          {DOCUMENTATION_ACTION_ERROR_MESSAGES[docErrorCode] ||
+            'The documentation upload could not be completed.'}
         </p>
       ) : null}
 
@@ -264,6 +283,51 @@ export default async function AdminMatchDetailPage({
           <h2>Score Summary</h2>
           <p>{match.score_summary || 'Score summary not recorded yet.'}</p>
           <MatchSetsTable sets={matchSets} />
+        </article>
+
+        <article className="workspace-panel match-detail-grid__wide">
+          <h2>Documentation</h2>
+          <DocumentationAssetList assets={documentationAssets} showVisibility />
+          <form
+            action={addDocumentationAssetAction}
+            encType="multipart/form-data"
+            className="documentation-upload-form"
+          >
+            <input type="hidden" name="matchNumber" value={match.match_number} />
+            <label>
+              <span>Asset Type</span>
+              <select name="assetType" defaultValue="photo">
+                <option value="photo">Photo</option>
+                <option value="video">Video</option>
+                <option value="file">File</option>
+                <option value="score_sheet">Score Sheet</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              <span>Visibility</span>
+              <select name="visibility" defaultValue="internal">
+                <option value="internal">Internal</option>
+                <option value="public">Public</option>
+              </select>
+            </label>
+            <label>
+              <span>Caption</span>
+              <input type="text" name="caption" maxLength={200} />
+            </label>
+            <label>
+              <span>File</span>
+              <input type="file" name="file" required />
+            </label>
+            <button type="submit" className="match-action-button">
+              Upload Documentation
+            </button>
+          </form>
+        </article>
+
+        <article className="workspace-panel match-detail-grid__wide">
+          <h2>Audit History</h2>
+          <AuditLogPanel entries={auditLogEntries} />
         </article>
       </section>
     </main>

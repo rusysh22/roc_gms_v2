@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02
+Last updated: 2026-07-02 (D013 added)
 
 ## 1. Purpose
 
@@ -281,6 +281,57 @@ audit log — every mutation currently overwrites state with no history of who c
 Phase 4C (or a dedicated audit phase) must address before this is safe for multi-officer concurrent
 use. Match-set editing in this phase only supports editing existing sets and appending a new one
 (auto-incrementing `set_number`); there is no delete/reorder capability yet.
+
+### D013 - Documentation assets use local upload storage; audit logs are best-effort local-API writes with no auth-gated actor
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+`DocumentationAsset` (`documentation-assets`) is a Payload upload-enabled collection storing files on
+local disk at `media/documentation-assets` (bind-mounted by Docker Compose, gitignored), served
+through the existing catch-all `/api/[...slug]` route at `/api/documentation-assets/file/<name>`. No
+MinIO/S3 adapter and no `mimeTypes` restriction were added, consistent with keeping upload support
+"basic" for this phase. Its Payload access control mirrors `Matches`/`MatchSets`
+(`read: () => true`, write gated by `canManageMatches`); the public/internal split is enforced only
+in the page loader (`getMatchDetail` returns all assets, the public match page filters to
+`visibility === 'public'`, the admin page shows all with a visibility badge) — the same pattern
+already established for `Match.is_public` in D011, not a new weaker rule.
+
+`AuditLog` (`audit-logs`) is a generic collection (`actor_user_id`, free-text `action` /
+`entity_type` / `entity_id`, `before_snapshot`/`after_snapshot` as `json`) written through a single
+reusable helper (`src/lib/audit.ts` `recordAuditLog`) wrapped in try/catch so a logging failure never
+blocks the underlying mutation. It is wired into all three Phase 4B match Server Actions
+(`transitionMatchStatusAction`, `updateMatchSetScoreAction`, `addMatchSetAction`) in
+`matchActions.ts`. Collection access sets `create`/`update` to `() => false` since Payload's Local
+API bypasses access control by default — only server-side code can write rows, the Admin UI and REST
+API cannot. The actor is resolved via `payload.auth({ headers: await headers() })` inside the Server
+Action; since no login/session flow exists yet for workspace routes (open since D011), this
+currently always resolves to `null`, which the UI renders as "System / Unknown" rather than a
+disallowed write.
+
+Reason:
+
+Local disk storage matches the project's stated default ("start with local file storage; add MinIO
+if uploads become important early") and Docker Compose already bind-mounts the whole project
+directory, so no extra volume was needed. Keeping documentation visibility enforcement at the page
+layer (not a stricter Payload access rule) keeps the model consistent with how every other
+public/internal split in this project already works, rather than introducing a second, inconsistent
+mechanism. A single generic `AuditLog` shape (rather than a strongly-typed field per action) keeps
+the audit writer reusable for future audited actions without schema changes, matching "keep audit
+writing simple and reusable" from the phase brief.
+
+Impact:
+
+Any future feature that needs audit coverage should call `recordAuditLog` rather than inventing a
+new logging path. Because actor resolution depends on an authenticated Payload session and workspace
+routes still have none, every audit row from this phase has `actor_user_id: null` — the audit trail
+records *what* changed and *when*, not yet *who* did it. This must be revisited together with the
+still-open workspace authentication gap (D011) before audit logs are trustworthy for multi-officer
+accountability. `documentation-assets` also inherits the same "collection read access does not
+enforce visibility" gap already accepted for `matches` in D011 — a direct `/api/documentation-assets`
+query still returns internal-visibility rows; only the Next.js pages respect the split.
 
 ## 3. Pending Decisions
 
