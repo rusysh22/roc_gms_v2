@@ -2,11 +2,12 @@
 
 Last updated: 2026-07-02  
 Branch: `codex/phase-0-1-baseline`  
-Current phase: Phase 5E single elimination champion display foundation complete  
-Current status: Single-elimination bracket caches now include non-authoritative champion metadata
-derived from the published last-round match winner. Public brackets, workspace brackets, admin match
-detail, and a minimal public champions route show decided or pending champion states. Match remains
-the source of truth.
+Current phase: Phase 5F bracket and standing impact polish complete  
+Current status: Public and workspace match detail pages now show compact read-only competition
+impact panels. Group-stage/round-robin-like matches show related standing snippets and participant
+rank/points/played context. Single-elimination matches show bracket round, next-match context, and
+last-round champion state when relevant. Match, standing, and bracket data remain source/cache truth
+and are not mutated by these panels.
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -23,60 +24,52 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added champion detection to `src/lib/brackets.ts` for single-elimination bracket layouts.
-- Champion detection reads the final/last-round match from bracket layout data and marks a champion
-  only when that match is `result_published` and has a winner.
-- The bracket cache now stores `bracket_data.champion` as display/cache metadata only; Match remains
-  the source of truth.
-- Updated `/brackets` with a compact Champion banner and pending empty state.
-- Updated bracket match cards so a decided champion's final/last-round match can be visually
-  highlighted.
-- Updated `/workspaces/brackets` with a champions-decided stat and champion summary in cached
-  bracket listings.
-- Added champion context to `/workspaces/matches/[matchNumber]` for single-elimination matches.
-- Added minimal public `/champions` route that lists decided champions or pending champion states
-  from bracket caches.
-- Linked `/champions` from home, public brackets, and workspace brackets.
-- Updated `prd/implementation-plan.md` for Phase 5E progress.
-- Added D019 to `prd/decision-log.md`.
+- Extended `src/app/(frontend)/matchDetailData.ts` with read-only `standingImpact` and
+  `bracketImpact` context.
+- Standing impact loads cached standings for the match's category/stage/group scope and identifies
+  the current match participants' rows when available.
+- Bracket impact reuses existing bracket cache, champion metadata, and winner advancement preview
+  to show current round, next match target or skipped/last-round reason, and champion state for
+  last-round matches.
+- Added reusable `StandingImpactPanel` and `BracketImpactPanel` components to
+  `src/app/(frontend)/workspaces/workspaceComponents.tsx`.
+- Rendered standing/bracket impact panels on both public match detail pages and workspace match
+  detail pages.
+- Added compact responsive styles for impact summary cards and table snippets.
+- Updated `prd/implementation-plan.md` for Phase 5F progress.
+- Updated this handoff. No durable architecture/product decision was added to
+  `prd/decision-log.md` because this was a UI/data-loader polish pass using existing decisions.
 
 Changed files:
 
-- `src/lib/brackets.ts`
-- `src/app/(frontend)/brackets/page.tsx`
-- `src/app/(frontend)/champions/page.tsx`
 - `src/app/(frontend)/matchDetailData.ts`
-- `src/app/(frontend)/page.tsx`
+- `src/app/(frontend)/matches/[matchNumber]/page.tsx`
 - `src/app/(frontend)/styles.css`
-- `src/app/(frontend)/workspaces/brackets/page.tsx`
 - `src/app/(frontend)/workspaces/matches/[matchNumber]/page.tsx`
+- `src/app/(frontend)/workspaces/workspaceComponents.tsx`
 - `prd/implementation-plan.md`
-- `prd/decision-log.md`
 - `prd/session-handoff.md`
 
 Decisions:
 
-- Recorded D019: champion display is derived from the published last-round single-elimination match
-  winner, cached only as display metadata, and never treated as result truth.
+- No new durable decision. Phase 5F follows existing D015-D019: standings/brackets/champion display
+  are cached/read-only views over Match truth.
 
 Tests / Verification:
 
 - `npm.cmd run typecheck` passed.
-- Recalculated the seeded Badminton Men Single bracket cache for stage `1`.
-- `npm.cmd run build` passed and includes the new `/champions` route.
+- `npm.cmd run build` passed.
 - `docker compose run --rm app npm run seed` passed twice, verifying seed duplicate-safety.
-- Restarted the app container so the running server picked up the new route and UI.
-- HTTP 200 verified for `/`, `/brackets`, `/workspaces/brackets`,
-  `/workspaces/matches/ROC-BMS-001`, and `/champions`.
-- Verified current seeded empty/pending champion state on `/brackets` and `/champions`:
-  `Champion is pending until the last-round result is published.`
-- Verified the bracket cache stores pending champion metadata for `ROC-BMS-001` while the seeded
-  match remains `walkover`.
-- Temporarily set `ROC-BMS-001` to `result_published`, recalculated the bracket cache, and verified
-  `/champions` displayed `Andi Pratama` with reason
-  `Champion detected from the published last-round match winner.`
-- Restored `ROC-BMS-001` to the seeded `walkover` state and recalculated the bracket cache back to
-  pending champion metadata.
+- Restarted the app container so the running server picked up the new panels.
+- HTTP 200 verified for `/`, `/standings`, `/brackets`, `/champions`, `/matches/ROC-BMS-001`, and
+  `/workspaces/matches/ROC-BMS-001`.
+- Verified public `/matches/ROC-BMS-001` renders `Bracket Impact`, current round `Semi Final`, and
+  last-round/champion context.
+- Verified workspace `/workspaces/matches/ROC-BMS-001` renders `Bracket Impact`, `Champion Context`,
+  and no-next-match context.
+- Verified public `/matches/ROC-FUT-GA-001` renders `Standing Impact`, `Futsal Men`, `Group A`, and
+  cached participant rows for `IT Futsal Squad` and `Finance Futsal Squad`.
+- Verified workspace `/workspaces/matches/ROC-FUT-GA-001` renders the same standing impact context.
 
 Pending:
 
@@ -102,14 +95,12 @@ Pending:
 
 Blockers:
 
-- None. The current seed does not include a completed final/last-round `result_published` champion
-  by default, so the permanent demo state shows the champion pending state. A decided champion can
-  be verified by temporarily publishing `ROC-BMS-001`, then restoring it.
+- None.
 
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5E single elimination champion display foundation is complete. Next, start a small Phase 5F bracket/standing impact polish pass, or add explicit bracket edge/source-to-target metadata to make winner advancement more robust. Keep group-to-knockout promotion, double elimination, bracket mutation UI, seeding/draw editor, manual standing override UI, full winners announcement CMS, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5F bracket and standing impact polish is complete. Next, add explicit bracket edge/source-to-target metadata to make winner advancement more robust, or start Phase 6A Article CMS foundation. Keep group-to-knockout promotion, double elimination, bracket mutation UI, seeding/draw editor, manual standing override UI, full winners announcement CMS, live score, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template

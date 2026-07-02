@@ -42,6 +42,38 @@ export type WorkspaceMatchSet = {
   notes?: string | null
 }
 
+export type StandingImpactSummaryRow = {
+  id: string | number
+  rank: number
+  played: number
+  points: number
+  score_difference: number
+  qualified_status: string
+  entry_id?: RelationshipDoc | string | number | null
+}
+
+export type StandingImpactSummary = {
+  scopeLabel: string
+  rows: StandingImpactSummaryRow[]
+  participantRows: StandingImpactSummaryRow[]
+  reason?: string
+}
+
+export type BracketImpactSummary = {
+  roundName: string
+  nextMatchNumber?: string
+  nextTargetSlot?: 'a' | 'b'
+  nextReason: string
+  isLastRound: boolean
+  champion?: {
+    status: 'decided' | 'pending'
+    label?: string
+    match_number?: string
+    round_name?: string
+    reason: string
+  } | null
+}
+
 export const getRelationshipLabel = (
   value: RelationshipDoc | string | number | null | undefined,
   fallback = 'TBD',
@@ -250,6 +282,151 @@ export const MatchSetsTable = ({ sets }: { sets: WorkspaceMatchSet[] }) => {
         ))}
       </tbody>
     </table>
+  )
+}
+
+export const StandingImpactPanel = ({
+  impact,
+}: {
+  impact: StandingImpactSummary | null | undefined
+}) => {
+  if (!impact) {
+    return null
+  }
+
+  return (
+    <article className="workspace-panel match-detail-grid__wide impact-panel">
+      <h2>Standing Impact</h2>
+      <p className="match-meta">{impact.scopeLabel}</p>
+      {impact.rows.length === 0 ? (
+        <p className="empty-state">
+          {impact.reason || 'Standings are not calculated yet for this match scope.'}
+        </p>
+      ) : (
+        <>
+          <div className="impact-summary-grid" aria-label="Match participant standing summary">
+            {impact.participantRows.length === 0 ? (
+              <p className="empty-state">This match's participants are not in the standing cache yet.</p>
+            ) : (
+              impact.participantRows.map((row) => (
+                <div className="impact-summary-card" key={row.id}>
+                  <span>{getRelationshipLabel(row.entry_id)}</span>
+                  <strong>#{row.rank}</strong>
+                  <small>
+                    {row.points} pts / {row.played} played / SD {row.score_difference}
+                  </small>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="impact-table-wrap">
+            <table className="impact-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Entry</th>
+                  <th>P</th>
+                  <th>Pts</th>
+                  <th>SD</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {impact.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.rank}</td>
+                    <td>{getRelationshipLabel(row.entry_id)}</td>
+                    <td>{row.played}</td>
+                    <td>{row.points}</td>
+                    <td>{row.score_difference}</td>
+                    <td>{formatStatus(row.qualified_status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </article>
+  )
+}
+
+export const BracketImpactPanel = ({
+  impact,
+  workspace = false,
+}: {
+  impact: BracketImpactSummary | null | undefined
+  workspace?: boolean
+}) => {
+  if (!impact) {
+    return null
+  }
+
+  const matchHref =
+    impact.nextMatchNumber ?
+      `${workspace ? '/workspaces' : ''}/matches/${impact.nextMatchNumber}`
+    : ''
+  const championMatchHref =
+    impact.champion?.match_number ?
+      `${workspace ? '/workspaces' : ''}/matches/${impact.champion.match_number}`
+    : ''
+
+  return (
+    <article className="workspace-panel match-detail-grid__wide impact-panel">
+      <h2>Bracket Impact</h2>
+      <dl className="workspace-facts impact-facts">
+        <div>
+          <dt>Round</dt>
+          <dd>{impact.roundName}</dd>
+        </div>
+        <div>
+          <dt>Next Match</dt>
+          <dd>
+            {impact.nextMatchNumber ? (
+              <a href={matchHref}>{impact.nextMatchNumber}</a>
+            ) : (
+              'No next match'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Target Slot</dt>
+          <dd>{impact.nextTargetSlot ? impact.nextTargetSlot.toUpperCase() : 'Not set'}</dd>
+        </div>
+        <div>
+          <dt>Last Round</dt>
+          <dd>{impact.isLastRound ? 'Yes' : 'No'}</dd>
+        </div>
+      </dl>
+      <p className="empty-state">{impact.nextReason}</p>
+      {impact.isLastRound && impact.champion ? (
+        <div
+          className={
+            impact.champion.status === 'decided' ?
+              'champion-banner champion-banner--decided'
+            : 'champion-banner'
+          }
+        >
+          <div>
+            <p className="match-meta">Champion</p>
+            <h3>
+              {impact.champion.status === 'decided' ?
+                impact.champion.label || 'Champion'
+              : 'Not decided yet'}
+            </h3>
+          </div>
+          <p>
+            {impact.champion.reason}
+            {championMatchHref ? (
+              <>
+                {' '}
+                <a href={championMatchHref}>View deciding match</a>
+              </>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
+    </article>
   )
 }
 

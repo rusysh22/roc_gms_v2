@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation'
 import { getMatchAuditLog, getMatchDetail } from '../../../matchDetailData'
 import {
   AuditLogPanel,
+  BracketImpactPanel,
   CommentList,
   DocumentationAssetList,
   MatchSetsTable,
+  StandingImpactPanel,
   WorkspaceNav,
   formatDateTime,
   formatStatus,
@@ -47,7 +49,16 @@ export default async function AdminMatchDetailPage({
     notFound()
   }
 
-  const { match, matchSets, documentationAssets, comments, advancement, champion } = result
+  const {
+    match,
+    matchSets,
+    documentationAssets,
+    comments,
+    advancement,
+    champion,
+    standingImpact,
+    bracketImpact,
+  } = result
   const allowedTransitions = getAllowedTransitions(match.status)
   const auditLogEntries = await getMatchAuditLog(
     match.id,
@@ -192,6 +203,9 @@ export default async function AdminMatchDetailPage({
             </div>
           </dl>
         </article>
+
+        <StandingImpactPanel impact={standingImpact} />
+        <BracketImpactPanel impact={bracketImpact} workspace />
 
         {advancement ? (
           <article className="workspace-panel match-detail-grid__wide">

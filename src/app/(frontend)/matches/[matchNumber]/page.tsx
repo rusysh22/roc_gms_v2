@@ -2,9 +2,11 @@ import { notFound } from 'next/navigation'
 
 import { getMatchDetail } from '../../matchDetailData'
 import {
+  BracketImpactPanel,
   CommentList,
   DocumentationAssetList,
   MatchSetsTable,
+  StandingImpactPanel,
   formatDateTime,
   formatStatus,
   getRelationshipLabel,
@@ -22,7 +24,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
     notFound()
   }
 
-  const { match, matchSets, documentationAssets, comments } = result
+  const { match, matchSets, documentationAssets, comments, standingImpact, bracketImpact } = result
   const publicDocumentationAssets = documentationAssets.filter(
     (asset) => asset.visibility === 'public',
   )
@@ -104,6 +106,9 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
             </div>
           </dl>
         </article>
+
+        <StandingImpactPanel impact={standingImpact} />
+        <BracketImpactPanel impact={bracketImpact} />
 
         <article className="workspace-panel">
           <h2>Score Summary</h2>

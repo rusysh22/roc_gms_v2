@@ -1,7 +1,7 @@
 import { getPayload, type Where } from 'payload'
 
 import config from '@payload-config'
-import type { BracketChampion, SingleEliminationBracketData } from '@/lib/brackets'
+import type { BracketChampion, BracketMatchCard, SingleEliminationBracketData } from '@/lib/brackets'
 import {
   getSingleEliminationAdvancementPreview,
   type WinnerAdvancementResult,
@@ -90,6 +90,42 @@ export type CommentDetail = {
   createdAt?: string
 }
 
+export type StandingImpactRow = {
+  id: string | number
+  rank: number
+  played: number
+  won: number
+  drawn: number
+  lost: number
+  points: number
+  score_for: number
+  score_against: number
+  score_difference: number
+  set_for: number
+  set_against: number
+  set_difference: number
+  qualified_status: string
+  entry_id?: EntryDoc | string | number | null
+}
+
+export type StandingImpact = {
+  scopeLabel: string
+  rows: StandingImpactRow[]
+  participantRows: StandingImpactRow[]
+  reason?: string
+}
+
+export type BracketImpact = {
+  roundName: string
+  currentMatch?: BracketMatchCard
+  nextMatchNumber?: string
+  nextMatchHref?: string
+  nextTargetSlot?: 'a' | 'b'
+  nextReason: string
+  isLastRound: boolean
+  champion?: BracketChampion | null
+}
+
 export type MatchDetailResult = {
   match: MatchDetail
   matchSets: MatchSetDetail[]
@@ -97,6 +133,8 @@ export type MatchDetailResult = {
   comments: CommentDetail[]
   advancement?: WinnerAdvancementResult | null
   champion?: BracketChampion | null
+  standingImpact?: StandingImpact | null
+  bracketImpact?: BracketImpact | null
 }
 
 const getRelationshipId = (value: RelationshipDoc | string | number | null | undefined) => {
@@ -109,6 +147,103 @@ const getRelationshipId = (value: RelationshipDoc | string | number | null | und
   }
 
   return value.id
+}
+
+const idsEqual = (left: string | number | undefined, right: string | number | undefined) =>
+  left !== undefined && right !== undefined && String(left) === String(right)
+
+const standingsStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
+
+const getStandingImpact = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  match: MatchDetail,
+  stageType: string | undefined,
+): Promise<StandingImpact | null> => {
+  if (!stageType || !standingsStageTypes.has(stageType)) {
+    return null
+  }
+
+  const categoryId = getRelationshipId(match.category_id)
+  const stageId = getRelationshipId(match.stage_id)
+  const groupId = getRelationshipId(match.group_id)
+  if (!categoryId || !stageId) {
+    return null
+  }
+
+  const standings = await payload.find({
+    collection: 'standings',
+    depth: 1,
+    limit: 100,
+    sort: 'rank',
+    where: {
+      and: [
+        { category_id: { equals: categoryId } },
+        { stage_id: { equals: stageId } },
+        groupId ? { group_id: { equals: groupId } } : { group_id: { exists: false } },
+      ],
+    },
+  })
+  const rows = standings.docs as StandingImpactRow[]
+  const participantAId = getRelationshipId(match.participant_a_entry_id)
+  const participantBId = getRelationshipId(match.participant_b_entry_id)
+  const participantRows = rows.filter((row) => {
+    const entryId = getRelationshipId(row.entry_id)
+    return idsEqual(entryId, participantAId) || idsEqual(entryId, participantBId)
+  })
+
+  return {
+    scopeLabel: [
+      match.category_id && typeof match.category_id === 'object' ? match.category_id.name : 'Category',
+      match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.name : 'Stage',
+      match.group_id && typeof match.group_id === 'object' ? match.group_id.name : 'No group',
+    ].join(' / '),
+    rows,
+    participantRows,
+    reason:
+      rows.length === 0 ?
+        'Standings are not calculated yet for this match scope.'
+      : undefined,
+  }
+}
+
+const getBracketImpact = (
+  match: MatchDetail,
+  bracketData: SingleEliminationBracketData | undefined,
+  advancement: WinnerAdvancementResult | null,
+  champion: BracketChampion | null,
+): BracketImpact | null => {
+  const roundName = match.round_name || 'Single Elimination'
+  if (!bracketData) {
+    return {
+      roundName,
+      nextReason: advancement?.reason || 'Bracket cache has not been generated yet.',
+      isLastRound: false,
+      champion,
+    }
+  }
+
+  const currentRoundIndex = bracketData.rounds.findIndex((round) =>
+    round.matches.some((roundMatch) => idsEqual(roundMatch.id, match.id)),
+  )
+  const currentRound = currentRoundIndex >= 0 ? bracketData.rounds[currentRoundIndex] : undefined
+  const currentMatch = currentRound?.matches.find((roundMatch) => idsEqual(roundMatch.id, match.id))
+  const isLastRound = currentRoundIndex >= 0 && currentRoundIndex === bracketData.rounds.length - 1
+
+  return {
+    roundName: currentRound?.name || roundName,
+    currentMatch,
+    nextMatchNumber: advancement?.targetMatchNumber,
+    nextMatchHref: advancement?.targetMatchNumber
+      ? `/matches/${advancement.targetMatchNumber}`
+      : undefined,
+    nextTargetSlot: advancement?.targetSlot,
+    nextReason:
+      isLastRound ?
+        'This is the last round for the current single-elimination bracket.'
+      : advancement?.reason || 'No next-match target is available yet.',
+    isLastRound,
+    champion: isLastRound ? champion : null,
+  }
 }
 
 export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailResult | null> => {
@@ -162,10 +297,22 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
   })
   let advancement: WinnerAdvancementResult | null = null
   let champion: BracketChampion | null = null
+  let standingImpact: StandingImpact | null = null
+  let bracketImpact: BracketImpact | null = null
   const stageType =
     match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
 
+  try {
+    standingImpact = await getStandingImpact(payload, match, stageType)
+  } catch (error) {
+    payload.logger.error(
+      `Failed to load standing impact for match ${match.match_number}: ${error}`,
+    )
+  }
+
   if (stageType === 'single_elimination') {
+    let bracketData: SingleEliminationBracketData | undefined
+
     try {
       advancement = await getSingleEliminationAdvancementPreview(payload, match.id)
     } catch (error) {
@@ -187,9 +334,7 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
             },
           },
         })
-        const bracketData = brackets.docs[0]?.bracket_data as
-          | SingleEliminationBracketData
-          | undefined
+        bracketData = brackets.docs[0]?.bracket_data as SingleEliminationBracketData | undefined
         champion =
           bracketData?.champion || {
             status: 'pending',
@@ -201,6 +346,8 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
         )
       }
     }
+
+    bracketImpact = getBracketImpact(match, bracketData, advancement, champion)
   }
 
   return {
@@ -210,6 +357,8 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
     comments: comments.docs as CommentDetail[],
     advancement,
     champion,
+    standingImpact,
+    bracketImpact,
   }
 }
 

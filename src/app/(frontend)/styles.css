@@ -773,6 +773,87 @@ h1 {
   font-weight: 750;
 }
 
+.impact-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.impact-panel h2 {
+  margin-bottom: 0;
+}
+
+.impact-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.impact-summary-card {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.impact-summary-card span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.impact-summary-card strong {
+  font-size: 1.4rem;
+}
+
+.impact-summary-card small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.impact-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.impact-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.impact-table th,
+.impact-table td {
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.impact-table th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.impact-table td:nth-child(n + 3),
+.impact-table th:nth-child(n + 3) {
+  text-align: right;
+}
+
+.impact-table td:last-child,
+.impact-table th:last-child {
+  text-align: left;
+}
+
+.impact-facts {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .match-sets-table {
   width: 100%;
   margin: 14px 0 0;
