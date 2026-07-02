@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 
 import { AuditLogs } from './src/collections/AuditLogs'
+import { Brackets } from './src/collections/Brackets'
 import { Clubs } from './src/collections/Clubs'
 import { Comments } from './src/collections/Comments'
 import { CompetitionCategories } from './src/collections/CompetitionCategories'
@@ -57,6 +58,7 @@ export default buildConfig({
     Matches,
     MatchSets,
     Standings,
+    Brackets,
     DocumentationAssets,
     Comments,
     AuditLogs,

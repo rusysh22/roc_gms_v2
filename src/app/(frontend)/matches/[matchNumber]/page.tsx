@@ -43,6 +43,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
         <div className="actions">
           <a href="/schedule">Public Schedule</a>
           <a href="/standings">Standings</a>
+          <a href="/brackets">Brackets</a>
           <a href="/">Home</a>
         </div>
       </section>

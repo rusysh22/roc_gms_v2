@@ -417,6 +417,7 @@ export const WorkspaceNav = () => (
     <a href="/workspaces/scheduler">Scheduler</a>
     <a href="/workspaces/match-officer">Match Officer</a>
     <a href="/workspaces/standings">Standings</a>
+    <a href="/workspaces/brackets">Brackets</a>
     <a href="/workspaces/content-admin">Content Admin</a>
     <a href="/admin">Backoffice</a>
   </nav>

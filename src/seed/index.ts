@@ -1,6 +1,7 @@
 import { getPayload } from 'payload'
 
 import config from '@payload-config'
+import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import {
   generateRoundRobinPairings,
   generateSingleEliminationFirstRound,
@@ -27,6 +28,7 @@ type CollectionName =
   | 'courts'
   | 'matches'
   | 'match-sets'
+  | 'brackets'
   | 'comments'
 
 type SeedPayload = Awaited<ReturnType<typeof getPayload>>
@@ -473,6 +475,7 @@ const seed = async () => {
 
   const mixedDoubleCategoryId = categoryIds.get('roc-olympic-2026-badminton-mixed-double')
   const futsalCategoryId = categoryIds.get('roc-olympic-2026-futsal-men')
+  const badmintonMenSingleCategoryId = categoryIds.get('roc-olympic-2026-badminton-men-single')
   const rosterSeeds = [
     {
       key: 'it-pair-andi',
@@ -960,6 +963,13 @@ const seed = async () => {
       categoryId: futsalCategoryId,
       stageId: futsalStageId,
       groupId: futsalGroupId,
+    })
+  }
+
+  const badmintonMenSingleStageId = stageIds.get('roc-olympic-2026-badminton-men-single')
+  if (badmintonMenSingleCategoryId && badmintonMenSingleStageId) {
+    await recalculateSingleEliminationBracket(payload, {
+      stageId: badmintonMenSingleStageId,
     })
   }
 

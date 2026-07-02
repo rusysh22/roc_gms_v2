@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D015 added)
+Last updated: 2026-07-02 (D016 added)
 
 ## 1. Purpose
 
@@ -406,6 +406,32 @@ Impact:
 Future result-publish actions should call the same recalculation helper after a successful result
 change. A later phase must implement head-to-head/manual tie-breakers, rank explanations, and manual
 override/audit UI before complex tournaments rely on standings for advancement.
+
+### D016 - Phase 5B brackets are custom cached layouts over match truth
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+`Bracket` (`brackets`) is a Payload collection that stores layout/cache metadata only:
+`bracket_key`, `event_id`, `category_id`, `stage_id`, `name`, `format`, `seed_config`,
+`bracket_data`, and `status`. Match records remain the source of truth for status, score, winner,
+participants, and match detail links. The Phase 5B builder supports only `single_elimination` stages
+and writes a deterministic cache keyed by event/category/stage/format. The public bracket UI is
+custom HTML/CSS rather than a third-party bracket component.
+
+Reason:
+
+The project needs a bracket view early, but winner advancement, seeding editors, and complex bracket
+engines are still out of scope. A cache keeps the public page simple and Payload Admin-friendly while
+avoiding duplicated result truth.
+
+Impact:
+
+Future match result updates should refresh affected bracket caches after successful mutations. Later
+phases can add winner advancement, bracket mutation/seeding UI, group-to-knockout promotion,
+connector drawing, and double-elimination support without changing match ownership of results.
 
 ## 3. Pending Decisions
 

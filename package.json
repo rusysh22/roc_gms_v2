@@ -9,6 +9,7 @@
     "start": "next start",
     "payload": "payload",
     "seed": "payload run src/seed/index.ts",
+    "brackets:recalculate": "payload run src/scripts/recalculateBrackets.ts",
     "standings:recalculate": "payload run src/scripts/recalculateStandings.ts",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",

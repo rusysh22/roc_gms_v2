@@ -76,6 +76,7 @@ export default async function AdminMatchDetailPage({
           <a href="/workspaces/scheduler">Scheduler Workspace</a>
           <a href="/workspaces/match-officer">Match Officer Workspace</a>
           <a href="/workspaces/standings">Standings Workspace</a>
+          <a href="/workspaces/brackets">Brackets Workspace</a>
           <a href={`/admin/collections/matches/${match.id}`}>Edit in Backoffice</a>
           {match.is_public ? <a href={`/matches/${match.match_number}`}>View Public Page</a> : null}
         </div>

@@ -2,13 +2,14 @@
 
 Last updated: 2026-07-02  
 Branch: `codex/phase-0-1-baseline`  
-Current phase: Phase 5A group standings foundation complete  
-Current status: Group standings foundation is live. Payload has a `standings` collection, the
-public `/standings` page shows cached standings in a mobile-readable table, seed data now includes a
-published futsal group result, and standings can be recalculated from a command or the new
-`/workspaces/standings` utility page. Brackets, winner advancement, group-to-knockout promotion,
-manual standing overrides, live score, article CMS, announcement CMS, public edit mode, email/calendar
-invite, and workspace authentication overhaul remain out of scope.
+Current phase: Phase 5B custom single elimination bracket foundation complete  
+Current status: Custom single-elimination brackets are live. Payload has a `brackets` collection,
+the public `/brackets` page renders a mobile-friendly custom bracket from cached layout data, the
+new `/workspaces/brackets` utility can recalculate the seeded bracket, and seed now generates a
+minimal Badminton Men Single bracket cache. Match records remain the source of truth for status,
+score, winner, and match detail links. Double elimination, winner advancement, group-to-knockout
+promotion, bracket mutation UI, seeding/draw editor, live score, article CMS, announcement CMS,
+public edit mode, email/calendar invite, and workspace authentication overhaul remain out of scope.
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -25,43 +26,40 @@ The next session should read this file after reading:
 
 Completed:
 
-- Added `src/collections/Standings.ts` and registered it in `payload.config.ts`. The collection
-  includes the required standing fields plus `standing_key` for deterministic duplicate-safe
-  recalculation.
-- Added `src/lib/standings.ts`, a reusable calculation and persistence module that reads only
-  `finished` / `result_published` matches and `match-sets`, applies Ruleset points/draw settings,
-  sorts deterministically, and writes only cached standing rows.
-- Added `src/scripts/recalculateStandings.ts` and the `npm run standings:recalculate` command. It
-  accepts `--category=...`, `--stage=...`, optional `--group=...`, and optional `--event=...`.
-- Added `/standings` public page with grouped standing tables, empty states, and mobile horizontal
-  scrolling.
-- Added `/workspaces/standings` with a simple seeded-group recalculation form and links to public
-  standings and Payload Admin standings.
-- Added links to standings from home, public schedule, public match detail, admin match detail, and
-  workspace navigation.
-- Updated seed data so `ROC-FUT-GA-001` is a duplicate-safe seeded futsal result:
-  `IT Futsal Squad 3-1 Finance Futsal Squad`, `result_published`, with IT as winner.
-- Seed now recalculates the futsal Group A standing cache after creating/updating demo data.
-- Updated `prd/implementation-plan.md` for Phase 5A progress.
-- Added D015 to `prd/decision-log.md`.
+- Added `src/collections/Brackets.ts` and registered it in `payload.config.ts`. The collection stores
+  deterministic cache/layout metadata only: `bracket_key`, relationships, format, `seed_config`,
+  `bracket_data`, and status.
+- Added `src/lib/brackets.ts`, a reusable single-elimination layout/cache module that reads existing
+  `Stage`, `Match`, `CompetitionEntry`, and `MatchSet` data. It groups matches into rounds, includes
+  participant labels/seeds, set score fallback, status, winner highlighting, and match detail hrefs.
+- Added `src/scripts/recalculateBrackets.ts` and the `npm run brackets:recalculate --stage=...`
+  command.
+- Updated seed so Badminton Men Single recalculates a duplicate-safe single-elimination bracket cache
+  after matches and match sets are seeded.
+- Added `/brackets`, a custom public bracket page with horizontally scrollable rounds on wider
+  screens and stacked readable rounds on small screens.
+- Added `/workspaces/brackets`, a simple backoffice-friendly bracket utility page with seeded-stage
+  recalculation and links to public brackets / Payload Admin.
+- Added links to brackets from home, public match detail, admin match detail, and workspace nav.
+- Added bracket-specific responsive CSS in `src/app/(frontend)/styles.css`.
+- Updated `prd/implementation-plan.md` for Phase 5B progress.
+- Added D016 to `prd/decision-log.md`.
 
 Changed files:
 
-- `src/collections/Standings.ts` (new)
-- `src/lib/standings.ts` (new)
-- `src/scripts/recalculateStandings.ts` (new)
-- `src/app/(frontend)/standings/page.tsx` (new)
-- `src/app/(frontend)/workspaces/standings/page.tsx` (new)
-- `src/app/(frontend)/workspaces/standings/standingActions.ts` (new)
+- `src/collections/Brackets.ts` (new)
+- `src/lib/brackets.ts` (new)
+- `src/scripts/recalculateBrackets.ts` (new)
+- `src/app/(frontend)/brackets/page.tsx` (new)
+- `src/app/(frontend)/workspaces/brackets/page.tsx` (new)
+- `src/app/(frontend)/workspaces/brackets/bracketActions.ts` (new)
 - `payload.config.ts`
 - `package.json`
 - `src/app/(frontend)/page.tsx`
-- `src/app/(frontend)/schedule/page.tsx`
 - `src/app/(frontend)/matches/[matchNumber]/page.tsx`
 - `src/app/(frontend)/workspaces/matches/[matchNumber]/page.tsx`
 - `src/app/(frontend)/workspaces/workspaceComponents.tsx`
 - `src/app/(frontend)/styles.css`
-- `src/seed/data/demoScenario.ts`
 - `src/seed/index.ts`
 - `prd/implementation-plan.md`
 - `prd/decision-log.md`
@@ -69,35 +67,37 @@ Changed files:
 
 Decisions:
 
-- Recorded D015: standings are cached recalculations keyed by `standing_key`; Phase 5A supports
-  Ruleset point fields and scalar tie-breakers first; head-to-head/manual/fewest-penalties tie
-  breakers are deferred.
+- Recorded D016: brackets are custom cached layouts over match truth; Phase 5B supports
+  single-elimination only and stores no final result truth in `brackets`.
 
 Tests / Verification:
 
 - `npm.cmd run typecheck` passed.
 - `npm.cmd run build` passed.
-- `docker compose run --rm app npm run seed` passed twice after the standings changes, verifying
-  duplicate-safe seed and standing cache updates.
-- `docker compose run --rm app npm run standings:recalculate --category=3 --stage=3 --group=2`
-  passed and printed two standing rows.
-- Verified seeded futsal standings in PostgreSQL:
-  `IT Futsal Squad` rank 1, played 1, won 1, points 3, score 3-1, difference +2;
-  `Finance Futsal Squad` rank 2, played 1, lost 1, points 0, score 1-3, difference -2.
-- `docker compose up -d` started the app. `docker compose up -d --build` was attempted but Windows
-  blocked a locked generated `.next/dev` file while sending build context; the non-rebuild app start
-  worked for route verification.
-- HTTP 200 verified for `/`, `/schedule`, `/standings`, `/matches/ROC-BMS-001`,
-  `/workspaces/matches/ROC-BMS-001`, and `/admin/collections/standings`.
-- Verified Payload Admin can access the Standing collection via `/admin/collections/standings` (HTTP
+- `docker compose run --rm app npm run seed` passed twice after adding brackets, verifying
+  duplicate-safe bracket cache generation.
+- `docker compose run --rm app npm run brackets:recalculate --stage=1` passed and updated bracket
+  `1` with 2 match(es) across 2 round(s).
+- Verified cached bracket in PostgreSQL: one published Badminton Men Single bracket, stage
+  `Knockout`, with 2 rounds: `First Round` and `Semi Final`.
+- `docker compose restart app` was required for the dev server to pick up new route folders.
+- HTTP 200 verified for `/`, `/brackets`, `/workspaces/brackets`, `/matches/ROC-BMS-001`,
+  `/workspaces/matches/ROC-BMS-001`, and `/admin/collections/brackets`.
+- Verified Payload Admin can access the Bracket collection via `/admin/collections/brackets` (HTTP
   200).
+- Verified `/brackets` renders `Badminton Men Single`, `ROC-BMS-001`, `ROC-BMS-GEN-R1-001`, and
+  links to `/matches/ROC-BMS-001` and `/matches/ROC-BMS-GEN-R1-001`.
 
 Pending:
 
+- Recalculate brackets automatically from match result publish/update actions.
+- Winner advancement and next-round participant promotion.
+- Bracket mutation UI, seeding/draw editor, and stronger bracket readiness/lock workflow.
+- Connector drawing / richer bracket visualization polish.
+- Double elimination and group-to-knockout promotion.
 - Recalculate standings automatically from match result publish/update actions.
 - Standing rank explanations and head-to-head/manual/fewest-penalties tie-breakers.
 - Manual standing override UI with reason and audit log.
-- Bracket collection, bracket renderer, winner advancement, and group-to-knockout promotion.
 - Reschedule reason workflow / real scheduling mutation from the Scheduler Workspace.
 - Full public comment submission and moderation workflow.
 - Session/authentication gating for workspace routes and mutations.
@@ -108,13 +108,13 @@ Pending:
 
 Blockers:
 
-- None. Note: Docker rebuild may need `.next` cleanup or closing processes on Windows if the locked
-  generated file issue repeats.
+- None. Note: `next-env.d.ts` may appear modified from line-ending/build metadata after Next builds,
+  but it has no content diff in this session.
 
 Recommended next prompt:
 
 ```text
-Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5A group standings foundation is complete. Next, wire automatic standings recalculation after result publish/update actions, then add rank explanation/head-to-head planning or begin the Bracket collection foundation. Keep manual standing override UI, winner advancement, group-to-knockout promotion, double elimination, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
+Continue ROC GMS V2 from the latest handoff. Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Inspect the repository and git status. Phase 5B custom single-elimination bracket foundation is complete. Next, wire automatic standings/bracket recalculation after result publish/update actions, or start Phase 5C winner advancement planning/foundation without implementing double elimination. Keep group-to-knockout promotion, bracket mutation UI, seeding/draw editor, live score, article CMS, announcement CMS, public edit mode, email/calendar invite, and workspace authentication overhaul out of scope unless explicitly requested. Run typecheck, production build, seed duplicate-safety verification, relevant route checks, and update the handoff.
 ```
 
 ## 3. Session Handoff Template
