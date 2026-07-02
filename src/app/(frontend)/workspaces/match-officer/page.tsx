@@ -75,6 +75,10 @@ export default async function MatchOfficerWorkspacePage() {
               </dd>
             </div>
           </dl>
+          <a className="match-card__details-link" href={`/workspaces/matches/${nextMatch.match_number}`}>
+            Match details
+          </a>
+
           <div className="officer-actions" aria-label="Match officer pending actions">
             <span>Check-in later</span>
             <span>Start later</span>

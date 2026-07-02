@@ -121,6 +121,10 @@ export default async function PublicSchedulePage() {
                   <dd>{match.status.replaceAll('_', ' ')}</dd>
                 </div>
               </dl>
+
+              <a className="match-card__details-link" href={`/matches/${match.match_number}`}>
+                View match details
+              </a>
             </article>
           ))
         )}

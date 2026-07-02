@@ -33,6 +33,15 @@ export type WorkspaceOption = {
   label: string
 }
 
+export type WorkspaceMatchSet = {
+  id: string | number
+  set_number: number
+  participant_a_score?: number | null
+  participant_b_score?: number | null
+  winner_entry_id?: EntryDoc | string | number | null
+  notes?: string | null
+}
+
 export const getRelationshipLabel = (
   value: RelationshipDoc | string | number | null | undefined,
   fallback = 'TBD',
@@ -180,8 +189,43 @@ export const MatchCard = ({
         <dd>{formatStatus(match.generation_source || 'manual')}</dd>
       </div>
     </dl>
+
+    <a className="match-card__details-link" href={`/workspaces/matches/${match.match_number}`}>
+      Match details
+    </a>
   </article>
 )
+
+export const MatchSetsTable = ({ sets }: { sets: WorkspaceMatchSet[] }) => {
+  if (sets.length === 0) {
+    return <p className="empty-state">No match sets recorded yet.</p>
+  }
+
+  return (
+    <table className="match-sets-table">
+      <thead>
+        <tr>
+          <th>Set</th>
+          <th>Participant A</th>
+          <th>Participant B</th>
+          <th>Winner</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sets.map((set) => (
+          <tr key={set.id}>
+            <td>{set.set_number}</td>
+            <td>{set.participant_a_score ?? '-'}</td>
+            <td>{set.participant_b_score ?? '-'}</td>
+            <td>{getRelationshipLabel(set.winner_entry_id, 'Not decided')}</td>
+            <td>{set.notes || '-'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
 
 export const WorkspaceNav = () => (
   <nav className="workspace-nav" aria-label="Operational workspaces">

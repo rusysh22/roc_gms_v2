@@ -208,6 +208,35 @@ A later phase must decide whether conflicts should block publish/reschedule acti
 scheduling mutation workflow exists, and whether advanced constraints (match officer overlap, rest
 time, category-specific rules) are added to the same detector or a new one.
 
+### D011 - Match detail routes use `match_number` as the URL identifier
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+Public match detail lives at `/matches/[matchNumber]` and the admin-oriented panel lives at
+`/workspaces/matches/[matchNumber]`, both keyed by the unique, indexed `match_number` field (e.g.
+`ROC-BMS-001`) rather than the internal Payload document id. The public route calls Next.js
+`notFound()` (HTTP 404) when the match does not exist or `is_public` is not `true`; the admin route
+has no visibility gating and shows any match by number. Both routes share one data loader
+(`src/app/(frontend)/matchDetailData.ts`) so match + match-set fetching logic is not duplicated.
+
+Reason:
+
+`match_number` is human-readable, unique, and already indexed, which makes for a cleaner shareable
+URL than a raw database id (PRD section 15 requires match detail to be shareable). Gating the public
+route on `is_public` keeps it consistent with the existing public schedule filter
+(`src/app/(frontend)/schedule/page.tsx`), so a match that is not yet public cannot be discovered
+through a guessed or shared link.
+
+Impact:
+
+Any future feature that creates or renumbers matches must keep `match_number` unique and URL-safe.
+The admin match detail route currently has no authentication/authorization gate, consistent with
+every other workspace page added so far in this project — a future phase must decide when to add
+session-based access control across all workspace routes at once rather than piecemeal per page.
+
 ## 3. Pending Decisions
 
 - Decide whether public comments require login.

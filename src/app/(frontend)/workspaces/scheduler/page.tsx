@@ -197,7 +197,11 @@ export default async function SchedulerWorkspacePage({
                     <p className="calendar-lane__label">{lane.label}</p>
                     <div className="calendar-lane__items">
                       {lane.matches.map((match) => (
-                        <div className="calendar-lane__item" key={match.id}>
+                        <a
+                          className="calendar-lane__item"
+                          key={match.id}
+                          href={`/workspaces/matches/${match.match_number}`}
+                        >
                           <span className="calendar-lane__time">
                             {formatTimeOnly(match.scheduled_start_at)}
                           </span>
@@ -206,7 +210,7 @@ export default async function SchedulerWorkspacePage({
                             {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
                             {getRelationshipLabel(match.participant_b_entry_id)}
                           </span>
-                        </div>
+                        </a>
                       ))}
                     </div>
                   </div>
