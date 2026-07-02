@@ -1,0 +1,12 @@
+node_modules
+.next
+dist
+build
+coverage
+.env
+.env*.local
+payload-types.ts
+media
+*.log
+*.tsbuildinfo
+Dockerfile.local

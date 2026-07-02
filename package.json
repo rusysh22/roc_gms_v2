@@ -1,0 +1,36 @@
+{
+  "name": "roc-gms-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "payload": "payload",
+    "seed": "payload run src/seed/index.ts",
+    "generate:importmap": "payload generate:importmap",
+    "generate:types": "payload generate:types",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@payloadcms/db-postgres": "3.85.2",
+    "@payloadcms/next": "3.85.2",
+    "@payloadcms/richtext-lexical": "3.85.2",
+    "graphql": "16.12.0",
+    "next": "16.2.10",
+    "payload": "3.85.2",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "sharp": "0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

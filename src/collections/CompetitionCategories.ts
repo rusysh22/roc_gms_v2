@@ -1,0 +1,118 @@
+import type { CollectionConfig } from 'payload'
+
+import { canManageEventStructure } from '@/access/roles'
+
+export const CompetitionCategories: CollectionConfig = {
+  slug: 'competition-categories',
+  admin: {
+    defaultColumns: ['name', 'sport_id', 'participant_mode', 'format_type', 'status'],
+    group: 'Event Setup',
+    useAsTitle: 'name',
+  },
+  access: {
+    create: canManageEventStructure,
+    delete: canManageEventStructure,
+    read: () => true,
+    update: canManageEventStructure,
+  },
+  fields: [
+    {
+      name: 'event_id',
+      type: 'relationship',
+      relationTo: 'events',
+      required: true,
+      index: true,
+    },
+    {
+      name: 'sport_id',
+      type: 'relationship',
+      relationTo: 'sports',
+      required: true,
+      index: true,
+    },
+    {
+      name: 'name',
+      type: 'text',
+      required: true,
+    },
+    {
+      name: 'slug',
+      type: 'text',
+      required: true,
+      unique: true,
+      index: true,
+    },
+    {
+      name: 'participant_mode',
+      type: 'select',
+      required: true,
+      defaultValue: 'open',
+      options: [
+        { label: 'Individual', value: 'individual' },
+        { label: 'Pair', value: 'pair' },
+        { label: 'Team', value: 'team' },
+        { label: 'Club', value: 'club' },
+        { label: 'Open', value: 'open' },
+        { label: 'TBD', value: 'tbd' },
+      ],
+    },
+    {
+      name: 'roster_required',
+      type: 'checkbox',
+      defaultValue: false,
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'min_roster_size',
+          type: 'number',
+          min: 0,
+          defaultValue: 0,
+        },
+        {
+          name: 'max_roster_size',
+          type: 'number',
+          min: 0,
+        },
+      ],
+    },
+    {
+      name: 'ruleset_id',
+      type: 'text',
+      admin: {
+        description: 'Temporary identifier until the Ruleset collection is added in Phase 2.',
+      },
+    },
+    {
+      name: 'format_type',
+      type: 'select',
+      required: true,
+      defaultValue: 'single_elimination',
+      options: [
+        { label: 'Single Elimination', value: 'single_elimination' },
+        { label: 'Double Elimination', value: 'double_elimination' },
+        { label: 'Round Robin', value: 'round_robin' },
+        { label: 'Group Stage to Knockout', value: 'group_stage_to_knockout' },
+        { label: 'League', value: 'league' },
+        { label: 'Friendly', value: 'friendly' },
+        { label: 'Time Trial', value: 'time_trial' },
+        { label: 'Score Ranking', value: 'score_ranking' },
+      ],
+    },
+    {
+      name: 'status',
+      type: 'select',
+      required: true,
+      defaultValue: 'draft',
+      options: [
+        { label: 'Draft', value: 'draft' },
+        { label: 'Open', value: 'open' },
+        { label: 'Locked', value: 'locked' },
+        { label: 'Published', value: 'published' },
+        { label: 'Archived', value: 'archived' },
+      ],
+    },
+  ],
+  timestamps: true,
+}
