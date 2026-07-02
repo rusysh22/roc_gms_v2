@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import config from '@payload-config'
+import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -147,6 +148,7 @@ export default async function HomePage() {
 
   return (
     <main className="font-sans text-ink">
+      <AutoRefresh />
       <section className="relative overflow-hidden px-4 pb-16 pt-10 sm:pt-16">
         <div
           aria-hidden="true"

@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import type { BracketChampion, BracketMatchCard, BracketRound } from '@/lib/brackets'
 import { formatStatus } from '../workspaces/workspaceComponents'
+import { MobileRoundIndicator } from './mobile-round-indicator'
 
 const GAP_PX = 48
 const NODE_WIDTH = 'min(260px, 82vw)'
@@ -193,26 +194,35 @@ export const BracketTree = ({
   const columnCount = rounds.length + (finalMatch ? 1 : 0)
   const gridTemplateColumns = `repeat(${columnCount}, ${NODE_WIDTH})`
 
+  const allRounds = [...rounds.map((r) => r.name)]
+  if (finalMatch) allRounds.push('Champion')
+
   return (
-    <div className="overflow-x-auto pb-4 [scrollbar-gutter:stable] snap-x snap-mandatory">
-      <div
-        className="sticky top-20 z-30 mb-3 grid gap-x-12 bg-paper/95 py-2 backdrop-blur"
-        style={{ gridTemplateColumns }}
-      >
-        {rounds.map((round) => (
-          <p
-            key={round.name}
-            className="snap-start truncate text-xs font-bold uppercase tracking-wide text-ink-soft"
-          >
-            {round.name}
-          </p>
-        ))}
-        {finalMatch ? (
-          <p className="snap-start truncate text-xs font-bold uppercase tracking-wide text-ink-soft">
-            Champion
-          </p>
-        ) : null}
-      </div>
+    <div className="relative">
+      <MobileRoundIndicator rounds={allRounds} />
+      <div id="bracket-scroll-container" className="overflow-x-auto pb-4 [scrollbar-gutter:stable] snap-x snap-mandatory">
+        <div
+          className="sticky top-20 z-30 mb-3 grid gap-x-12 bg-paper/95 py-2 backdrop-blur"
+          style={{ gridTemplateColumns }}
+        >
+          {rounds.map((round, index) => (
+            <p
+              key={round.name}
+              data-round-index={index}
+              className="bracket-round-header snap-start truncate text-xs font-bold uppercase tracking-wide text-ink-soft"
+            >
+              {round.name}
+            </p>
+          ))}
+          {finalMatch ? (
+            <p
+              data-round-index={rounds.length}
+              className="bracket-round-header snap-start truncate text-xs font-bold uppercase tracking-wide text-ink-soft"
+            >
+              Champion
+            </p>
+          ) : null}
+        </div>
 
       <div
         className="grid gap-x-12"
@@ -287,6 +297,7 @@ export const BracketTree = ({
             </div>
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   )

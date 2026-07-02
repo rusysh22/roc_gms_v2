@@ -9,6 +9,7 @@ import {
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
 import { recalculateStandingsForScope } from '@/lib/standings'
+import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { demoScenario } from './data/demoScenario'
 import { defaultSiteConfig } from './data/siteConfig'
 
@@ -33,6 +34,21 @@ type CollectionName =
 
 type SeedPayload = Awaited<ReturnType<typeof getPayload>>
 type SeedId = string | number
+
+type DemoMatchSetSeedLike = {
+  set_number: number
+  participant_a_score: number
+  participant_b_score: number
+  notes?: string
+}
+
+// A minimal valid 1x1 transparent PNG, reused for every seeded documentation asset. Real bytes
+// are only needed so DocumentationAssets (an upload-enabled collection) accepts the create call -
+// the mimetype on each seeded row is what drives the redesigned gallery's image/video/file icon
+// choice, not the actual file content, so this same tiny buffer works for every asset_type.
+const PLACEHOLDER_FILE_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+const PLACEHOLDER_FILE_BUFFER = Buffer.from(PLACEHOLDER_FILE_BASE64, 'base64')
 
 const getId = (doc: { id: SeedId }) => doc.id
 const getRelationshipId = (value: unknown): SeedId | undefined => {
@@ -245,6 +261,22 @@ const findComment = async (
           },
         },
       ],
+    },
+  })
+
+  return result.docs[0]
+}
+
+const findDocumentationAsset = async (
+  payload: SeedPayload,
+  matchId: SeedId,
+  caption: string,
+) => {
+  const result = await payload.find({
+    collection: 'documentation-assets',
+    limit: 1,
+    where: {
+      and: [{ match_id: { equals: matchId } }, { caption: { equals: caption } }],
     },
   })
 
@@ -473,43 +505,10 @@ const seed = async () => {
     teamIds.set(teamData.slug, getId(team))
   }
 
-  const mixedDoubleCategoryId = categoryIds.get('roc-olympic-2026-badminton-mixed-double')
-  const futsalCategoryId = categoryIds.get('roc-olympic-2026-futsal-men')
-  const badmintonMenSingleCategoryId = categoryIds.get('roc-olympic-2026-badminton-men-single')
-  const rosterSeeds = [
-    {
-      key: 'it-pair-andi',
-      teamSlug: 'roc-olympic-2026-it-smash-pair',
-      employeeId: 'ROC-2026-001',
-      categoryId: mixedDoubleCategoryId,
-      role: 'captain',
-    },
-    {
-      key: 'it-pair-citra',
-      teamSlug: 'roc-olympic-2026-it-smash-pair',
-      employeeId: 'ROC-2026-003',
-      categoryId: mixedDoubleCategoryId,
-      role: 'player',
-    },
-    {
-      key: 'futsal-it-eko',
-      teamSlug: 'roc-olympic-2026-it-futsal-squad',
-      employeeId: 'ROC-2026-005',
-      categoryId: futsalCategoryId,
-      role: 'captain',
-    },
-    {
-      key: 'futsal-finance-fajar',
-      teamSlug: 'roc-olympic-2026-finance-futsal-squad',
-      employeeId: 'ROC-2026-006',
-      categoryId: futsalCategoryId,
-      role: 'captain',
-    },
-  ]
-
-  for (const rosterData of rosterSeeds) {
+  for (const rosterData of demoScenario.rosterSeeds) {
     const teamId = teamIds.get(rosterData.teamSlug)
     const playerId = playerIds.get(rosterData.employeeId)
+    const categoryId = categoryIds.get(rosterData.categorySlug)
     const existingRoster =
       teamId && playerId ? await findRoster(payload, eventId, teamId, playerId) : undefined
 
@@ -520,7 +519,7 @@ const seed = async () => {
           event_id: eventId,
           team_id: teamId,
           player_id: playerId,
-          category_id: rosterData.categoryId,
+          category_id: categoryId,
           role: rosterData.role,
           status: 'active',
         },
@@ -528,81 +527,8 @@ const seed = async () => {
     }
   }
 
-  const entries = [
-    {
-      display_name: 'Andi Pratama',
-      categorySlug: 'roc-olympic-2026-badminton-men-single',
-      entry_type: 'individual',
-      playerEmployeeId: 'ROC-2026-001',
-      clubSlug: 'roc-olympic-2026-it-club',
-      seed_number: 1,
-      status: 'confirmed',
-    },
-    {
-      display_name: 'Budi Santoso',
-      categorySlug: 'roc-olympic-2026-badminton-men-single',
-      entry_type: 'individual',
-      playerEmployeeId: 'ROC-2026-002',
-      clubSlug: 'roc-olympic-2026-finance',
-      seed_number: 2,
-      status: 'confirmed',
-    },
-    {
-      display_name: 'Open Registration Slot',
-      categorySlug: 'roc-olympic-2026-badminton-men-single',
-      entry_type: 'open',
-      status: 'pending',
-    },
-    {
-      display_name: 'IT Smash Pair',
-      categorySlug: 'roc-olympic-2026-badminton-mixed-double',
-      entry_type: 'pair',
-      teamSlug: 'roc-olympic-2026-it-smash-pair',
-      clubSlug: 'roc-olympic-2026-it-club',
-      seed_number: 1,
-      status: 'confirmed',
-    },
-    {
-      display_name: 'Marketing Mix Pair',
-      categorySlug: 'roc-olympic-2026-badminton-mixed-double',
-      entry_type: 'pair',
-      teamSlug: 'roc-olympic-2026-marketing-mix-pair',
-      clubSlug: 'roc-olympic-2026-marketing',
-      status: 'confirmed',
-    },
-    {
-      display_name: 'IT Futsal Squad',
-      categorySlug: 'roc-olympic-2026-futsal-men',
-      entry_type: 'team',
-      teamSlug: 'roc-olympic-2026-it-futsal-squad',
-      clubSlug: 'roc-olympic-2026-it-club',
-      seed_number: 1,
-      status: 'confirmed',
-    },
-    {
-      display_name: 'Finance Futsal Squad',
-      categorySlug: 'roc-olympic-2026-futsal-men',
-      entry_type: 'team',
-      teamSlug: 'roc-olympic-2026-finance-futsal-squad',
-      clubSlug: 'roc-olympic-2026-finance',
-      status: 'confirmed',
-    },
-    {
-      display_name: 'HR Club',
-      categorySlug: 'roc-olympic-2026-futsal-men',
-      entry_type: 'club',
-      clubSlug: 'roc-olympic-2026-hr',
-      status: 'pending',
-    },
-    {
-      display_name: 'TBD Futsal Opponent',
-      categorySlug: 'roc-olympic-2026-futsal-men',
-      entry_type: 'tbd',
-      status: 'pending',
-    },
-  ]
-
-  for (const entryData of entries) {
+  for (const entryData of demoScenario.entries) {
+    const categoryId = categoryIds.get(entryData.categorySlug)
     const existingEntry = await findOneInEvent(
       payload,
       'competition-entries',
@@ -616,12 +542,23 @@ const seed = async () => {
         collection: 'competition-entries',
         data: {
           event_id: eventId,
-          category_id: categoryIds.get(entryData.categorySlug),
+          category_id: categoryId,
           entry_type: entryData.entry_type,
           club_id: entryData.clubSlug ? clubIds.get(entryData.clubSlug) : undefined,
           team_id: entryData.teamSlug ? teamIds.get(entryData.teamSlug) : undefined,
           player_id: entryData.playerEmployeeId ? playerIds.get(entryData.playerEmployeeId) : undefined,
           display_name: entryData.display_name,
+          seed_number: entryData.seed_number,
+          status: entryData.status,
+        },
+      })
+    } else {
+      // Keep status/seed_number in sync so re-running the seed against a database created by an
+      // older version of this file (before an entry's demo status/seed changed) still converges.
+      await payload.update({
+        collection: 'competition-entries',
+        id: getId(existingEntry),
+        data: {
           seed_number: entryData.seed_number,
           status: entryData.status,
         },
@@ -709,7 +646,7 @@ const seed = async () => {
   const entryIds = new Map<string, SeedId>()
   const seededEntries = await payload.find({
     collection: 'competition-entries',
-    limit: 100,
+    limit: 200,
     where: {
       event_id: {
         equals: eventId,
@@ -757,12 +694,12 @@ const seed = async () => {
             : undefined,
           round_name: matchData.round_name,
           match_number: matchData.match_number,
-          participant_a_entry_id: entryIds.get(matchData.participantA),
-          participant_b_entry_id: entryIds.get(matchData.participantB),
+          participant_a_entry_id: entryIds.get(matchData.participantA || ''),
+          participant_b_entry_id: entryIds.get(matchData.participantB || ''),
           scheduled_start_at: matchData.scheduled_start_at,
           scheduled_end_at: matchData.scheduled_end_at,
-          venue_id: venueIds.get(matchData.venueName),
-          court_id: courtIds.get(matchData.courtName),
+          venue_id: matchData.venueName ? venueIds.get(matchData.venueName) : undefined,
+          court_id: matchData.courtName ? courtIds.get(matchData.courtName) : undefined,
           status: matchData.status,
           generation_source: 'manual',
           winner_entry_id: winnerEntryId,
@@ -774,11 +711,11 @@ const seed = async () => {
 
     matchIds.set(matchData.match_number, getId(match))
 
-    if (
-      existingMatch &&
-      matchData.match_number === 'ROC-FUT-GA-001' &&
-      existingMatch.status === 'published'
-    ) {
+    // Fully-declared matches (finalStateDeclared !== false) stay in sync with the seed data on
+    // every run. Placeholder matches (TBD participants, or a result applied later by
+    // matchGenerationOverrides/singleEliminationResults) are deliberately left alone here -
+    // re-syncing them would wipe out participants/results that advancement already wrote in.
+    if (existingMatch && matchData.finalStateDeclared !== false) {
       await payload.update({
         collection: 'matches',
         id: getId(existingMatch),
@@ -786,6 +723,12 @@ const seed = async () => {
           status: matchData.status,
           winner_entry_id: winnerEntryId,
           score_summary: scoreSummary,
+          is_public: matchData.is_public,
+          documentation_status: matchData.documentation_status,
+          scheduled_start_at: matchData.scheduled_start_at,
+          scheduled_end_at: matchData.scheduled_end_at,
+          venue_id: matchData.venueName ? venueIds.get(matchData.venueName) : undefined,
+          court_id: matchData.courtName ? courtIds.get(matchData.courtName) : undefined,
         },
       })
     }
@@ -897,13 +840,36 @@ const seed = async () => {
     }
   }
 
-  for (const setData of demoScenario.matchSets) {
-    const matchId = matchIds.get(setData.matchNumber)
-    const existingSet = matchId
-      ? await findMatchSet(payload, eventId, matchId, setData.set_number)
-      : undefined
+  // Any match_number not yet in matchIds (generated matches created on a previous seed run) still
+  // needs to resolve before the override/results passes below can find it by number.
+  const resolveMatchId = async (matchNumber: string): Promise<SeedId | undefined> => {
+    if (matchIds.has(matchNumber)) {
+      return matchIds.get(matchNumber)
+    }
 
-    if (!existingSet && matchId) {
+    const match = await findOne(payload, 'matches', 'match_number', matchNumber)
+    if (match) {
+      matchIds.set(matchNumber, getId(match))
+      return getId(match)
+    }
+
+    return undefined
+  }
+
+  const upsertMatchSet = async (setData: DemoMatchSetSeedLike, matchId: SeedId) => {
+    const existingSet = await findMatchSet(payload, eventId, matchId, setData.set_number)
+
+    if (existingSet) {
+      await payload.update({
+        collection: 'match-sets',
+        id: getId(existingSet),
+        data: {
+          participant_a_score: setData.participant_a_score,
+          participant_b_score: setData.participant_b_score,
+          notes: setData.notes,
+        },
+      })
+    } else {
       await payload.create({
         collection: 'match-sets',
         data: {
@@ -915,57 +881,281 @@ const seed = async () => {
           notes: setData.notes,
         },
       })
-    } else if (
-      existingSet &&
-      setData.matchNumber === 'ROC-FUT-GA-001' &&
-      existingSet.participant_a_score === 0 &&
-      existingSet.participant_b_score === 0
-    ) {
-      await payload.update({
-        collection: 'match-sets',
-        id: getId(existingSet),
+    }
+  }
+
+  for (const setData of demoScenario.matchSets) {
+    const matchId = await resolveMatchId(setData.matchNumber)
+    if (matchId) {
+      await upsertMatchSet(setData, matchId)
+    }
+  }
+
+  // Status/score upgrades for matches that don't need winner advancement (round robin and
+  // standalone matches). Safe to re-run: every field here is an idempotent upsert.
+  for (const overrideData of demoScenario.matchGenerationOverrides) {
+    const matchId = await resolveMatchId(overrideData.matchNumber)
+    if (!matchId) {
+      payload.logger.warn(`Seed: could not resolve match ${overrideData.matchNumber} for override`)
+      continue
+    }
+
+    for (const setData of overrideData.sets || []) {
+      await upsertMatchSet(setData, matchId)
+    }
+
+    await payload.update({
+      collection: 'matches',
+      id: matchId,
+      data: {
+        status: overrideData.status,
+        winner_entry_id: overrideData.winner ? entryIds.get(overrideData.winner) : undefined,
+        score_summary: overrideData.score_summary,
+        is_public: overrideData.is_public,
+        documentation_status: overrideData.documentation_status,
+        scheduled_start_at: overrideData.scheduled_start_at,
+        scheduled_end_at: overrideData.scheduled_end_at,
+        venue_id: overrideData.venueName ? venueIds.get(overrideData.venueName) : undefined,
+        court_id: overrideData.courtName ? courtIds.get(overrideData.courtName) : undefined,
+      },
+    })
+  }
+
+  // Single-elimination results, applied in dependency order (quarter -> semi -> final) through the
+  // real attemptSingleEliminationWinnerAdvancement helper - the same function the match officer
+  // workspace calls - so TBD placeholder matches get filled in exactly like production. Safe to
+  // re-run: advancement is a no-op once a winner is already in the target slot.
+  for (const resultData of demoScenario.singleEliminationResults) {
+    const matchId = await resolveMatchId(resultData.matchNumber)
+    if (!matchId) {
+      payload.logger.warn(`Seed: could not resolve match ${resultData.matchNumber} for result`)
+      continue
+    }
+
+    for (const setData of resultData.sets) {
+      await upsertMatchSet(setData, matchId)
+    }
+
+    await payload.update({
+      collection: 'matches',
+      id: matchId,
+      data: {
+        status: 'result_published',
+        winner_entry_id: entryIds.get(resultData.winner),
+        score_summary: resultData.score_summary,
+        is_public: resultData.is_public,
+        documentation_status: resultData.documentation_status,
+        scheduled_start_at: resultData.scheduled_start_at,
+        scheduled_end_at: resultData.scheduled_end_at,
+        venue_id: resultData.venueName ? venueIds.get(resultData.venueName) : undefined,
+        court_id: resultData.courtName ? courtIds.get(resultData.courtName) : undefined,
+      },
+    })
+
+    await attemptSingleEliminationWinnerAdvancement(payload, matchId)
+  }
+
+  // Documentation assets: a small spread of photo/video/file/score-sheet uploads across a few
+  // matches, mixing public and internal visibility. Uses the same tiny placeholder buffer for
+  // every asset - only the mimetype/asset_type/visibility metadata varies, which is what the
+  // redesigned public gallery and workspace list actually render differently.
+  const documentationSeeds: Array<{
+    matchNumber: string
+    asset_type: string
+    caption: string
+    visibility: string
+    mimetype: string
+    filename: string
+  }> = [
+    { matchNumber: 'ROC-BMS-001', asset_type: 'photo', caption: 'Championship point celebration', visibility: 'public', mimetype: 'image/png', filename: 'bms-final-point.png' },
+    { matchNumber: 'ROC-BMS-001', asset_type: 'video', caption: 'Final rally highlight', visibility: 'public', mimetype: 'video/mp4', filename: 'bms-final-highlight.mp4' },
+    { matchNumber: 'ROC-BMS-001', asset_type: 'score_sheet', caption: 'Official final score sheet', visibility: 'internal', mimetype: 'application/pdf', filename: 'bms-final-scoresheet.pdf' },
+    { matchNumber: 'ROC-FUT-GA-001', asset_type: 'photo', caption: 'Kickoff at the Futsal Field', visibility: 'public', mimetype: 'image/png', filename: 'fut-ga-001-kickoff.png' },
+    { matchNumber: 'ROC-FUT-GA-001', asset_type: 'photo', caption: 'Committee notes on crowd size', visibility: 'internal', mimetype: 'image/png', filename: 'fut-ga-001-crowd.png' },
+    { matchNumber: 'ROC-FUT-GA-001', asset_type: 'score_sheet', caption: 'Referee score sheet', visibility: 'internal', mimetype: 'application/pdf', filename: 'fut-ga-001-scoresheet.pdf' },
+    { matchNumber: 'ROC-TTO-SF-001', asset_type: 'photo', caption: 'Semi-final match point', visibility: 'public', mimetype: 'image/png', filename: 'tto-sf-001-point.png' },
+    { matchNumber: 'ROC-CHS-GA-001', asset_type: 'file', caption: 'Recorded move list (PGN)', visibility: 'internal', mimetype: 'text/plain', filename: 'chs-ga-001-moves.txt' },
+  ]
+
+  for (const docData of documentationSeeds) {
+    const matchId = await resolveMatchId(docData.matchNumber)
+    if (!matchId) {
+      continue
+    }
+
+    const existingAsset = await findDocumentationAsset(payload, matchId, docData.caption)
+    if (!existingAsset) {
+      await payload.create({
+        collection: 'documentation-assets',
         data: {
-          participant_a_score: setData.participant_a_score,
-          participant_b_score: setData.participant_b_score,
-          notes: setData.notes,
+          event_id: eventId,
+          match_id: matchId,
+          asset_type: docData.asset_type,
+          caption: docData.caption,
+          visibility: docData.visibility,
+        },
+        file: {
+          data: PLACEHOLDER_FILE_BUFFER,
+          mimetype: docData.mimetype,
+          name: docData.filename,
+          size: PLACEHOLDER_FILE_BUFFER.length,
         },
       })
     }
   }
 
-  const publicCommentBody =
-    'Reminder from the committee: please arrive 10 minutes before warm-up for this match.'
-  const publicCommentMatchId = matchIds.get('ROC-BMS-001')
-  const existingPublicComment = publicCommentMatchId
-    ? await findComment(payload, 'matches', publicCommentMatchId, 'public', publicCommentBody)
-    : undefined
+  // Comments: keep the existing pinned public reminder, and add internal/official-note variety
+  // (pending, approved, resolved) across a couple of different matches.
+  const commentSeeds: Array<{
+    matchNumber: string
+    comment_type: string
+    author_name: string
+    body: string
+    status: string
+    is_pinned?: boolean
+    resolved_at?: string
+  }> = [
+    {
+      matchNumber: 'ROC-BMS-001',
+      comment_type: 'public',
+      author_name: 'ROC Sports Committee',
+      body: 'Reminder from the committee: please arrive 10 minutes before warm-up for this match.',
+      status: 'approved',
+      is_pinned: true,
+    },
+    {
+      matchNumber: 'ROC-FUT-GA-001',
+      comment_type: 'internal',
+      author_name: 'Match Officer',
+      body: 'Pitch was slightly wet before kickoff - flagged to the venue team for the next Group A match.',
+      status: 'pending',
+    },
+    {
+      matchNumber: 'ROC-FUT-GEN-GA-006',
+      comment_type: 'official_note',
+      author_name: 'Scheduler',
+      body: 'Marketing Futsal Squad confirmed unable to field a team; walkover awarded to HR Club per committee rules.',
+      status: 'approved',
+    },
+    {
+      matchNumber: 'ROC-RUN-002',
+      comment_type: 'internal',
+      author_name: 'Match Officer',
+      body: 'Timing camera angle was obstructed - committee to review footage before publishing the result.',
+      status: 'resolved',
+      resolved_at: '2026-07-02T10:00:00.000Z',
+    },
+  ]
 
-  if (!existingPublicComment && publicCommentMatchId) {
-    await payload.create({
-      collection: 'comments',
-      data: {
-        entity_type: 'matches',
-        entity_id: String(publicCommentMatchId),
-        comment_type: 'public',
-        author_name: 'ROC Sports Committee',
-        body: publicCommentBody,
-        status: 'approved',
-        is_pinned: true,
-      },
+  for (const commentData of commentSeeds) {
+    const matchId = await resolveMatchId(commentData.matchNumber)
+    if (!matchId) {
+      continue
+    }
+
+    const existingComment = await findComment(
+      payload,
+      'matches',
+      matchId,
+      commentData.comment_type,
+      commentData.body,
+    )
+
+    if (!existingComment) {
+      await payload.create({
+        collection: 'comments',
+        data: {
+          entity_type: 'matches',
+          entity_id: String(matchId),
+          comment_type: commentData.comment_type,
+          author_name: commentData.author_name,
+          body: commentData.body,
+          status: commentData.status,
+          is_pinned: commentData.is_pinned || false,
+          resolved_at: commentData.resolved_at,
+        },
+      })
+    }
+  }
+
+  // Standings recalculation for every group-stage/round-robin scope in the demo.
+  const badmintonMixedDoubleCategoryId = categoryIds.get('roc-olympic-2026-badminton-mixed-double')
+  const badmintonMixedDoubleStageId = stageIds.get('roc-olympic-2026-badminton-mixed-double')
+  const badmintonMixedDoubleGroupId = groupIds.get('roc-olympic-2026-badminton-mixed-double:Group A')
+  if (badmintonMixedDoubleCategoryId && badmintonMixedDoubleStageId && badmintonMixedDoubleGroupId) {
+    await recalculateStandingsForScope(payload, {
+      eventId,
+      categoryId: badmintonMixedDoubleCategoryId,
+      stageId: badmintonMixedDoubleStageId,
+      groupId: badmintonMixedDoubleGroupId,
     })
   }
 
+  const futsalCategoryId = categoryIds.get('roc-olympic-2026-futsal-men')
   const futsalStageId = stageIds.get('roc-olympic-2026-futsal-men')
-  const futsalGroupId = groupIds.get('roc-olympic-2026-futsal-men:Group A')
-  if (futsalCategoryId && futsalStageId && futsalGroupId) {
+  const futsalGroupAId = groupIds.get('roc-olympic-2026-futsal-men:Group A')
+  const futsalGroupBId = groupIds.get('roc-olympic-2026-futsal-men:Group B')
+  if (futsalCategoryId && futsalStageId && futsalGroupAId) {
     await recalculateStandingsForScope(payload, {
       eventId,
       categoryId: futsalCategoryId,
       stageId: futsalStageId,
-      groupId: futsalGroupId,
+      groupId: futsalGroupAId,
+    })
+  }
+  if (futsalCategoryId && futsalStageId && futsalGroupBId) {
+    await recalculateStandingsForScope(payload, {
+      eventId,
+      categoryId: futsalCategoryId,
+      stageId: futsalStageId,
+      groupId: futsalGroupBId,
     })
   }
 
+  const chessCategoryId = categoryIds.get('roc-olympic-2026-chess-open')
+  const chessStageId = stageIds.get('roc-olympic-2026-chess-open')
+  if (chessCategoryId && chessStageId) {
+    await recalculateStandingsForScope(payload, {
+      eventId,
+      categoryId: chessCategoryId,
+      stageId: chessStageId,
+    })
+  }
+
+  // Demo-only manual enrichment: the standings calculator always leaves qualified_status as
+  // 'pending' (there is no manual-override workflow yet - see prd/implementation-plan.md Phase 5
+  // "standing admin override" as still unbuilt). To exercise the redesigned qualified/eliminated/
+  // champion StatusBadge tones, mark the top team in Futsal Group A as a preview of that future
+  // workflow. This does not change calculateStandingsForScope itself.
+  if (futsalCategoryId && futsalStageId && futsalGroupAId) {
+    const futsalGroupAStandings = await payload.find({
+      collection: 'standings',
+      depth: 0,
+      limit: 10,
+      sort: 'rank',
+      where: {
+        and: [
+          { category_id: { equals: futsalCategoryId } },
+          { stage_id: { equals: futsalStageId } },
+          { group_id: { equals: futsalGroupAId } },
+        ],
+      },
+    })
+
+    for (const [index, standing] of futsalGroupAStandings.docs.entries()) {
+      const qualifiedStatus = index === 0 ? 'qualified' : index === futsalGroupAStandings.docs.length - 1 ? 'eliminated' : 'pending'
+      if (standing.qualified_status !== qualifiedStatus) {
+        await payload.update({
+          collection: 'standings',
+          id: standing.id,
+          data: { qualified_status: qualifiedStatus },
+        })
+      }
+    }
+  }
+
+  // Bracket cache recalculation for every single-elimination stage in the demo.
+  const badmintonMenSingleCategoryId = categoryIds.get('roc-olympic-2026-badminton-men-single')
   const badmintonMenSingleStageId = stageIds.get('roc-olympic-2026-badminton-men-single')
   if (badmintonMenSingleCategoryId && badmintonMenSingleStageId) {
     await recalculateSingleEliminationBracket(payload, {
@@ -973,9 +1163,21 @@ const seed = async () => {
     })
   }
 
+  const tableTennisStageId = stageIds.get('roc-olympic-2026-table-tennis-open')
+  if (tableTennisStageId) {
+    await recalculateSingleEliminationBracket(payload, {
+      stageId: tableTennisStageId,
+    })
+  }
+
   payload.logger.info('ROC Olympic 2026 demo event structure is ready')
   console.log('ROC GMS seed complete.')
 }
 
-await seed()
+try {
+  await seed()
+} catch (error) {
+  console.error('SEED DEBUG:', JSON.stringify(error, null, 2))
+  throw error
+}
 process.exit(0)

@@ -267,9 +267,10 @@ exact (derived from participant identity, not the index assumption). See `prd/se
 for what was built, the workspace-isolation approach, and outstanding follow-ups.
 
 ### R3 — Interaction & Motion polish (size: S–M, runs alongside Phase 6/7)
-- [ ] Hover/tap transitions on cards and buttons
-- [ ] Skeleton loading states for data fetches
-- [ ] Homepage "Live & Next" widget auto-refreshes without a full reload
+- [x] Hover/tap transitions on cards and buttons
+- [x] Skeleton loading states for data fetches
+- [x] Homepage "Live & Next" widget auto-refreshes without a full reload
+- [x] Mobile brackets round indicator (deferred from R2)
 
 ### R4 — Workspace/Admin visual refresh (size: S per page, lowest priority)
 - [ ] Apply the same tokens to Event Admin / Scheduler / Match Officer / Content Admin workspaces

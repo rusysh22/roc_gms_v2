@@ -21,10 +21,10 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        'rounded-card border border-line bg-paper p-4 font-sans text-ink transition-all duration-150',
+        'rounded-card border border-line bg-paper p-4 font-sans text-ink transition-all duration-200',
         interactive &&
           cn(
-            'cursor-pointer hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-none',
+            'cursor-pointer hover:duration-150 hover:-translate-y-0.5 active:scale-[0.98] focus-visible:-translate-y-0.5 focus-visible:outline-none motion-reduce:transform-none',
             accentHoverClasses[accent],
           ),
         className,
