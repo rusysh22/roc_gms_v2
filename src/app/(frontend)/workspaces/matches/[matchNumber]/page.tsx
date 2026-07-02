@@ -47,7 +47,7 @@ export default async function AdminMatchDetailPage({
     notFound()
   }
 
-  const { match, matchSets, documentationAssets, comments } = result
+  const { match, matchSets, documentationAssets, comments, advancement } = result
   const allowedTransitions = getAllowedTransitions(match.status)
   const auditLogEntries = await getMatchAuditLog(
     match.id,
@@ -192,6 +192,39 @@ export default async function AdminMatchDetailPage({
             </div>
           </dl>
         </article>
+
+        {advancement ? (
+          <article className="workspace-panel match-detail-grid__wide">
+            <h2>Advancement</h2>
+            <dl className="workspace-facts">
+              <div>
+                <dt>Outcome</dt>
+                <dd>{formatStatus(advancement.outcome)}</dd>
+              </div>
+              <div>
+                <dt>Winner</dt>
+                <dd>{advancement.winnerLabel || 'No winner'}</dd>
+              </div>
+              <div>
+                <dt>Next Match</dt>
+                <dd>
+                  {advancement.targetMatchNumber ? (
+                    <a href={`/workspaces/matches/${advancement.targetMatchNumber}`}>
+                      {advancement.targetMatchNumber}
+                    </a>
+                  ) : (
+                    'No deterministic target'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Target Slot</dt>
+                <dd>{advancement.targetSlot ? advancement.targetSlot.toUpperCase() : 'Not set'}</dd>
+              </div>
+            </dl>
+            <p className="empty-state">{advancement.reason}</p>
+          </article>
+        ) : null}
 
         <article className="workspace-panel match-detail-grid__wide">
           <h2>Match Actions</h2>

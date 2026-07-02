@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D017 added)
+Last updated: 2026-07-02 (D018 added)
 
 ## 1. Purpose
 
@@ -458,6 +458,34 @@ Impact:
 Future result mutation paths should reuse the same post-mutation refresh behavior. A later phase can
 expand supported result statuses, queue cache recalculation work, or add stronger refresh retry
 handling if event volume grows.
+
+### D018 - Single-elimination winner advancement is safe, deterministic, and best-effort
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+Winner advancement for Phase 5D is limited to single-elimination matches whose result is published
+and whose `winner_entry_id` is set. The advancement module derives the next target from the current
+round order and match index inside the same stage, then writes the winner only when the target slot
+is empty or a TBD placeholder. It never overwrites an occupied participant slot. If the winner is
+already present in the target match, or if the target is missing, ambiguous, occupied, or not a later
+round, the attempt returns a clear skipped outcome and writes an audit entry when triggered from
+match Server Actions. Bracket cache recalculation still runs after the advancement attempt.
+
+Reason:
+
+The seeded Badminton Men Single demo has enough structure to support deterministic first-round to
+semi-final advancement, but the product does not yet include a full draw editor, explicit bracket
+edge metadata, or winner advancement for more complex formats. A conservative best-effort approach
+supports the current demo without risking destructive participant overwrites.
+
+Impact:
+
+Future bracket generation can add explicit source-to-target metadata to make advancement stronger
+and less dependent on round order/index. Double elimination, group-to-knockout promotion, seeding
+edits, and manual bracket mutation remain out of scope.
 
 ## 3. Pending Decisions
 

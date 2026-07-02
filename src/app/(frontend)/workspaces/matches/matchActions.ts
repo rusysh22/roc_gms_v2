@@ -9,6 +9,7 @@ import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { recalculateStandingsForScope } from '@/lib/standings'
+import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { isValidTransition } from './matchLifecycle'
 
 type MinimalMatch = {
@@ -154,6 +155,42 @@ const recalculateResultCachesBestEffort = async ({
   }
 
   if (stage.stage_type === 'single_elimination') {
+    if (match.status === 'result_published' && match.winner_entry_id) {
+      try {
+        const advancement = await attemptSingleEliminationWinnerAdvancement(payload, match.id)
+
+        await recordAuditLog({
+          payload,
+          action: advancement.advanced ? 'winner_advancement.advance' : 'winner_advancement.skip',
+          entityType: 'matches',
+          entityId: match.id,
+          before: null,
+          after: {
+            reason: action,
+            match_number: matchNumber,
+            outcome: advancement.outcome,
+            skipped_reason: advancement.reason,
+            winner_entry_id: advancement.winnerEntryId,
+            winner_label: advancement.winnerLabel,
+            target_match_id: advancement.targetMatchId,
+            target_match_number: advancement.targetMatchNumber,
+            target_slot: advancement.targetSlot,
+            advanced: advancement.advanced,
+          },
+          actorUserId,
+        })
+
+        if (advancement.targetMatchNumber) {
+          revalidatePath(`/workspaces/matches/${advancement.targetMatchNumber}`)
+          revalidatePath(`/matches/${advancement.targetMatchNumber}`)
+        }
+      } catch (error) {
+        payload.logger.error(
+          `Failed to attempt winner advancement after ${action} on match ${matchNumber}: ${error}`,
+        )
+      }
+    }
+
     try {
       const result = await recalculateSingleEliminationBracket(payload, {
         stageId: match.stage_id,

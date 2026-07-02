@@ -1,6 +1,10 @@
 import { getPayload, type Where } from 'payload'
 
 import config from '@payload-config'
+import {
+  getSingleEliminationAdvancementPreview,
+  type WinnerAdvancementResult,
+} from '@/lib/winnerAdvancement'
 import { EntryDoc, RelationshipDoc } from './workspaces/workspaceComponents'
 
 export type StageDoc = RelationshipDoc & {
@@ -90,6 +94,7 @@ export type MatchDetailResult = {
   matchSets: MatchSetDetail[]
   documentationAssets: DocumentationAssetDetail[]
   comments: CommentDetail[]
+  advancement?: WinnerAdvancementResult | null
 }
 
 export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailResult | null> => {
@@ -141,12 +146,26 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
       ],
     },
   })
+  let advancement: WinnerAdvancementResult | null = null
+  const stageType =
+    match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
+
+  if (stageType === 'single_elimination') {
+    try {
+      advancement = await getSingleEliminationAdvancementPreview(payload, match.id)
+    } catch (error) {
+      payload.logger.error(
+        `Failed to load winner advancement preview for match ${match.match_number}: ${error}`,
+      )
+    }
+  }
 
   return {
     match,
     matchSets: matchSets.docs as MatchSetDetail[],
     documentationAssets: documentationAssets.docs as DocumentationAssetDetail[],
     comments: comments.docs as CommentDetail[],
+    advancement,
   }
 }
 
