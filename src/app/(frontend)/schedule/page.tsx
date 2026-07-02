@@ -1,23 +1,31 @@
+import Link from 'next/link'
 import { getPayload } from 'payload'
+import { Calendar, Clock, MapPin } from 'lucide-react'
 
 import config from '@payload-config'
+import { cn } from '@/lib/utils'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
+import {
+  formatDateLabel,
+  formatStatus,
+  formatTimeOnly,
+  getDateKey,
+  getRelationshipLabel,
+  type RelationshipDoc,
+} from '../workspaces/workspaceComponents'
 
 export const dynamic = 'force-dynamic'
 
-type RelationshipDoc = {
-  name?: string
-  display_name?: string
-}
+type SportDoc = RelationshipDoc & { slug?: string }
 
 type ScheduleMatch = {
   id: string | number
   match_number: string
   round_name?: string | null
   scheduled_start_at?: string | null
-  scheduled_end_at?: string | null
   status: string
-  score_summary?: string | null
-  sport_id?: RelationshipDoc | string | number | null
+  sport_id?: SportDoc | string | number | null
   category_id?: RelationshipDoc | string | number | null
   participant_a_entry_id?: RelationshipDoc | string | number | null
   participant_b_entry_id?: RelationshipDoc | string | number | null
@@ -25,110 +33,177 @@ type ScheduleMatch = {
   court_id?: RelationshipDoc | string | number | null
 }
 
-const getRelationshipLabel = (
-  value: RelationshipDoc | string | number | null | undefined,
-  fallback = 'TBD',
-) => {
-  if (!value || typeof value === 'string' || typeof value === 'number') {
-    return fallback
-  }
-
-  return value.display_name || value.name || fallback
+type SchedulePageProps = {
+  searchParams: Promise<{ sport?: string }>
 }
 
-const formatTime = (value?: string | null) => {
-  if (!value) {
-    return 'Unscheduled'
-  }
-
-  return new Intl.DateTimeFormat('en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Asia/Bangkok',
-  }).format(new Date(value))
-}
-
-export default async function PublicSchedulePage() {
+export default async function PublicSchedulePage({ searchParams }: SchedulePageProps) {
+  const { sport: sportSlug } = await searchParams
   const payload = await getPayload({ config })
-  const matches = await payload.find({
-    collection: 'matches',
-    depth: 2,
-    limit: 50,
-    sort: 'scheduled_start_at',
-    where: {
-      is_public: {
-        equals: true,
-      },
-    },
+
+  const [matchesResult, sportsResult] = await Promise.all([
+    payload.find({
+      collection: 'matches',
+      depth: 2,
+      limit: 100,
+      sort: 'scheduled_start_at',
+      where: { is_public: { equals: true } },
+    }),
+    payload.find({
+      collection: 'sports',
+      depth: 0,
+      limit: 20,
+      sort: 'name',
+    }),
+  ])
+
+  const allMatches = matchesResult.docs as ScheduleMatch[]
+  const sports = sportsResult.docs as SportDoc[]
+  const activeSport = sportSlug ? sports.find((sport) => sport.slug === sportSlug) : undefined
+
+  const matches =
+    activeSport ?
+      allMatches.filter(
+        (match) => typeof match.sport_id === 'object' && match.sport_id?.slug === activeSport.slug,
+      )
+    : allMatches
+
+  const groups = matches.reduce<Map<string, ScheduleMatch[]>>((map, match) => {
+    const dateKey = getDateKey(match.scheduled_start_at) || 'unscheduled'
+    const rows = map.get(dateKey) || []
+    rows.push(match)
+    map.set(dateKey, rows)
+    return map
+  }, new Map())
+  const orderedDateKeys = Array.from(groups.keys()).sort((left, right) => {
+    if (left === 'unscheduled') return 1
+    if (right === 'unscheduled') return -1
+    return left.localeCompare(right)
   })
 
-  const schedule = matches.docs as ScheduleMatch[]
-
   return (
-    <main className="schedule-shell">
-      <section className="schedule-header" aria-labelledby="schedule-title">
-        <p className="eyebrow">Public Schedule</p>
-        <h1 id="schedule-title">ROC Olympic 2026 Schedule</h1>
-        <p className="summary">
-          Published matches for Badminton and Futsal. This is the first schedule list foundation;
-          filters and match details will grow in later phases.
-        </p>
-        <div className="actions">
-          <a href="/">Home</a>
-          <a href="/standings">Public Standings</a>
-          <a href="/admin/collections/matches">Backoffice Matches</a>
+    <main className="font-sans text-ink">
+      <section className="px-4 pt-4 pb-6">
+        <div className="mx-auto max-w-4xl">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
+            Public Schedule
+          </p>
+          <h1 className="text-3xl font-extrabold sm:text-4xl">ROC Olympic 2026 Schedule</h1>
+          <p className="mt-3 max-w-xl text-base text-ink-soft">
+            Every published match for this event, grouped by day. Filter by sport to find what
+            you're looking for faster.
+          </p>
         </div>
       </section>
 
-      <section className="schedule-list" aria-label="Published matches">
-        {schedule.length === 0 ? (
-          <p className="empty-state">No public matches have been published yet.</p>
-        ) : (
-          schedule.map((match) => (
-            <article className="schedule-item" key={match.id}>
-              <div>
-                <p className="match-meta">
-                  {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
-                </p>
-                <h2>{match.match_number}</h2>
-                <p className="match-round">{match.round_name || 'Scheduled Match'}</p>
-              </div>
+      <div className="sticky top-20 z-40 border-y border-line bg-paper/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl gap-2 overflow-x-auto">
+          <Link
+            href="/schedule"
+            className={cn(
+              'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+              !activeSport ?
+                'border-green bg-green text-paper'
+              : 'border-line bg-paper text-ink-soft hover:text-ink',
+            )}
+          >
+            All Sports
+          </Link>
+          {sports.map((sport) => (
+            <Link
+              key={sport.id}
+              href={`/schedule?sport=${sport.slug}`}
+              className={cn(
+                'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                activeSport?.slug === sport.slug ?
+                  'border-green bg-green text-paper'
+                : 'border-line bg-paper text-ink-soft hover:text-ink',
+              )}
+            >
+              {sport.name}
+            </Link>
+          ))}
+        </div>
+      </div>
 
-              <div className="match-participants">
-                <span>{getRelationshipLabel(match.participant_a_entry_id)}</span>
-                <strong>vs</strong>
-                <span>{getRelationshipLabel(match.participant_b_entry_id)}</span>
-              </div>
+      <section className="px-4 py-8" aria-label="Published matches">
+        <div className="mx-auto max-w-4xl">
+          {matches.length === 0 ? (
+            <Card className="text-sm text-ink-soft">
+              No public matches match this filter yet. Check back closer to the event.
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-8">
+              {orderedDateKeys.map((dateKey) => {
+                const rows = groups.get(dateKey) || []
+                const label =
+                  dateKey === 'unscheduled' ? 'Date to be confirmed' : (
+                    formatDateLabel(rows[0]?.scheduled_start_at)
+                  )
 
-              <dl className="match-details">
-                <div>
-                  <dt>Starts</dt>
-                  <dd>{formatTime(match.scheduled_start_at)}</dd>
-                </div>
-                <div>
-                  <dt>Ends</dt>
-                  <dd>{formatTime(match.scheduled_end_at)}</dd>
-                </div>
-                <div>
-                  <dt>Venue</dt>
-                  <dd>{getRelationshipLabel(match.venue_id)}</dd>
-                </div>
-                <div>
-                  <dt>Court</dt>
-                  <dd>{getRelationshipLabel(match.court_id)}</dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{match.status.replaceAll('_', ' ')}</dd>
-                </div>
-              </dl>
+                return (
+                  <div key={dateKey}>
+                    <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+                      {label}
+                    </h2>
+                    <div className="flex flex-col gap-3">
+                      {rows.map((match) => (
+                        <Link key={match.id} href={`/matches/${match.match_number}`} className="block">
+                          <Card interactive accent="blue">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <CardDescription>
+                                  {getRelationshipLabel(match.sport_id)} ·{' '}
+                                  {getRelationshipLabel(match.category_id)}
+                                </CardDescription>
+                                <CardTitle className="mt-1">
+                                  {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                                  {getRelationshipLabel(match.participant_b_entry_id)}
+                                </CardTitle>
+                                <p className="mt-1 text-xs font-semibold text-ink-soft">
+                                  {match.match_number} · {match.round_name || 'Scheduled Match'}
+                                </p>
+                              </div>
+                              <div className="flex flex-col items-start gap-2 sm:items-end">
+                                <StatusBadge tone={getMatchStatusTone(match.status)}>
+                                  {formatStatus(match.status)}
+                                </StatusBadge>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
+                                  <span className="inline-flex items-center gap-1">
+                                    <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {formatTimeOnly(match.scheduled_start_at)}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                                    {getRelationshipLabel(match.venue_id)} ·{' '}
+                                    {getRelationshipLabel(match.court_id)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
 
-              <a className="match-card__details-link" href={`/matches/${match.match_number}`}>
-                View match details
-              </a>
-            </article>
-          ))
-        )}
+      <section className="px-4 pb-16">
+        <div className="mx-auto max-w-4xl">
+          <Card className="flex items-center gap-3 text-sm text-ink-soft">
+            <Calendar className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Need the raw data? The backoffice keeps the full record at{' '}
+            <a className="font-semibold text-blue hover:underline" href="/admin/collections/matches">
+              /admin/collections/matches
+            </a>
+            .
+          </Card>
+        </div>
       </section>
     </main>
   )

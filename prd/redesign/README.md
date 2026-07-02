@@ -1,8 +1,8 @@
 # ROC GMS V2 - Public Redesign Plan (Draft)
 
 Owner: Rusydani
-Status: R0 (Design Foundation) and R1 (Public Landing & Navigation) complete; PD1-PD4 promoted to
-`prd/decision-log.md` D020-D023; R2-R4 not started
+Status: R0 (Design Foundation), R1 (Public Landing & Navigation), and R2 (Public Feature Pages)
+complete; PD1-PD4 promoted to `prd/decision-log.md` D020-D023; R3-R4 not started
 Last updated: 2026-07-03
 Relates to: `prd/README.md` (section 21, UX direction), `prd/implementation-plan.md` (Phase 6/7/8),
 `prd/decision-log.md`
@@ -253,12 +253,18 @@ Olympic site" goal is met.
 R1 status (2026-07-03): complete. See `prd/session-handoff.md` for what was built and verified.
 
 ### R2 — Public Feature Pages (size: L)
-- [ ] Schedule: filter chips, date-grouped agenda, status badges, sticky mobile filter bar
-- [ ] Standings: table → card on mobile, qualified/eliminated badges
-- [ ] Brackets: implement the full tree spec in section 4.2 (centered columns, elbow connectors,
+- [x] Schedule: filter chips, date-grouped agenda, status badges, sticky mobile filter bar
+- [x] Standings: table → card on mobile, qualified/eliminated badges
+- [x] Brackets: implement the full tree spec in section 4.2 (centered columns, elbow connectors,
       champion-path connectors, champion chip, snap-scroll mobile, all listed states)
-- [ ] Champions: celebratory card layout
-- [ ] Public match detail: large score card, documentation gallery, share buttons
+- [x] Champions: celebratory card layout
+- [x] Public match detail: large score card, documentation gallery, share buttons
+
+R2 status (2026-07-03): complete. Bracket tree layout uses the same round-order/index feeder
+assumption the winner-advancement module already relies on (D018) — real for perfect binary
+brackets, best-effort for irregular ones (byes, odd counts). Champion-path connector highlighting is
+exact (derived from participant identity, not the index assumption). See `prd/session-handoff.md`
+for what was built, the workspace-isolation approach, and outstanding follow-ups.
 
 ### R3 — Interaction & Motion polish (size: S–M, runs alongside Phase 6/7)
 - [ ] Hover/tap transitions on cards and buttons

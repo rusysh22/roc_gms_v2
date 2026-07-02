@@ -1,16 +1,18 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ArrowLeft, MapPin } from 'lucide-react'
 
 import { getMatchDetail } from '../../matchDetailData'
+import { Card, CardTitle } from '@/components/ui/card'
+import { ShareButtons } from '@/components/share-buttons'
+import { formatDateTime, getRelationshipLabel } from '../../workspaces/workspaceComponents'
 import {
-  BracketImpactPanel,
-  CommentList,
-  DocumentationAssetList,
-  MatchSetsTable,
-  StandingImpactPanel,
-  formatDateTime,
-  formatStatus,
-  getRelationshipLabel,
-} from '../../workspaces/workspaceComponents'
+  DocumentationGallery,
+  PublicBracketImpactPanel,
+  PublicCommentList,
+  PublicStandingImpactPanel,
+  ScoreCard,
+} from './publicMatchComponents'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,100 +33,93 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
   const publicComments = comments.filter(
     (comment) => comment.comment_type === 'public' && comment.status === 'approved',
   )
+  const shareTitle = `${getRelationshipLabel(match.participant_a_entry_id)} vs ${getRelationshipLabel(
+    match.participant_b_entry_id,
+  )} · ${match.match_number}`
 
   return (
-    <main className="match-detail-shell">
-      <section className="schedule-header" aria-labelledby="match-detail-title">
-        <p className="eyebrow">
-          {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
-        </p>
-        <h1 id="match-detail-title">{match.match_number}</h1>
-        <p className="summary">
-          {match.round_name || 'Match'} &middot; {formatStatus(match.status)}
-        </p>
-        <div className="actions">
-          <a href="/schedule">Public Schedule</a>
-          <a href="/standings">Standings</a>
-          <a href="/brackets">Brackets</a>
-          <a href="/">Home</a>
+    <main className="font-sans text-ink">
+      <section className="px-4 pt-4 pb-6">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/schedule"
+            className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to schedule
+          </Link>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+            {getRelationshipLabel(match.sport_id)} · {getRelationshipLabel(match.category_id)}
+          </p>
+          <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">
+            {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+            {getRelationshipLabel(match.participant_b_entry_id)}
+          </h1>
+          <p className="mt-2 text-sm text-ink-soft">
+            {match.match_number} · {match.round_name || 'Match'}
+          </p>
         </div>
       </section>
 
-      <section className="match-detail-grid" aria-label="Match details">
-        <article className="workspace-panel">
-          <h2>Participants</h2>
-          <div className="match-participants match-participants--detail">
-            <span>{getRelationshipLabel(match.participant_a_entry_id)}</span>
-            <strong>vs</strong>
-            <span>{getRelationshipLabel(match.participant_b_entry_id)}</span>
+      <section className="px-4 pb-8" aria-label="Score">
+        <div className="mx-auto max-w-3xl">
+          <ScoreCard match={match} matchSets={matchSets} />
+        </div>
+      </section>
+
+      <section className="px-4 pb-8" aria-label="Schedule and venue">
+        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+          <Card>
+            <CardTitle>Schedule</CardTitle>
+            <dl className="mt-3 flex flex-col gap-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-soft">Starts</dt>
+                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-soft">Ends</dt>
+                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at)}</dd>
+              </div>
+            </dl>
+          </Card>
+          <Card>
+            <CardTitle>Venue</CardTitle>
+            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink">
+              <MapPin className="h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+              {getRelationshipLabel(match.venue_id)} · {getRelationshipLabel(match.court_id)}
+            </p>
+          </Card>
+        </div>
+      </section>
+
+      {standingImpact || bracketImpact ? (
+        <section className="px-4 pb-8" aria-label="Competition impact">
+          <div className="mx-auto flex max-w-3xl flex-col gap-4">
+            <PublicStandingImpactPanel impact={standingImpact} />
+            <PublicBracketImpactPanel impact={bracketImpact} />
           </div>
-          {match.winner_entry_id ? (
-            <p className="match-winner">Winner: {getRelationshipLabel(match.winner_entry_id)}</p>
-          ) : null}
-        </article>
+        </section>
+      ) : null}
 
-        <article className="workspace-panel">
-          <h2>Schedule</h2>
-          <dl className="workspace-facts">
-            <div>
-              <dt>Starts</dt>
-              <dd>{formatDateTime(match.scheduled_start_at)}</dd>
-            </div>
-            <div>
-              <dt>Ends</dt>
-              <dd>{formatDateTime(match.scheduled_end_at)}</dd>
-            </div>
-            <div>
-              <dt>Venue</dt>
-              <dd>{getRelationshipLabel(match.venue_id)}</dd>
-            </div>
-            <div>
-              <dt>Court</dt>
-              <dd>{getRelationshipLabel(match.court_id)}</dd>
-            </div>
-          </dl>
-        </article>
+      <section className="px-4 pb-8" aria-label="Documentation">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="mb-3 text-xl font-bold text-ink">Documentation</h2>
+          <DocumentationGallery assets={publicDocumentationAssets} />
+        </div>
+      </section>
 
-        <article className="workspace-panel">
-          <h2>Competition Context</h2>
-          <dl className="workspace-facts">
-            <div>
-              <dt>Event</dt>
-              <dd>{getRelationshipLabel(match.event_id)}</dd>
-            </div>
-            <div>
-              <dt>Stage</dt>
-              <dd>{getRelationshipLabel(match.stage_id)}</dd>
-            </div>
-            <div>
-              <dt>Group</dt>
-              <dd>{getRelationshipLabel(match.group_id, 'No group')}</dd>
-            </div>
-            <div>
-              <dt>Round</dt>
-              <dd>{match.round_name || 'Not set'}</dd>
-            </div>
-          </dl>
-        </article>
+      <section className="px-4 pb-8" aria-label="Comments">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="mb-3 text-xl font-bold text-ink">Comments</h2>
+          <PublicCommentList comments={publicComments} />
+        </div>
+      </section>
 
-        <StandingImpactPanel impact={standingImpact} />
-        <BracketImpactPanel impact={bracketImpact} />
-
-        <article className="workspace-panel">
-          <h2>Score Summary</h2>
-          <p>{match.score_summary || 'Score summary not published yet.'}</p>
-          <MatchSetsTable sets={matchSets} />
-        </article>
-
-        <article className="workspace-panel">
-          <h2>Documentation</h2>
-          <DocumentationAssetList assets={publicDocumentationAssets} />
-        </article>
-
-        <article className="workspace-panel">
-          <h2>Comments</h2>
-          <CommentList comments={publicComments} />
-        </article>
+      <section className="px-4 pb-16" aria-label="Share this match">
+        <div className="mx-auto max-w-3xl">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Share</p>
+          <ShareButtons title={shareTitle} />
+        </div>
       </section>
     </main>
   )
