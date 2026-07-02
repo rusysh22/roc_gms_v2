@@ -7,17 +7,27 @@ import { getPayload, type Payload } from 'payload'
 
 import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
+import { recalculateSingleEliminationBracket } from '@/lib/brackets'
+import { recalculateStandingsForScope } from '@/lib/standings'
 import { isValidTransition } from './matchLifecycle'
 
 type MinimalMatch = {
   id: string | number
   event_id?: string | number | null
+  category_id?: string | number | null
+  stage_id?: string | number | null
+  group_id?: string | number | null
   status: string
   actual_start_at?: string | null
   actual_end_at?: string | null
   participant_a_entry_id?: string | number | null
   participant_b_entry_id?: string | number | null
   winner_entry_id?: string | number | null
+}
+
+type MinimalStage = {
+  id: string | number
+  stage_type?: string | null
 }
 
 type MinimalMatchSet = {
@@ -61,12 +71,115 @@ const findMatchByNumber = async (matchNumber: string) => {
 const revalidateMatch = (matchNumber: string) => {
   revalidatePath(`/workspaces/matches/${matchNumber}`)
   revalidatePath(`/matches/${matchNumber}`)
+  revalidatePath('/standings')
+  revalidatePath('/brackets')
+  revalidatePath('/workspaces/standings')
+  revalidatePath('/workspaces/brackets')
 }
 
 const getActorUserId = async (payload: Payload): Promise<string | number | null> => {
   const headersList = await getHeaders()
   const { user } = await payload.auth({ headers: headersList })
   return user?.id ?? null
+}
+
+const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
+const standingResultStatuses = new Set(['finished', 'result_published'])
+
+const recalculateResultCachesBestEffort = async ({
+  payload,
+  match,
+  matchNumber,
+  action,
+  actorUserId,
+}: {
+  payload: Payload
+  match: MinimalMatch
+  matchNumber: string
+  action: string
+  actorUserId: string | number | null
+}) => {
+  if (!match.stage_id || !match.category_id) {
+    return
+  }
+
+  let stage: MinimalStage
+  try {
+    stage = (await payload.findByID({
+      collection: 'stages',
+      id: match.stage_id,
+      depth: 0,
+    })) as MinimalStage
+  } catch (error) {
+    payload.logger.error(
+      `Failed to load stage for result cache recalculation after ${action} on match ${matchNumber}: ${error}`,
+    )
+    return
+  }
+
+  if (stage.stage_type && standingStageTypes.has(stage.stage_type)) {
+    if (!standingResultStatuses.has(match.status)) {
+      return
+    }
+
+    try {
+      const result = await recalculateStandingsForScope(payload, {
+        eventId: match.event_id || undefined,
+        categoryId: match.category_id,
+        stageId: match.stage_id,
+        groupId: match.group_id || undefined,
+      })
+
+      await recordAuditLog({
+        payload,
+        action: 'standing.cache_recalculate',
+        entityType: 'matches',
+        entityId: match.id,
+        before: null,
+        after: {
+          reason: action,
+          match_number: matchNumber,
+          row_count: result.rows.length,
+          finished_match_count: result.finishedMatchCount,
+        },
+        actorUserId,
+      })
+    } catch (error) {
+      payload.logger.error(
+        `Failed to recalculate standings after ${action} on match ${matchNumber}: ${error}`,
+      )
+    }
+
+    return
+  }
+
+  if (stage.stage_type === 'single_elimination') {
+    try {
+      const result = await recalculateSingleEliminationBracket(payload, {
+        stageId: match.stage_id,
+      })
+
+      await recordAuditLog({
+        payload,
+        action: 'bracket.cache_recalculate',
+        entityType: 'matches',
+        entityId: match.id,
+        before: null,
+        after: {
+          reason: action,
+          match_number: matchNumber,
+          bracket_id: result.bracketId,
+          match_count: result.matchCount,
+          round_count: result.roundCount,
+        },
+        actorUserId,
+      })
+    } catch (error) {
+      payload.logger.error(
+        `Failed to recalculate bracket after ${action} on match ${matchNumber}: ${error}`,
+      )
+    }
+  }
 }
 
 export async function transitionMatchStatusAction(formData: FormData): Promise<void> {
@@ -124,6 +237,8 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     data: updateData,
   })
 
+  const actorUserId = await getActorUserId(payload)
+
   await recordAuditLog({
     payload,
     action: 'match.status_transition',
@@ -131,7 +246,15 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     entityId: match.id,
     before: beforeSnapshot,
     after: { ...beforeSnapshot, ...updateData },
-    actorUserId: await getActorUserId(payload),
+    actorUserId,
+  })
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match: { ...match, ...updateData, status: targetStatus },
+    matchNumber,
+    action: 'match.status_transition',
+    actorUserId,
   })
 
   revalidateMatch(matchNumber)
@@ -192,6 +315,8 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     data: afterSnapshot,
   })
 
+  const actorUserId = await getActorUserId(payload)
+
   await recordAuditLog({
     payload,
     action: 'match_set.score_update',
@@ -199,7 +324,15 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     entityId: matchSetId,
     before: beforeSnapshot,
     after: afterSnapshot,
-    actorUserId: await getActorUserId(payload),
+    actorUserId,
+  })
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match,
+    matchNumber,
+    action: 'match_set.score_update',
+    actorUserId,
   })
 
   revalidateMatch(matchNumber)
@@ -240,6 +373,8 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     },
   })
 
+  const actorUserId = await getActorUserId(payload)
+
   await recordAuditLog({
     payload,
     action: 'match_set.create',
@@ -251,7 +386,15 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
       participant_a_score: 0,
       participant_b_score: 0,
     },
-    actorUserId: await getActorUserId(payload),
+    actorUserId,
+  })
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match,
+    matchNumber,
+    action: 'match_set.create',
+    actorUserId,
   })
 
   revalidateMatch(matchNumber)

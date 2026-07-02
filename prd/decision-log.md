@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D016 added)
+Last updated: 2026-07-02 (D017 added)
 
 ## 1. Purpose
 
@@ -432,6 +432,32 @@ Impact:
 Future match result updates should refresh affected bracket caches after successful mutations. Later
 phases can add winner advancement, bracket mutation/seeding UI, group-to-knockout promotion,
 connector drawing, and double-elimination support without changing match ownership of results.
+
+### D017 - Standing and bracket cache refresh is best-effort after match mutations
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+Match Server Actions now trigger cache refreshes after successful status transitions, match-set
+score updates, and match-set creation. Group-stage, round-robin, league, and swiss stages refresh
+standings only when the match is in a result state currently supported by the standings calculator
+(`finished` or `result_published`). Single-elimination stages refresh the bracket cache after those
+same match mutation paths. Cache refresh failures are logged but do not roll back or block the
+original match mutation. Successful refreshes write small audit rows (`standing.cache_recalculate`
+or `bracket.cache_recalculate`) tied to the match that caused the refresh.
+
+Reason:
+
+Match and match-set records remain the source of truth, while standings/brackets are cached public
+views. Match-day mutations should not fail because a derived cache failed to refresh.
+
+Impact:
+
+Future result mutation paths should reuse the same post-mutation refresh behavior. A later phase can
+expand supported result statuses, queue cache recalculation work, or add stronger refresh retry
+handling if event volume grows.
 
 ## 3. Pending Decisions
 

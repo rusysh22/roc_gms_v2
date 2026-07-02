@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 5B custom single elimination bracket foundation complete  
+Status: Phase 5C automatic standing and bracket recalculation complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -213,15 +213,17 @@ Tasks:
 - [x] Add `Standing`.
 - [x] Calculate standings from match results.
 - [x] Add group standing public view.
+- [x] Recalculate standings after relevant match result mutations.
 - [ ] Add standing admin override with reason.
 - [x] Add `Bracket`.
 - [x] Add single elimination bracket view.
+- [x] Recalculate bracket cache after relevant match result mutations.
 - [ ] Add winner advancement.
 - [ ] Add champion display.
 
 Acceptance criteria:
 
-- [ ] Group stage standings update after result confirmation.
+- [x] Group stage standings update after result confirmation.
 - [x] Public can read standings on mobile.
 - [x] Bracket links to match detail.
 - [ ] Winner advances in single elimination bracket.
