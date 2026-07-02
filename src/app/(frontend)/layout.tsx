@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
+import { PublicChrome } from '@/components/public-chrome'
+
 import './styles.css'
 import './tailwind.css'
 
@@ -26,7 +28,9 @@ type Props = {
 export default function FrontendLayout({ children }: Props) {
   return (
     <html lang="en" className={plusJakartaSans.variable}>
-      <body>{children}</body>
+      <body>
+        <PublicChrome brand="ROC GMS">{children}</PublicChrome>
+      </body>
     </html>
   )
 }

@@ -2,12 +2,15 @@
 
 Last updated: 2026-07-03  
 Branch: `redesign/r0-design-foundation`  
-Current phase: Redesign phase R0 (Design Foundation) complete  
-Current status: The `(frontend)` route group now has Tailwind CSS v4 and a Radix-based shared
-primitive library (NavBar, Footer, Button, StatusBadge, Card, Skeleton) alongside the existing
-hand-written `styles.css`. Nothing is wired into a live page yet, so every existing route renders
-exactly as before. Phase 5F (implementation-plan.md) work is unchanged and still the latest
-completed item in the main phase sequence.
+Current phase: Redesign phase R1 (Public Landing & Navigation) complete  
+Current status: The public homepage is rebuilt as an Olympic-style landing page (typography hero,
+aurora blobs, countdown, Live Now/Next Up strip, sports grid) on top of the R0 design foundation.
+The floating pill NavBar and Footer are wired into the `(frontend)` layout and apply to every public
+page (`/`, `/schedule`, `/standings`, `/brackets`, `/champions`, `/matches/[matchNumber]`) while
+`/workspaces/*` and `/scheduler/*` stay chrome-free. Only the homepage's own content/markup changed —
+schedule/standings/brackets/champions/match-detail pages still render their pre-redesign markup
+inside the new nav/footer shell; restyling their content is R2 scope. Phase 5F
+(`implementation-plan.md`) work is unchanged.
 Source of truth: `prd/README.md`
 
 ## 1. How to Use This File
@@ -23,130 +26,136 @@ The next session should read this file after reading:
 
 ## 2. Latest Session Summary
 
-Completed:
+Completed (this session, R1):
 
-- Created branch `redesign/r0-design-foundation` off `codex/phase-0-1-baseline`.
-- Installed Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/postcss`, `postcss`) and shadcn/ui-adjacent
-  libraries (`class-variance-authority`, `clsx`, `tailwind-merge`, `@radix-ui/react-dialog`,
-  `@radix-ui/react-slot`, `lucide-react`).
-- Added `postcss.config.mjs` wiring `@tailwindcss/postcss`.
-- Added `src/app/(frontend)/tailwind.css`: imports only `tailwindcss/theme.css` +
-  `tailwindcss/utilities.css` in named CSS layers (preflight intentionally excluded), scoped via
-  `@source` to `(frontend)`, `src/components`, and `src/lib`. Defines the design tokens from
-  `prd/redesign/README.md` section 4 as Tailwind `@theme` values: colors (`paper`, `mist`, `ink`,
-  `ink-soft`, `green`, `blue`, `gold`, `line`), radii (`card` 12px, `panel` 16px, `input` 10px), and
-  `--font-sans` wired to the self-hosted font variable.
-- Updated `src/app/(frontend)/layout.tsx` to self-host Plus Jakarta Sans via `next/font/google`,
-  exposed as the `--font-jakarta-sans` variable on `<html>` only (not applied to `body`), and to
-  import the new `tailwind.css` alongside the existing `styles.css`.
-- Added `components.json` (shadcn/ui alias config: `@/components`, `@/lib/utils`, `@/components/ui`).
-- Added `src/lib/utils.ts` (`cn` helper via `clsx` + `tailwind-merge`).
-- Hand-built shared primitives following the consistency contract in
-  `prd/redesign/README.md` section 4.1:
-  - `src/components/ui/button.tsx` — pill Button (`primary`/`secondary`/`ghost` variants via `cva`,
-    Radix `Slot` for `asChild`).
-  - `src/components/ui/status-badge.tsx` — rounded-full StatusBadge with the global
-    green/blue/gold/neutral tone mapping, plus a starting `getMatchStatusTone()` helper.
-  - `src/components/ui/card.tsx` — Card/CardHeader/CardTitle/CardDescription/CardContent/CardFooter,
-    12px radius, 1px `--line` border, no shadow in flow, optional `interactive` hover lift + accent
-    border.
-  - `src/components/ui/skeleton.tsx` — pulse skeleton respecting `prefers-reduced-motion`.
-  - `src/components/nav-bar.tsx` — floating pill "island" NavBar, `sticky top-4`, shadow intensifies
-    on scroll, Radix Dialog-based mobile drawer with focus trap/ESC/overlay close.
-  - `src/components/footer.tsx` — simple Footer with brand/tagline/links.
-- None of the primitives are imported into any route yet — `layout.tsx` only gained the font/CSS
-  wiring, `page.tsx` and all other route files are untouched.
-- Promoted PD1-PD4 from `prd/redesign/README.md` section 3 into `prd/decision-log.md` as D020-D023
-  (accepted).
-- Checked off completed R0 items in `prd/redesign/README.md` (styles.css removal intentionally left
-  unchecked — it is incremental and only makes sense once R1/R2 migrate pages).
+- Added `src/components/countdown.tsx` — client component computing days/hours/minutes/seconds to
+  an event's `event_start_at`, switching to a "Live" state between `event_start_at`/`event_end_at`
+  and a "Completed" state after `event_end_at`. Styled as the spec's one hero-widget exception to
+  the "cards never carry shadow" rule (`rounded-panel` + `shadow-md`).
+- Added `src/components/public-chrome.tsx` — client wrapper that renders the R0 `NavBar`/`Footer`
+  around page content, keyed off `usePathname()`. Excludes `/workspaces` (per the R1 brief) and
+  `/scheduler` (the standalone queue-foundation route, the same kind of internal tool) so operational
+  pages stay chrome-free.
+- Nav destinations wired: Home, Schedule, Standings, Brackets, Champions. Sports/Announcements/
+  Articles/Winners from the full PRD 21.2 list are intentionally deferred — Announcements/Articles
+  don't exist until Phase 6, and Sports/Winners have no dedicated route yet.
+- Updated `src/app/(frontend)/layout.tsx` to wrap `children` in `<PublicChrome brand="ROC GMS">`.
+  No data fetching was added to the layout itself (brand text is a plain string, matching the
+  existing convention of hardcoded "ROC Olympic 2026" copy already used on schedule/standings/
+  champions pages).
+- Rebuilt `src/app/(frontend)/page.tsx` as the event landing page:
+  - Typography-first hero: two-line headline with a green→blue gradient-emphasis word ("Champions"),
+    green/blue blurred aurora blobs behind it, pill CTAs into `/schedule` and `/brackets`, and the
+    `Countdown` widget driven by the first `events` document's `event_start_at`/`event_end_at`.
+  - "Live Now & Next Up" horizontal-scroll strip: reads public matches (`is_public = true`) that are
+    either currently `ongoing`/`paused` or upcoming (`scheduled`/`published`/`ready_to_start`/
+    `check_in_open` with `scheduled_start_at` in the future), live ones first, each card linking to
+    `/matches/[matchNumber]`.
+  - Sports overview grid: reads active `sports` plus a `competition-categories` count-by-sport query,
+    each card linking to `/schedule?sport=<slug>` (the query param is not yet consumed by `/schedule`
+    — that wiring is R2 scope alongside the filter-chip work).
+  - All three reads are read-only Payload local API `find()` calls scoped to the homepage, matching
+    the R1 brief's "read-only queries the homepage needs" boundary. No collection, server action, or
+    existing page's data loader changed.
+- Checked off completed R1 items in `prd/redesign/README.md` with notes on the intentional nav-item
+  and sports-grid-link scope reductions.
 
-Changed files:
+Changed files (this session):
 
-- `package.json`, `package-lock.json`
-- `postcss.config.mjs` (new)
-- `components.json` (new)
 - `src/app/(frontend)/layout.tsx`
-- `src/app/(frontend)/tailwind.css` (new)
-- `src/lib/utils.ts` (new)
-- `src/components/ui/button.tsx` (new)
-- `src/components/ui/status-badge.tsx` (new)
-- `src/components/ui/card.tsx` (new)
-- `src/components/ui/skeleton.tsx` (new)
-- `src/components/nav-bar.tsx` (new)
-- `src/components/footer.tsx` (new)
-- `prd/decision-log.md`
+- `src/app/(frontend)/page.tsx` (full rewrite)
+- `src/components/countdown.tsx` (new)
+- `src/components/public-chrome.tsx` (new)
 - `prd/redesign/README.md`
 - `prd/session-handoff.md`
 
-Decisions:
-
-- D020 - Tailwind CSS + shadcn/ui (Radix-based primitives) is the public redesign styling
-  foundation, layered alongside `styles.css` via CSS cascade layers so existing pages are
-  unaffected until deliberately migrated.
-- D021 - Plus Jakarta Sans is self-hosted via `next/font/google`, exposed as a CSS variable only
-  (not yet applied to `body`).
-- D022 - Public redesign (R0-R2) ships before workspace/admin visual refresh (R4); R3 can run
-  alongside Phase 6/7.
-- D023 - White-dominant palette with green/blue/gold spent deliberately on focal elements, with
-  exact hex tokens recorded.
+No new decisions were added this session (R1 builds directly on D020-D023 from the R0 session; no
+new durable product/technical decision emerged).
 
 Tests / Verification:
 
-- `npm.cmd run typecheck` passed (no errors).
-- `npm.cmd run build` passed (`next build`, Turbopack) — all existing routes still compile
-  (`/`, `/brackets`, `/champions`, `/matches/[matchNumber]`, `/schedule`, `/standings`,
-  `/workspaces/*`, `/admin/*`, `/api/*`).
-- Ran `docker compose exec app npm install` (first attempt hit a transient `ETIMEDOUT` on
-  `react-remove-scroll`, second attempt succeeded) to sync new dependencies into the running dev
-  container's separate `node_modules` volume, then `docker compose restart app`.
-- Verified HTTP 200 for `/`, `/schedule`, `/standings`, `/brackets`, `/champions`, and
-  `/matches/ROC-BMS-001` against the restarted dev container.
-- Verified HTTP 200 for `/admin` ((payload) route group untouched).
-- Fetched `/` raw HTML and confirmed: (a) the `page-shell`/`status-panel` markup and copy are
-  byte-for-byte unchanged from before this session, and (b) `<html>` carries the generated
-  `plus_jakarta_sans_*__variable` class, confirming the font is self-hosted and preloaded without
-  changing any rendered page's actual font (body still resolves to `Inter, ui-sans-serif, ...` from
-  `styles.css`).
+- `npm.cmd run typecheck` passed (no errors) after fixing one cast (`competition-categories` docs
+  needed an `as unknown as` step before the narrower local type — `payload.find()`'s generic return
+  type doesn't structurally overlap with the ad hoc shape used for counting).
+- `npm.cmd run build` passed (`next build`, Turbopack) — `/` is now correctly listed as dynamic
+  (`ƒ`) rather than static, since it does data-dependent server-side fetches.
+- Synced the running dev container and re-verified all target routes return HTTP 200:
+  `/`, `/schedule`, `/standings`, `/brackets`, `/champions`, `/matches/ROC-BMS-001`,
+  `/workspaces/event-admin`, `/workspaces/scheduler`, `/workspaces/match-officer`,
+  `/workspaces/content-admin`, `/admin`. `/scheduler/queue` returns its pre-existing 307 redirect to
+  `/workspaces/scheduler` (unrelated to this session's changes).
+- Confirmed via raw HTML fetch that public pages (`/`, `/workspaces/event-admin` as a control) show
+  the expected chrome split: `/` contains the nav (`aria-label="Primary"`) and a `<footer>`;
+  `/workspaces/event-admin` contains neither.
+- Confirmed homepage HTML contains the hero headline, "Live Now & Next Up" heading, and the sports
+  grid section.
+
+Known environment caveat (not a code defect, no action taken):
+
+- Mid-session, `npm.cmd run build` (host, production mode) was run while the Docker dev container
+  (`roc_gms_v2-app-1`) was also serving the same bind-mounted `.next/` directory via `next dev`
+  (Turbopack). Mixing a prod build's `.next` output into a running Turbopack dev server produced a
+  transient `Module not found: Can't resolve '@vercel/turbopack-next/internal/font/google/font'`
+  error in the browser. Fix: stopped the container, deleted `.next/`, restarted — resolved cleanly.
+  Lesson for future sessions: avoid running `next build` on the host while the dev container is live
+  against the same bind-mounted `.next/`; stop the container first, or run the host build from a
+  worktree/clone instead.
+- Separately (and unrelated to the above), the Docker container cannot reliably reach
+  `fonts.googleapis.com` (confirmed via direct `fetch()` tests inside the container: `registry.npmjs.org`
+  → 200, `fonts.googleapis.com`/`google.com` → fail most attempts), while the host machine reaches
+  `fonts.googleapis.com` fine (200) and the host-side `npm run build` downloaded the real font with no
+  warning. This looks like a network-egress restriction specific to this sandbox's Docker container,
+  not a bug in `next/font/google` usage. `next/font` is designed to degrade gracefully when the
+  download fails — it logs a warning and falls back to a system font rather than crashing, which is
+  exactly what's observed: every route still returns HTTP 200 with correct content in the running dev
+  container, just occasionally rendering with a fallback font instead of the actual Plus Jakarta Sans
+  file. D021 (self-host Plus Jakarta Sans via `next/font/google`) stands as implemented; this is an
+  environment characteristic to be aware of when visually reviewing the running dev container, not a
+  reason to change the approach.
 
 Pending:
 
-- Redesign R1 — Public Landing & Navigation: rebuild the homepage, wire the NavBar/Footer into the
-  `(frontend)` layout (excluding `/workspaces`), add the "Live Now / Next Up" strip and sports
-  overview grid. See `prd/redesign/README.md` section 7 for the suggested R1 prompt.
-- Redesign R2 — Public Feature Pages (schedule, standings, brackets tree spec, champions, match
-  detail).
+- Redesign R2 — Public Feature Pages: restyle `/schedule` (filter chips incl. reading the `?sport=`
+  query param this session's homepage now links with, date-grouped agenda, status badges, sticky
+  mobile filter bar), `/standings` (table→card mobile, qualified/eliminated badges), `/brackets`
+  (full tree spec from `prd/redesign/README.md` section 4.2), `/champions` (celebratory cards),
+  `/matches/[matchNumber]` (large score card, documentation gallery, share buttons). See
+  `prd/redesign/README.md` section 7 for the suggested R2 prompt.
 - Redesign R3 — Interaction & Motion polish (can run alongside implementation-plan.md Phase 6/7).
 - Redesign R4 — Workspace/Admin visual refresh (lowest priority).
 - Incremental removal/replacement of `src/app/(frontend)/styles.css` as pages migrate onto the new
-  primitives (tracked as an unchecked R0 item, deferred by design).
+  primitives — `/schedule`, `/standings`, `/brackets`, `/champions`, `/matches/[matchNumber]` still
+  render their pre-redesign markup/CSS classes inside the new nav/footer shell until R2 restyles them.
 - Open questions still unresolved from `prd/redesign/README.md` section 8: public-facing copy
-  language (Bahasa Indonesia/English/bilingual), motion library choice for R3 (plain CSS vs. Framer
-  Motion), and PR rollout shape for R-phases.
+  language (Bahasa Indonesia/English/bilingual — current copy stayed English, consistent with all
+  existing pages), motion library choice for R3, and PR rollout shape for R-phases.
 - Everything already pending from the main `implementation-plan.md` track (Phase 6 Content/
-  Announcements/Sharing onward) is unchanged and still applies; see prior decision-log entries
-  D001-D019 for that track's scope boundaries.
+  Announcements/Sharing onward) is unchanged and still applies; see decision-log entries D001-D019
+  for that track's scope boundaries.
 
 Blockers:
 
-- None. (Note: the docker container's `npm install` intermittently hits `ETIMEDOUT` against the npm
-  registry on the first attempt — retrying once resolved it both times observed this session.)
+- None. See the "Known environment caveat" section above for two resolved, non-blocking issues hit
+  during this session.
 
 Recommended next prompt:
 
 ```text
 Continue ROC GMS V2. Read prd/README.md, prd/decision-log.md, prd/session-handoff.md, and
-prd/redesign/README.md first, then inspect the repository. R0 is complete; execute redesign phase
-R1 only: rebuild the public homepage (src/app/(frontend)/page.tsx) as the event landing page using
-the R0 primitives and the style direction in prd/redesign/README.md sections 2.1 and 4 —
-typography-first hero with gradient-emphasis words and green/blue aurora blob background, event
-countdown, pill CTAs, a "Live Now / Next Up" strip sourced from is_public=true matches, and a
-sports overview grid. Add the floating pill NavBar with the public destinations (Home, Schedule,
-Standings, Brackets, Champions; leave Announcements/Articles out until Phase 6 ships them) to the
-public pages via the (frontend) layout, excluding /workspaces routes. Public-facing copy stays
-non-technical. Do not change collections, server actions, or data loaders except read-only queries
-the homepage needs. Run typecheck, build, verify routes, check off R1 items in
-prd/redesign/README.md, and update prd/session-handoff.md.
+prd/redesign/README.md first, then inspect the repository. R0-R1 are complete; execute redesign
+phase R2. Restyle the public feature pages one at a time in this order, keeping each functional
+exactly as-is: (1) /schedule with filter chips (including reading the ?sport= query param the R1
+homepage's sports grid already links with), date-grouped agenda, status badges, sticky mobile
+filter bar; (2) /standings with table-to-card mobile behavior and qualified/eliminated badges;
+(3) /brackets implementing the full tree spec in prd/redesign/README.md section 4.2 — node anatomy,
+vertically centered rounds, elbow connectors, champion-path connectors, champion chip, snap-scroll
+mobile, and every state in the states checklist; (4) /champions celebratory cards;
+(5) /matches/[matchNumber] public detail with large score card, documentation gallery, and share
+buttons. Follow the consistency contract in section 4.1 strictly — no one-off shapes, radii, or
+state colors. Do not touch workspace pages or any mutation logic. If you need to run a host-side
+`npm run build`, stop the Docker dev container first to avoid corrupting the shared .next cache (see
+this handoff's "Known environment caveat" note). Run typecheck, build, verify all routes, check off
+R2 items, and update prd/session-handoff.md.
 ```
 
 ## 3. Session Handoff Template

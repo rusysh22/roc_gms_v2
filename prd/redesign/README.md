@@ -1,7 +1,8 @@
 # ROC GMS V2 - Public Redesign Plan (Draft)
 
 Owner: Rusydani
-Status: R0 (Design Foundation) complete; PD1-PD4 promoted to `prd/decision-log.md` D020-D023; R1-R4 not started
+Status: R0 (Design Foundation) and R1 (Public Landing & Navigation) complete; PD1-PD4 promoted to
+`prd/decision-log.md` D020-D023; R2-R4 not started
 Last updated: 2026-07-03
 Relates to: `prd/README.md` (section 21, UX direction), `prd/implementation-plan.md` (Phase 6/7/8),
 `prd/decision-log.md`
@@ -237,15 +238,19 @@ once R1/R2 start migrating pages onto the new primitives. See `prd/session-hando
 notes and `prd/decision-log.md` D020-D023 for the promoted decisions (formerly PD1-PD4 here).
 
 ### R1 — Public Landing & Navigation (size: M)
-- [ ] Persistent public nav: Home, Schedule, Sports, Standings, Brackets, Announcements, Articles,
-      Winners (per PRD 21.2)
-- [ ] Homepage hero: typography-first display headline with gradient-emphasis words, aurora blob
+- [x] Persistent public nav: Home, Schedule, Standings, Brackets, Champions (Sports/Announcements/
+      Articles/Winners deferred — no dedicated pages exist yet; Announcements/Articles wait for
+      Phase 6, Sports/Winners are not yet separate routes)
+- [x] Homepage hero: typography-first display headline with gradient-emphasis words, aurora blob
       background, countdown, pill CTAs into schedule/standings/brackets
-- [ ] "Live Now / Next Up" strip sourced from `is_public = true` matches
-- [ ] Sports overview grid linking into filtered schedule
+- [x] "Live Now / Next Up" strip sourced from `is_public = true` matches
+- [x] Sports overview grid linking into filtered schedule (links to `/schedule?sport=<slug>`; `/schedule`
+      does not read the query param yet — wiring that up is R2 scope, see filter chips item below)
 
 This is the page most visitors see first — it's the one that decides whether the "feels like an
 Olympic site" goal is met.
+
+R1 status (2026-07-03): complete. See `prd/session-handoff.md` for what was built and verified.
 
 ### R2 — Public Feature Pages (size: L)
 - [ ] Schedule: filter chips, date-grouped agenda, status badges, sticky mobile filter bar
