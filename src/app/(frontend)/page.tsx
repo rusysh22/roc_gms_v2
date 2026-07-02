@@ -36,6 +36,7 @@ export default function HomePage() {
           <a href="/workspaces/match-officer">Match Officer</a>
           <a href="/workspaces/content-admin">Content Admin</a>
           <a href="/schedule">Public Schedule</a>
+          <a href="/standings">Public Standings</a>
           <a href="/admin">Backoffice</a>
           <a href="/api/health">Health Check</a>
         </div>

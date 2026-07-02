@@ -75,6 +75,7 @@ export default async function PublicSchedulePage() {
         </p>
         <div className="actions">
           <a href="/">Home</a>
+          <a href="/standings">Public Standings</a>
           <a href="/admin/collections/matches">Backoffice Matches</a>
         </div>
       </section>

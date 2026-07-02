@@ -1188,6 +1188,90 @@ h1 {
   overflow-x: auto;
 }
 
+.standings-list {
+  display: grid;
+  gap: 16px;
+}
+
+.standings-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.standings-panel .match-meta {
+  padding: 16px 16px 0;
+}
+
+.standings-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.standings-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.standings-table th,
+.standings-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.standings-table th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.standings-table td:first-child,
+.standings-table th:first-child {
+  padding-left: 16px;
+}
+
+.standings-table td:nth-child(n + 3),
+.standings-table th:nth-child(n + 3) {
+  text-align: right;
+}
+
+.standings-table td:last-child,
+.standings-table th:last-child {
+  padding-right: 16px;
+  text-align: left;
+}
+
+.standing-recalc-form {
+  display: grid;
+  gap: 16px;
+}
+
+.standing-summary-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.standing-summary-list li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.standing-summary-list span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 @media (max-width: 640px) {
   .page-shell {
     align-items: start;

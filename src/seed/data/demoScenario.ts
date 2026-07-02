@@ -336,7 +336,9 @@ export const demoScenario = {
       scheduled_end_at: '2026-08-18T09:00:00.000Z',
       venueName: 'Futsal Field',
       courtName: 'Futsal Field',
-      status: 'published',
+      status: 'result_published',
+      winner: 'IT Futsal Squad',
+      score_summary: 'IT Futsal Squad 3-1 Finance Futsal Squad',
       is_public: true,
       documentation_status: 'needed',
     },
@@ -407,9 +409,9 @@ export const demoScenario = {
     {
       matchNumber: 'ROC-FUT-GA-001',
       set_number: 1,
-      participant_a_score: 0,
-      participant_b_score: 0,
-      notes: 'Full-time score placeholder.',
+      participant_a_score: 3,
+      participant_b_score: 1,
+      notes: 'Seeded full-time futsal result for standings validation.',
     },
   ],
 }

@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D014 added)
+Last updated: 2026-07-02 (D015 added)
 
 ## 1. Purpose
 
@@ -373,6 +373,39 @@ anti-spam, moderation workflow, and public write access deliberately. Like earli
 mutations, comment creation can resolve `author_user_id` only when a Payload session exists; until
 workspace authentication is added, manual workspace comments may still have no authenticated user
 actor in audit logs.
+
+### D015 - Phase 5A standings are cached recalculations with scalar tie-breakers first
+
+Date: 2026-07-02  
+Status: accepted
+
+Decision:
+
+`Standing` (`standings`) is a cached Payload collection recalculated from result-state
+(`finished` or `result_published`) group-stage, round-robin, league, or swiss-like matches and their
+`match-sets`. Recalculation writes only standing rows and does not mutate match or match-set results.
+Each standing row has a deterministic `standing_key` (`stage:group-or-no-group:entry`) so seed and
+utility runs can update existing rows without duplicating them.
+
+The Phase 5A calculator uses existing Ruleset point fields (`points_win`, `points_draw`,
+`points_loss`, `allow_draw`) and honors configured scalar tie-breakers when available: `points`,
+`score_difference`, `score_for`, `set_difference`, and `set_for`. Non-scalar or not-yet-modeled
+tie-breakers such as `head_to_head`, `fewest_penalties`, and `manual_decision` are intentionally
+deferred and skipped in this foundation pass. Final deterministic ordering falls back to entry
+display name and entry id.
+
+Reason:
+
+Cached standings make the public page fast and Payload Admin-friendly while keeping the calculation
+reproducible from match results. Supporting scalar tie-breakers first covers the seeded futsal
+example and most basic group tables without prematurely adding a head-to-head engine or manual
+override workflow.
+
+Impact:
+
+Future result-publish actions should call the same recalculation helper after a successful result
+change. A later phase must implement head-to-head/manual tie-breakers, rank explanations, and manual
+override/audit UI before complex tournaments rely on standings for advancement.
 
 ## 3. Pending Decisions
 

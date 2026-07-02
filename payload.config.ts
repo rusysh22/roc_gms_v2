@@ -22,6 +22,7 @@ import { Rulesets } from './src/collections/Rulesets'
 import { SiteConfigs } from './src/collections/SiteConfigs'
 import { Sports } from './src/collections/Sports'
 import { Stages } from './src/collections/Stages'
+import { Standings } from './src/collections/Standings'
 import { Teams } from './src/collections/Teams'
 import { Users } from './src/collections/Users'
 import { Venues } from './src/collections/Venues'
@@ -55,6 +56,7 @@ export default buildConfig({
     Groups,
     Matches,
     MatchSets,
+    Standings,
     DocumentationAssets,
     Comments,
     AuditLogs,

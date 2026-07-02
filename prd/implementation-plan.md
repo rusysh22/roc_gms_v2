@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 4D match comments complete  
+Status: Phase 5A group standings foundation complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -210,9 +210,9 @@ Show competitive results clearly.
 
 Tasks:
 
-- [ ] Add `Standing`.
-- [ ] Calculate standings from match results.
-- [ ] Add group standing public view.
+- [x] Add `Standing`.
+- [x] Calculate standings from match results.
+- [x] Add group standing public view.
 - [ ] Add standing admin override with reason.
 - [ ] Add `Bracket`.
 - [ ] Add single elimination bracket view.
@@ -222,7 +222,7 @@ Tasks:
 Acceptance criteria:
 
 - [ ] Group stage standings update after result confirmation.
-- [ ] Public can read standings on mobile.
+- [x] Public can read standings on mobile.
 - [ ] Bracket links to match detail.
 - [ ] Winner advances in single elimination bracket.
 

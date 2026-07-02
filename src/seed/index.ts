@@ -7,6 +7,7 @@ import {
   getMatchPairKey,
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
+import { recalculateStandingsForScope } from '@/lib/standings'
 import { demoScenario } from './data/demoScenario'
 import { defaultSiteConfig } from './data/siteConfig'
 
@@ -735,6 +736,10 @@ const seed = async () => {
   const matchIds = new Map<string, SeedId>()
   for (const matchData of demoScenario.matches) {
     const existingMatch = await findOne(payload, 'matches', 'match_number', matchData.match_number)
+    const winnerEntryId =
+      'winner' in matchData && matchData.winner ? entryIds.get(matchData.winner) : undefined
+    const scoreSummary =
+      'score_summary' in matchData && matchData.score_summary ? matchData.score_summary : undefined
     const match =
       existingMatch ||
       (await payload.create({
@@ -757,12 +762,30 @@ const seed = async () => {
           court_id: courtIds.get(matchData.courtName),
           status: matchData.status,
           generation_source: 'manual',
+          winner_entry_id: winnerEntryId,
+          score_summary: scoreSummary,
           is_public: matchData.is_public,
           documentation_status: matchData.documentation_status,
         },
       }))
 
     matchIds.set(matchData.match_number, getId(match))
+
+    if (
+      existingMatch &&
+      matchData.match_number === 'ROC-FUT-GA-001' &&
+      existingMatch.status === 'published'
+    ) {
+      await payload.update({
+        collection: 'matches',
+        id: getId(existingMatch),
+        data: {
+          status: matchData.status,
+          winner_entry_id: winnerEntryId,
+          score_summary: scoreSummary,
+        },
+      })
+    }
   }
 
   const matchesForEvent = await payload.find({
@@ -889,6 +912,21 @@ const seed = async () => {
           notes: setData.notes,
         },
       })
+    } else if (
+      existingSet &&
+      setData.matchNumber === 'ROC-FUT-GA-001' &&
+      existingSet.participant_a_score === 0 &&
+      existingSet.participant_b_score === 0
+    ) {
+      await payload.update({
+        collection: 'match-sets',
+        id: getId(existingSet),
+        data: {
+          participant_a_score: setData.participant_a_score,
+          participant_b_score: setData.participant_b_score,
+          notes: setData.notes,
+        },
+      })
     }
   }
 
@@ -911,6 +949,17 @@ const seed = async () => {
         status: 'approved',
         is_pinned: true,
       },
+    })
+  }
+
+  const futsalStageId = stageIds.get('roc-olympic-2026-futsal-men')
+  const futsalGroupId = groupIds.get('roc-olympic-2026-futsal-men:Group A')
+  if (futsalCategoryId && futsalStageId && futsalGroupId) {
+    await recalculateStandingsForScope(payload, {
+      eventId,
+      categoryId: futsalCategoryId,
+      stageId: futsalStageId,
+      groupId: futsalGroupId,
     })
   }
 
