@@ -1,0 +1,34 @@
+/*
+ * Tailwind CSS foundation for the (frontend) route group only.
+ *
+ * Preflight (Tailwind's base reset) is intentionally NOT imported here. `styles.css` already
+ * carries its own reset and every existing page relies on its unlayered rules. Importing only the
+ * theme + utilities layers keeps this file additive: Tailwind utility classes become available for
+ * new primitives without touching how any current page renders, because CSS cascade layers always
+ * lose to unlayered rules regardless of source order or specificity.
+ */
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@source './**/*.{ts,tsx}';
+@source '../../components/**/*.{ts,tsx}';
+@source '../../lib/**/*.{ts,tsx}';
+
+@theme {
+  --font-sans: var(--font-jakarta-sans), 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+
+  /* prd/redesign/README.md section 4 - color tokens (D023) */
+  --color-paper: #ffffff;
+  --color-mist: #f1f7f4;
+  --color-ink: #0c231f;
+  --color-ink-soft: #41564f;
+  --color-green: #128a56;
+  --color-blue: #1b57c4;
+  --color-gold: #de9f1e;
+  --color-line: #dbe6e1;
+
+  /* prd/redesign/README.md section 4.1 - shape language (D020) */
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --radius-input: 10px;
+}

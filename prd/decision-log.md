@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-02 (D019 added)
+Last updated: 2026-07-03 (D020-D023 added)
 
 ## 1. Purpose
 
@@ -514,6 +514,113 @@ Match/bracket truth rather than editing the bracket cache directly. Double elimi
 group-to-knockout promotion, manual champion overrides, and full winners announcement CMS remain out
 of scope.
 
+### D020 - Tailwind CSS + shadcn/ui (Radix-based primitives) is the public redesign styling foundation
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Adopt Tailwind CSS v4 and shadcn/ui's approach (Radix UI primitives, `class-variance-authority`,
+`clsx`/`tailwind-merge`, a `components.json` alias configuration) as the styling foundation for the
+`(frontend)` route group, replacing the single hand-written `src/app/(frontend)/styles.css` file over
+time. `styles.css` is not removed yet; Tailwind is layered alongside it starting in redesign phase R0.
+
+Reason:
+
+The redesign (`prd/redesign/README.md`) needs accessible interactive components (nav drawer, future
+tabs/dialogs) without hand-rolling each one from scratch, and this is also the foundation Phase 8
+Live Score will want. This was proposed as PD1 in `prd/redesign/README.md` section 3.
+
+Impact:
+
+New `(frontend)` UI should be built with Tailwind utility classes and Radix-based primitives going
+forward. `(payload)` admin routes are untouched and do not consume this styling foundation.
+Implementation note (redesign phase R0): Tailwind CSS is wired through a dedicated
+`src/app/(frontend)/tailwind.css` entry that imports only `tailwindcss/theme.css` and
+`tailwindcss/utilities.css` in named layers, deliberately skipping Tailwind's preflight/base reset.
+CSS cascade layers always lose to the existing unlayered rules in `styles.css`, so no current page
+changes visually until it is deliberately migrated in a later redesign phase. Shared primitives
+(`Button`, `Card`, `StatusBadge`, `Skeleton`, `NavBar`, `Footer`) live under `src/components/` per the
+`components.json` aliases, hand-built to the exact consistency contract in
+`prd/redesign/README.md` section 4.1 rather than generated as-is from shadcn's default theme, since
+the default shadcn palette/radii do not match this project's tokens. `lucide-react` was added for
+icons (nav drawer open/close), resolving one of the redesign doc's open questions in section 8.
+
+### D021 - Plus Jakarta Sans is self-hosted via next/font/google
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Self-host Plus Jakarta Sans through `next/font/google` in `src/app/(frontend)/layout.tsx`, exposed as
+the `--font-jakarta-sans` CSS variable (and wired into Tailwind's `--font-sans` theme token), rather
+than loading it from a runtime Google Fonts request.
+
+Reason:
+
+Self-hosting avoids FOUT/layout shift and an external font request at runtime. This was proposed as
+PD2 in `prd/redesign/README.md` section 3.
+
+Impact:
+
+Implementation note (redesign phase R0): the font variable is applied to `<html>` only; `styles.css`
+still sets `body { font-family: Inter, ... }` explicitly, so no existing page's rendered font changes
+yet. New primitives opt in via Tailwind's `font-sans` utility. A later redesign phase decides when
+public pages switch their body font over to Plus Jakarta Sans.
+
+### D022 - Public redesign ships before workspace/admin visual refresh
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Redesign phases R0-R2 (design foundation, public landing/navigation, public feature pages) are built
+and shipped before R4 (workspace/admin visual refresh). R3 (interaction/motion polish) can run
+alongside Phase 6/7 of `prd/implementation-plan.md`. R4 has no hard dependency and can trail behind at
+any point.
+
+Reason:
+
+Public pages are what non-technical visitors judge the product by; workspace/admin pages are already
+usable and functional, so they are lower priority for a visual pass. This was proposed as PD3 in
+`prd/redesign/README.md` section 3.
+
+Impact:
+
+Redesign work should follow the R0 -> R1 -> R2 sequence in `prd/redesign/README.md` section 5 before
+R4 work starts. `prd/implementation-plan.md` Phase 6 (Content, Announcements, Sharing) should build
+its public pages on top of the R0-R2 design system rather than the pre-redesign `styles.css` look, per
+the sequencing note in `prd/redesign/README.md` section 6.
+
+### D023 - White-dominant palette with green/blue spent deliberately, not full-bleed
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+The redesigned public palette stays white/paper-dominant (`--color-paper`, `--color-mist`), with
+`--color-green` and `--color-blue` reserved for a small number of focal elements per page (CTAs,
+active nav pill, status accents, one hero widget) rather than full-bleed colored section backgrounds.
+`--color-gold` is reserved for sparse champion/live moments only. Exact token values are set in
+`src/app/(frontend)/tailwind.css`: `--color-paper #FFFFFF`, `--color-mist #F1F7F4`,
+`--color-ink #0C231F`, `--color-ink-soft #41564F`, `--color-green #128A56`, `--color-blue #1B57C4`,
+`--color-gold #DE9F1E`, `--color-line #DBE6E1`.
+
+Reason:
+
+Keeps mobile readability high outdoors and avoids a "loud" look while still feeling like an event
+brand. This was proposed as PD4 in `prd/redesign/README.md` section 3.
+
+Impact:
+
+Future redesign phases (R1-R4) should follow this restraint and the shared shape/elevation/state rules
+in `prd/redesign/README.md` section 4.1 (the "design consistency contract") rather than introducing
+one-off colors, radii, or shadow treatments per page.
+
 ## 3. Pending Decisions
 
 - Decide whether public comments require login.
@@ -521,3 +628,6 @@ of scope.
 - Decide whether MinIO should be included from day one or later.
 - Decide whether live score realtime uses polling first, WebSocket, or Server-Sent Events.
 - Decide whether Teams integration starts as share link or Microsoft Graph integration.
+- Decide public-facing copy language (Bahasa Indonesia, English, or bilingual) - `prd/redesign/README.md`
+  section 8 open question; internal code/routes/db stay English per D001 either way.
+- Decide rollout shape for redesign PRs (one large PR per R-phase vs. page-by-page within R2).
