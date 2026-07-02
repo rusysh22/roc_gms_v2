@@ -118,6 +118,144 @@ h1 {
   color: var(--teal);
 }
 
+.schedule-shell {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 36px 24px 56px;
+}
+
+.schedule-header {
+  margin: 0 0 28px;
+}
+
+.schedule-list {
+  display: grid;
+  gap: 14px;
+}
+
+.schedule-item {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.match-meta,
+.match-round {
+  margin: 0;
+  color: var(--muted);
+}
+
+.match-meta {
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.schedule-item h2 {
+  margin: 6px 0;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+
+.match-participants {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  font-weight: 750;
+}
+
+.match-participants span {
+  min-width: 0;
+}
+
+.match-participants span:last-child {
+  text-align: right;
+}
+
+.match-participants strong {
+  color: var(--gold);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.match-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.match-details div {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.match-details dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.match-details dd {
+  margin: 4px 0 0;
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.empty-state {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.queue-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.queue-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.queue-heading h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.queue-heading span {
+  min-width: 34px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 750;
+}
+
+.queue-item {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 @media (max-width: 640px) {
   .page-shell {
     align-items: start;
@@ -126,5 +264,21 @@ h1 {
 
   .actions a {
     width: 100%;
+  }
+
+  .schedule-shell {
+    padding: 28px 18px 40px;
+  }
+
+  .match-participants {
+    grid-template-columns: 1fr;
+  }
+
+  .match-participants span:last-child {
+    text-align: left;
+  }
+
+  .queue-columns {
+    grid-template-columns: 1fr;
   }
 }

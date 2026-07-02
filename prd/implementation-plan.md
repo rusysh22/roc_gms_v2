@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 1 core event structure complete  
+Status: Phase 2 match generation and schedule queue foundations complete  
 Last updated: 2026-07-02  
 Source of truth: `prd/README.md`
 
@@ -122,25 +122,26 @@ Create the competition structure and scheduling foundation.
 
 Tasks:
 
-- [ ] Add `Ruleset`.
-- [ ] Add ruleset templates for Badminton and Futsal.
-- [ ] Add `Stage`.
-- [ ] Add `Group`.
-- [ ] Add `Match`.
-- [ ] Add `MatchSet`.
-- [ ] Add schedule fields.
-- [ ] Add match lifecycle statuses.
-- [ ] Add basic match generation for round robin/group stage.
-- [ ] Add basic match generation for single elimination.
-- [ ] Add schedule list view.
-- [ ] Add public schedule page.
+- [x] Add `Ruleset`.
+- [x] Add ruleset templates for Badminton and Futsal.
+- [x] Add `Stage`.
+- [x] Add `Group`.
+- [x] Add `Match`.
+- [x] Add `MatchSet`.
+- [x] Add schedule fields.
+- [x] Add match lifecycle statuses.
+- [x] Add basic match generation for round robin/group stage.
+- [x] Add basic match generation for single elimination.
+- [x] Add schedule list view.
+- [x] Add public schedule page.
+- [x] Add minimal scheduled/unscheduled match queue foundation.
 
 Acceptance criteria:
 
-- [ ] Admin can create matches.
+- [x] Admin can create matches.
 - [ ] Public can view schedule after visibility opens.
-- [ ] Match status lifecycle is available.
-- [ ] Badminton/Futsal demo matches can be scheduled.
+- [x] Match status lifecycle is available.
+- [x] Badminton/Futsal demo matches can be scheduled.
 
 Suggested commit:
 

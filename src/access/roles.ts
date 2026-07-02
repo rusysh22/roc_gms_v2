@@ -37,6 +37,23 @@ export const canManageEventStructure: Access = ({ req }) => {
   return hasRole(req.user as AccessUser | null | undefined, ['super_admin', 'event_admin'])
 }
 
+export const canManageSchedule: Access = ({ req }) => {
+  return hasRole(req.user as AccessUser | null | undefined, [
+    'super_admin',
+    'event_admin',
+    'scheduler',
+  ])
+}
+
+export const canManageMatches: Access = ({ req }) => {
+  return hasRole(req.user as AccessUser | null | undefined, [
+    'super_admin',
+    'event_admin',
+    'scheduler',
+    'match_officer',
+  ])
+}
+
 export const canReadEventBackoffice: Access = ({ req }) => {
   return hasRole(req.user as AccessUser | null | undefined, [
     'super_admin',

@@ -79,10 +79,8 @@ export const CompetitionCategories: CollectionConfig = {
     },
     {
       name: 'ruleset_id',
-      type: 'text',
-      admin: {
-        description: 'Temporary identifier until the Ruleset collection is added in Phase 2.',
-      },
+      type: 'relationship',
+      relationTo: 'rulesets',
     },
     {
       name: 'format_type',

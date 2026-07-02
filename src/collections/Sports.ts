@@ -63,10 +63,8 @@ export const Sports: CollectionConfig = {
     },
     {
       name: 'default_ruleset_id',
-      type: 'text',
-      admin: {
-        description: 'Temporary identifier until the Ruleset collection is added in Phase 2.',
-      },
+      type: 'relationship',
+      relationTo: 'rulesets',
     },
     {
       name: 'is_active',

@@ -30,6 +30,8 @@ export default function HomePage() {
 
         <div className="actions">
           <a href="/admin">Open Admin</a>
+          <a href="/schedule">Public Schedule</a>
+          <a href="/scheduler/queue">Match Queue</a>
           <a href="/api/health">Health Check</a>
         </div>
       </section>

@@ -10,10 +10,15 @@ import { CompetitionCategories } from './src/collections/CompetitionCategories'
 import { CompetitionEntries } from './src/collections/CompetitionEntries'
 import { Courts } from './src/collections/Courts'
 import { Events } from './src/collections/Events'
+import { Groups } from './src/collections/Groups'
+import { Matches } from './src/collections/Matches'
+import { MatchSets } from './src/collections/MatchSets'
 import { Players } from './src/collections/Players'
 import { Rosters } from './src/collections/Rosters'
+import { Rulesets } from './src/collections/Rulesets'
 import { SiteConfigs } from './src/collections/SiteConfigs'
 import { Sports } from './src/collections/Sports'
+import { Stages } from './src/collections/Stages'
 import { Teams } from './src/collections/Teams'
 import { Users } from './src/collections/Users'
 import { Venues } from './src/collections/Venues'
@@ -40,8 +45,13 @@ export default buildConfig({
     Users,
     SiteConfigs,
     Events,
+    Rulesets,
     Sports,
     CompetitionCategories,
+    Stages,
+    Groups,
+    Matches,
+    MatchSets,
     Clubs,
     Players,
     Teams,
