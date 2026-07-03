@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-03 (D020-D023 added)
+Last updated: 2026-07-03 (D024 added)
 
 ## 1. Purpose
 
@@ -620,6 +620,33 @@ Impact:
 Future redesign phases (R1-R4) should follow this restraint and the shared shape/elevation/state rules
 in `prd/redesign/README.md` section 4.1 (the "design consistency contract") rather than introducing
 one-off colors, radii, or shadow treatments per page.
+
+### D024 - Public edit mode foundation is query-gated and auth-gated, with Payload Admin as rich editor fallback
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Public preview/edit mode starts as a small foundation on selected public content surfaces. Authenticated
+`super_admin`, `event_admin`, and `content_admin` users can use `?preview=1` and `?edit=1` to reveal
+an admin preview toolbar, editable region markers, and small in-context forms on the homepage event
+intro, article header/share/status fields, and announcement text/share/status fields. Anonymous
+visitors never see the toolbar, markers, or forms, even if they manually add those query parameters.
+Rich article body editing remains in Payload Admin through a full-editor link rather than being
+recreated inside the public page.
+
+Reason:
+
+This satisfies the Phase 7 foundation goal without introducing a broad workspace/auth redesign or a
+large public editing surface. It also keeps complex Lexical rich text editing in the CMS where it
+already works.
+
+Impact:
+
+Future Phase 7 hardening can add richer side-panel UX, true draft preview routing across all public
+collections, field-level permission messaging, autosave/review workflow, and more editable regions.
+Every public edit mutation should continue to enforce role checks server-side and write audit logs.
 
 ## 3. Pending Decisions
 

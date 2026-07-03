@@ -182,6 +182,29 @@ export const getPublicArticleBySlug = async (slug: string) => {
   return articles.docs[0] as PublicArticle | undefined
 }
 
+export const getPublicArticleBySlugForMode = async ({
+  slug,
+  includeUnpublished,
+}: {
+  slug: string
+  includeUnpublished?: boolean
+}) => {
+  if (!includeUnpublished) {
+    return getPublicArticleBySlug(slug)
+  }
+
+  const payload = await getPayload({ config })
+
+  const articles = await payload.find({
+    collection: 'articles',
+    depth: 2,
+    limit: 1,
+    where: { slug: { equals: slug } },
+  })
+
+  return articles.docs[0] as PublicArticle | undefined
+}
+
 export const getPublicAnnouncements = async (limit = 20) => {
   const payload = await getPayload({ config })
 
@@ -191,6 +214,29 @@ export const getPublicAnnouncements = async (limit = 20) => {
     limit,
     sort: ['-published_at', 'urgency'],
     where: publicAnnouncementWhere(new Date().toISOString()),
+  })
+
+  return announcements.docs as PublicAnnouncement[]
+}
+
+export const getPublicAnnouncementsForMode = async ({
+  includeUnpublished,
+  limit = 20,
+}: {
+  includeUnpublished?: boolean
+  limit?: number
+}) => {
+  if (!includeUnpublished) {
+    return getPublicAnnouncements(limit)
+  }
+
+  const payload = await getPayload({ config })
+
+  const announcements = await payload.find({
+    collection: 'announcements',
+    depth: 2,
+    limit,
+    sort: ['-published_at', 'urgency'],
   })
 
   return announcements.docs as PublicAnnouncement[]

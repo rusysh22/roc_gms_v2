@@ -24,6 +24,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { AnnouncementFeed, ArticleCard } from './contentComponents'
 import { getPublicArticles, getScopedPublicAnnouncements } from './contentData'
+import {
+  EditableRegion,
+  EventPublicEditor,
+  PublicEditToolbar,
+} from './publicEditComponents'
+import { getPublicEditState } from './publicEditState'
 import { formatStatus, getRelationshipLabel, type RelationshipDoc } from './workspaces/workspaceComponents'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +40,7 @@ type EventDoc = {
   description?: string | null
   event_start_at: string
   event_end_at: string
+  visibility?: string | null
 }
 
 type SportDoc = {
@@ -89,7 +96,10 @@ const formatMatchTime = (value?: string | null) => {
   }).format(new Date(value))
 }
 
-export default async function HomePage() {
+type HomeSearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default async function HomePage({ searchParams }: { searchParams: HomeSearchParams }) {
+  const editState = await getPublicEditState(await searchParams)
   const payload = await getPayload({ config })
 
   const [eventsResult, liveNextResult, sportsResult, articles] = await Promise.all([
@@ -163,6 +173,7 @@ export default async function HomePage() {
 
   return (
     <main className="font-sans text-ink">
+      <PublicEditToolbar state={editState} path="/" />
       <AutoRefresh />
       <section className="relative overflow-hidden px-4 pb-16 pt-10 sm:pt-16">
         <div
@@ -187,10 +198,30 @@ export default async function HomePage() {
                 Champions
               </span>
             </h1>
-            <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-soft sm:text-lg">
-              {event?.description ||
-                'Follow every match, standing, and bracket from the office olympiad - live scores, schedules, and results in one place.'}
-            </p>
+            {event ? (
+              <EditableRegion
+                state={editState}
+                label="Event intro"
+                editor={
+                  <EventPublicEditor
+                    id={event.id}
+                    description={event.description}
+                    visibility={event.visibility}
+                    returnTo="/"
+                  />
+                }
+              >
+                <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-soft sm:text-lg">
+                  {event.description ||
+                    'Follow every match, standing, and bracket from the office olympiad - live scores, schedules, and results in one place.'}
+                </p>
+              </EditableRegion>
+            ) : (
+              <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-soft sm:text-lg">
+                Follow every match, standing, and bracket from the office olympiad - live scores,
+                schedules, and results in one place.
+              </p>
+            )}
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild>
                 <Link href="/schedule">

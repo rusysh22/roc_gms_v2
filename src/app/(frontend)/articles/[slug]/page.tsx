@@ -12,12 +12,20 @@ import {
   getMediaUrl,
   getPlainTextFromLexical,
   getPublicArticleBySlug,
+  getPublicArticleBySlugForMode,
 } from '../../contentData'
+import {
+  ArticlePublicEditor,
+  EditableRegion,
+  PublicEditToolbar,
+} from '../../publicEditComponents'
+import { getPublicEditState } from '../../publicEditState'
 import { getRelationshipLabel } from '../../workspaces/workspaceComponents'
 
 export const dynamic = 'force-dynamic'
 
 type PageParams = Promise<{ slug: string }>
+type PageSearchParams = Promise<Record<string, string | string[] | undefined>>
 
 export async function generateMetadata({ params }: { params: PageParams }): Promise<Metadata> {
   const { slug } = await params
@@ -42,9 +50,19 @@ export async function generateMetadata({ params }: { params: PageParams }): Prom
   })
 }
 
-export default async function ArticleDetailPage({ params }: { params: PageParams }) {
-  const { slug } = await params
-  const article = await getPublicArticleBySlug(slug)
+export default async function ArticleDetailPage({
+  params,
+  searchParams,
+}: {
+  params: PageParams
+  searchParams: PageSearchParams
+}) {
+  const [{ slug }, resolvedSearchParams] = await Promise.all([params, searchParams])
+  const editState = await getPublicEditState(resolvedSearchParams)
+  const article = await getPublicArticleBySlugForMode({
+    slug,
+    includeUnpublished: editState.isPreview,
+  })
 
   if (!article) {
     notFound()
@@ -56,6 +74,7 @@ export default async function ArticleDetailPage({ params }: { params: PageParams
 
   return (
     <main className="font-sans text-ink">
+      <PublicEditToolbar state={editState} path={`/articles/${article.slug}`} />
       <section className="px-4 py-8">
         <div className="mx-auto max-w-3xl">
           <Link
@@ -65,13 +84,29 @@ export default async function ArticleDetailPage({ params }: { params: PageParams
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to articles
           </Link>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-            {formatContentDate(article.published_at)}
-          </p>
-          <h1 className="mt-2 text-4xl font-extrabold leading-tight sm:text-5xl">
-            {article.title}
-          </h1>
-          <p className="mt-4 text-lg leading-relaxed text-ink-soft">{article.excerpt}</p>
+          <EditableRegion
+            state={editState}
+            label="Article header"
+            editor={
+              <ArticlePublicEditor
+                id={article.id}
+                title={article.title}
+                excerpt={article.excerpt}
+                status={article.status}
+                shareTitle={article.share_title}
+                shareDescription={article.share_description}
+                returnTo={`/articles/${article.slug}`}
+              />
+            }
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+              {formatContentDate(article.published_at)}
+            </p>
+            <h1 className="mt-2 text-4xl font-extrabold leading-tight sm:text-5xl">
+              {article.title}
+            </h1>
+            <p className="mt-4 text-lg leading-relaxed text-ink-soft">{article.excerpt}</p>
+          </EditableRegion>
           <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold text-ink-soft">
             {article.event_id ? <span>{getRelationshipLabel(article.event_id)}</span> : null}
             {article.sport_id ? <span>{getRelationshipLabel(article.sport_id)}</span> : null}

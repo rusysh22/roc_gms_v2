@@ -1,7 +1,7 @@
 # ROC GMS V2 - Phase 6 Content, Announcements, and Sharing
 
 Owner: Rusydani
-Status: Phase 6B complete; ready for Phase 6C
+Status: Phase 6C complete
 Last updated: 2026-07-03
 Source of truth: `prd/README.md`, `prd/implementation-plan.md`, `prd/session-handoff.md`
 
@@ -123,22 +123,34 @@ Build the non-invasive communication foundation.
 
 Tasks:
 
-- Add basic HTML email template helpers for:
+- [x] Add basic HTML email template helpers for:
   - schedule email
   - match reminder
   - announcement email
-- Add `.ics` generation helper for matches.
-- Add `.ics` download route for match detail, recommended:
+- [x] Add `.ics` generation helper for matches.
+- [x] Add `.ics` download route for match detail, recommended:
   - `/matches/[matchNumber]/calendar.ics`
-- Optionally add event/category schedule `.ics` only if simple and safe.
-- Log or preview outgoing email content only through Mailpit/local helper; do not build bulk sending
+- [ ] Optionally add event/category schedule `.ics` only if simple and safe.
+- [x] Log or preview outgoing email content only through Mailpit/local helper; do not build bulk sending
   or Microsoft Graph integration yet.
 
 Acceptance:
 
-- A match can be downloaded as an Outlook-friendly `.ics`.
-- Email template helpers render readable HTML.
-- No real external email/Teams integration is introduced yet.
+- [x] A match can be downloaded as an Outlook-friendly `.ics`.
+- [x] Email template helpers render readable HTML.
+- [x] No real external email/Teams integration is introduced yet.
+
+Completion notes (2026-07-03):
+
+- Added local-only HTML email template helpers for schedule emails, match reminders, and
+  announcements in `src/lib/emailTemplates.ts`.
+- Added `buildMatchIcs` in `src/lib/calendar.ts` with Outlook-friendly `VCALENDAR` / `VEVENT`
+  output, UTC timestamps, escaped text, folded lines, and a 30-minute display reminder.
+- Added `/matches/[matchNumber]/calendar.ics` as a public match calendar download route. The route
+  returns 404 for missing, non-public, or unscheduled matches.
+- Verified `/matches/ROC-BMS-001/calendar.ics` returns HTTP 200 with `text/calendar; charset=utf-8`,
+  `Content-Disposition: attachment; filename="ROC-BMS-001.ics"`, and `BEGIN:VCALENDAR` content.
+- No bulk sending, Microsoft Graph, external email delivery, or public edit mode was introduced.
 
 ## 3. Design Rules
 

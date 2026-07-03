@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 6B complete; ready for Phase 6C email template and calendar export foundation  
+Status: Phase 7 public edit mode foundation complete; ready for Phase 8 live score or Phase 7 hardening  
 Last updated: 2026-07-03  
 Source of truth: `prd/README.md`
 
@@ -263,8 +263,8 @@ Tasks:
 - [x] Add WhatsApp share link.
 - [x] Add Teams share link.
 - [x] Add email share.
-- [ ] Add basic email template.
-- [ ] Add `.ics` calendar export foundation.
+- [x] Add basic email template.
+- [x] Add `.ics` calendar export foundation.
 
 Acceptance criteria:
 
@@ -285,18 +285,29 @@ Let admins edit selected content from public visual context.
 
 Tasks:
 
-- [ ] Add admin preview mode.
-- [ ] Add edit mode toggle on public pages.
-- [ ] Add editable region markers.
-- [ ] Add side panel editor.
-- [ ] Add draft/publish controls.
-- [ ] Add audit logging.
+- [x] Add admin preview mode foundation.
+- [x] Add edit mode toggle on selected public pages.
+- [x] Add editable region markers.
+- [x] Add side panel editor foundation.
+- [x] Add draft/publish controls for selected content fields.
+- [x] Add audit logging for public edit mutations.
 
 Acceptance criteria:
 
-- [ ] Authorized admin can edit event description from public page.
-- [ ] Authorized admin can edit article/announcement in context.
-- [ ] Public users never see edit affordances.
+- [x] Authorized admin can edit event description from public page foundation.
+- [x] Authorized admin can edit article/announcement header fields in context.
+- [x] Public users never see edit affordances.
+
+Completion notes (2026-07-03):
+
+- Added an authenticated public preview/edit-mode foundation using `?preview=1` and `?edit=1`.
+- Only `super_admin`, `event_admin`, and `content_admin` can see the preview toolbar, editable
+  region outlines, or edit forms. Anonymous visitors see no controls, even if query flags are present.
+- Selected editable areas now include the homepage event intro, article title/excerpt/share/status
+  fields, and announcement title/summary/body/share/status fields.
+- Saves write audit rows and revalidate the affected public pages.
+- Rich article body editing remains in Payload Admin through the full-editor link; no broad auth
+  redesign, Microsoft Graph, bulk notifications, or live score work was added.
 
 Suggested commit:
 

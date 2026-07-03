@@ -4,7 +4,13 @@ import { Bell } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { buildShareMetadata } from '@/lib/shareMetadata'
 import { AnnouncementCard } from '../contentComponents'
-import { getPublicAnnouncements } from '../contentData'
+import { getPublicAnnouncementsForMode } from '../contentData'
+import {
+  AnnouncementPublicEditor,
+  EditableRegion,
+  PublicEditToolbar,
+} from '../publicEditComponents'
+import { getPublicEditState } from '../publicEditState'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +20,22 @@ export const metadata: Metadata = buildShareMetadata({
   path: '/announcements',
 })
 
-export default async function AnnouncementsPage() {
-  const announcements = await getPublicAnnouncements(50)
+type PageSearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default async function AnnouncementsPage({
+  searchParams,
+}: {
+  searchParams: PageSearchParams
+}) {
+  const editState = await getPublicEditState(await searchParams)
+  const announcements = await getPublicAnnouncementsForMode({
+    includeUnpublished: editState.isPreview,
+    limit: 50,
+  })
 
   return (
     <main className="font-sans text-ink">
+      <PublicEditToolbar state={editState} path="/announcements" />
       <section className="px-4 py-10">
         <div className="mx-auto max-w-5xl">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
@@ -43,7 +60,25 @@ export default async function AnnouncementsPage() {
           ) : (
             <div className="flex flex-col gap-3">
               {announcements.map((announcement) => (
-                <AnnouncementCard key={announcement.id} announcement={announcement} />
+                <EditableRegion
+                  key={announcement.id}
+                  state={editState}
+                  label="Announcement"
+                  editor={
+                    <AnnouncementPublicEditor
+                      id={announcement.id}
+                      title={announcement.title}
+                      summary={announcement.summary}
+                      body={announcement.body}
+                      status={announcement.status}
+                      shareTitle={announcement.share_title}
+                      shareDescription={announcement.share_description}
+                      returnTo="/announcements"
+                    />
+                  }
+                >
+                  <AnnouncementCard announcement={announcement} />
+                </EditableRegion>
               ))}
             </div>
           )}
