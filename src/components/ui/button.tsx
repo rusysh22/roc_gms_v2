@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 // Pill button per prd/redesign/README.md section 4.1 - rounded-full is the signature shape.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-sans font-semibold transition-all duration-200 hover:duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-sans font-semibold no-underline transition-all duration-200 hover:duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none',
   {
     variants: {
       variant: {

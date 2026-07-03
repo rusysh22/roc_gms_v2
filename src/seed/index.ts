@@ -10,10 +10,12 @@ import {
 } from '@/lib/matchGeneration'
 import { recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
-import { demoScenario } from './data/demoScenario'
+import { demoScenario, type DemoEntrySeed, type DemoMatchSeed } from './data/demoScenario'
 import { defaultSiteConfig } from './data/siteConfig'
 
 type CollectionName =
+  | 'announcements'
+  | 'articles'
   | 'events'
   | 'rulesets'
   | 'sports'
@@ -31,6 +33,34 @@ type CollectionName =
   | 'match-sets'
   | 'brackets'
   | 'comments'
+
+type LexicalContent = {
+  root: {
+    type: 'root'
+    format: ''
+    indent: 0
+    version: 1
+    direction: 'ltr'
+    children: Array<{
+      type: 'paragraph'
+      format: ''
+      indent: 0
+      version: 1
+      direction: 'ltr'
+      children: Array<{
+        type: 'text'
+        text: string
+        format: 0
+        style: ''
+        mode: 'normal'
+        detail: 0
+        version: 1
+      }>
+      textFormat: 0
+      textStyle: ''
+    }>
+  }
+}
 
 type SeedPayload = Awaited<ReturnType<typeof getPayload>>
 type SeedId = string | number
@@ -283,6 +313,36 @@ const findDocumentationAsset = async (
   return result.docs[0]
 }
 
+const createLexicalContent = (paragraphs: string[]): LexicalContent => ({
+  root: {
+    type: 'root',
+    format: '',
+    indent: 0,
+    version: 1,
+    direction: 'ltr',
+    children: paragraphs.map((text) => ({
+      type: 'paragraph',
+      format: '',
+      indent: 0,
+      version: 1,
+      direction: 'ltr',
+      children: [
+        {
+          type: 'text',
+          text,
+          format: 0,
+          style: '',
+          mode: 'normal',
+          detail: 0,
+          version: 1,
+        },
+      ],
+      textFormat: 0,
+      textStyle: '',
+    })),
+  },
+})
+
 const seed = async () => {
   console.log('Starting ROC GMS seed...')
   const payload = await getPayload({ config })
@@ -527,7 +587,7 @@ const seed = async () => {
     }
   }
 
-  for (const entryData of demoScenario.entries) {
+  for (const entryData of demoScenario.entries as DemoEntrySeed[]) {
     const categoryId = categoryIds.get(entryData.categorySlug)
     const existingEntry = await findOneInEvent(
       payload,
@@ -563,6 +623,25 @@ const seed = async () => {
           status: entryData.status,
         },
       })
+    }
+  }
+
+  // Prune entries left over from an older version of this file (e.g. a placeholder that used to
+  // exist in a category's entry list but was since removed/renamed). Stale entries silently
+  // pollute round-robin/single-elimination generation - see D024 - so every entry in this event
+  // must either match a name in the current demoScenario.entries, or get removed.
+  const currentEntryDisplayNames = new Set(
+    (demoScenario.entries as DemoEntrySeed[]).map((entryData) => entryData.display_name),
+  )
+  const allEntriesForEvent = await payload.find({
+    collection: 'competition-entries',
+    limit: 500,
+    where: { event_id: { equals: eventId } },
+  })
+  for (const entry of allEntriesForEvent.docs) {
+    if (!currentEntryDisplayNames.has(String(entry.display_name))) {
+      await payload.delete({ collection: 'competition-entries', id: entry.id })
+      payload.logger.info(`Pruned stale demo entry: ${entry.display_name}`)
     }
   }
 
@@ -674,7 +753,7 @@ const seed = async () => {
   }
 
   const matchIds = new Map<string, SeedId>()
-  for (const matchData of demoScenario.matches) {
+  for (const matchData of demoScenario.matches as DemoMatchSeed[]) {
     const existingMatch = await findOne(payload, 'matches', 'match_number', matchData.match_number)
     const winnerEntryId =
       'winner' in matchData && matchData.winner ? entryIds.get(matchData.winner) : undefined
@@ -759,21 +838,41 @@ const seed = async () => {
     }
   }
 
-  const entriesByCategorySlug = new Map<string, MatchGenerationEntry[]>()
+  // Keyed by `${categorySlug}:${groupName || 'no-group'}` - entries themselves don't carry a
+  // group_id (group assignment only exists at the match/pairing level), so demoScenario.entries
+  // carries an explicit optional groupName used only to scope round-robin generation correctly.
+  // Without this, a category with more than one group (Futsal Men: Group A + Group B) would mix
+  // every group's entries into one giant round-robin instead of pairing within each group.
+  const entryGroupNameByDisplayName = new Map<string, string | undefined>()
+  for (const entryData of demoScenario.entries as DemoEntrySeed[]) {
+    entryGroupNameByDisplayName.set(entryData.display_name, entryData.groupName)
+  }
+
+  const entriesByCategoryAndGroup = new Map<string, MatchGenerationEntry[]>()
   for (const categoryData of demoScenario.categories) {
     const categoryId = categoryIds.get(categoryData.slug)
-    entriesByCategorySlug.set(
-      categoryData.slug,
-      seededEntries.docs
-        .filter((entry) => getRelationshipId(entry.category_id) === categoryId)
-        .map((entry) => ({
-          id: getId(entry),
-          display_name: String(entry.display_name),
-          seed_number:
-            typeof entry.seed_number === 'number' ? entry.seed_number : undefined,
-          status: typeof entry.status === 'string' ? entry.status : undefined,
-        })),
+    const categoryEntryDocs = seededEntries.docs.filter(
+      (entry) => getRelationshipId(entry.category_id) === categoryId,
     )
+    const groupNamesInCategory = new Set(
+      categoryEntryDocs.map((entry) => entryGroupNameByDisplayName.get(String(entry.display_name))),
+    )
+
+    for (const groupName of groupNamesInCategory) {
+      const key = `${categoryData.slug}:${groupName || 'no-group'}`
+      entriesByCategoryAndGroup.set(
+        key,
+        categoryEntryDocs
+          .filter((entry) => entryGroupNameByDisplayName.get(String(entry.display_name)) === groupName)
+          .map((entry) => ({
+            id: getId(entry),
+            display_name: String(entry.display_name),
+            seed_number:
+              typeof entry.seed_number === 'number' ? entry.seed_number : undefined,
+            status: typeof entry.status === 'string' ? entry.status : undefined,
+          })),
+      )
+    }
   }
 
   for (const generationData of demoScenario.matchGeneration) {
@@ -782,7 +881,10 @@ const seed = async () => {
     const groupId = generationData.groupName
       ? groupIds.get(`${generationData.stageCategorySlug}:${generationData.groupName}`)
       : undefined
-    const categoryEntries = entriesByCategorySlug.get(generationData.categorySlug) || []
+    const categoryEntries =
+      entriesByCategoryAndGroup.get(
+        `${generationData.categorySlug}:${generationData.groupName || 'no-group'}`,
+      ) || []
     const pairings =
       generationData.generation_type === 'round_robin'
         ? generateRoundRobinPairings(categoryEntries, generationData.roundNamePrefix)
@@ -854,6 +956,184 @@ const seed = async () => {
     }
 
     return undefined
+  }
+
+  const articleSeeds: Array<{
+    title: string
+    slug: string
+    excerpt: string
+    paragraphs: string[]
+    status: string
+    published_at?: string
+    sportSlug?: string
+    categorySlug?: string
+    matchNumber?: string
+    share_title: string
+    share_description: string
+    comments_enabled?: boolean
+  }> = [
+    {
+      title: 'ROC Olympic 2026 is Getting Ready',
+      slug: 'roc-olympic-2026-getting-ready',
+      excerpt:
+        'A quick organizer note for the opening week, sports lineup, and where participants should watch for updates.',
+      paragraphs: [
+        'ROC Olympic 2026 is moving from setup into match-week readiness. The committee is preparing sport pages, schedules, venue details, and result updates so employees can follow the event from one place.',
+        'Badminton, futsal, table tennis, chess, running, and padel are represented in the demo content foundation. Public reading pages will be added in the next Phase 6 session.',
+      ],
+      status: 'published',
+      published_at: '2026-07-03T02:00:00.000Z',
+      share_title: 'ROC Olympic 2026 is getting ready',
+      share_description: 'Opening update for the ROC Olympic 2026 demo event.',
+      comments_enabled: false,
+    },
+    {
+      title: 'Badminton Final Recap: Andi Claims the First Crown',
+      slug: 'badminton-final-recap-andi-claims-the-first-crown',
+      excerpt:
+        'A seeded match recap connected to the Badminton Men Single final for CMS and related-content testing.',
+      paragraphs: [
+        'The Badminton Men Single final delivered a three-set finish, with Andi Pratama recovering after the opening set and closing the championship match with steady attacking play.',
+        'This recap is linked to the final match record so later public article pages can show related match context without inventing another data model.',
+      ],
+      status: 'review',
+      published_at: '2026-08-21T04:30:00.000Z',
+      sportSlug: 'roc-olympic-2026-badminton',
+      categorySlug: 'roc-olympic-2026-badminton-men-single',
+      matchNumber: 'ROC-BMS-001',
+      share_title: 'Badminton final recap: Andi claims the crown',
+      share_description: 'A draft recap connected to the ROC-BMS-001 final match.',
+      comments_enabled: true,
+    },
+  ]
+
+  for (const articleData of articleSeeds) {
+    const existingArticle = await findOne(payload, 'articles', 'slug', articleData.slug)
+    const matchId = articleData.matchNumber ? await resolveMatchId(articleData.matchNumber) : undefined
+    const data = {
+      title: articleData.title,
+      slug: articleData.slug,
+      excerpt: articleData.excerpt,
+      content: createLexicalContent(articleData.paragraphs),
+      status: articleData.status,
+      published_at: articleData.published_at,
+      event_id: eventId,
+      sport_id: articleData.sportSlug ? sportIds.get(articleData.sportSlug) : undefined,
+      category_id: articleData.categorySlug ? categoryIds.get(articleData.categorySlug) : undefined,
+      match_id: matchId,
+      share_title: articleData.share_title,
+      share_description: articleData.share_description,
+      comments_enabled: articleData.comments_enabled || false,
+    }
+
+    if (existingArticle) {
+      await payload.update({
+        collection: 'articles',
+        id: getId(existingArticle),
+        data,
+      })
+    } else {
+      await payload.create({
+        collection: 'articles',
+        data,
+      })
+    }
+  }
+
+  const announcementSeeds: Array<{
+    title: string
+    slug: string
+    summary: string
+    body: string
+    urgency: string
+    display_mode: string
+    status: string
+    target_scope: string
+    published_at?: string
+    expires_at?: string
+    sportSlug?: string
+    categorySlug?: string
+    matchNumber?: string
+    cta_label?: string
+    cta_url?: string
+    share_title: string
+    share_description: string
+  }> = [
+    {
+      title: 'Weather Watch: Futsal Kickoff May Shift',
+      slug: 'weather-watch-futsal-kickoff-may-shift',
+      summary: 'Urgent operational alert for outdoor futsal matches if heavy rain continues.',
+      body: 'The committee is monitoring field conditions. Please check the public schedule before leaving for the Futsal Field.',
+      urgency: 'urgent',
+      display_mode: 'urgent_alert',
+      status: 'published',
+      target_scope: 'event',
+      published_at: '2026-07-03T02:30:00.000Z',
+      expires_at: '2026-08-19T05:00:00.000Z',
+      cta_label: 'Open schedule',
+      cta_url: '/schedule',
+      share_title: 'ROC Olympic weather watch',
+      share_description: 'Urgent futsal schedule watch for ROC Olympic 2026.',
+    },
+    {
+      title: 'Badminton Mixed Double Group A Starts on Court 2',
+      slug: 'badminton-mixed-double-group-a-starts-on-court-2',
+      summary: 'Category notice for players and supporters following Badminton Mixed Double.',
+      body: 'Group A matches for Badminton Mixed Double are planned on Court 2. Players should arrive early for warm-up and check-in.',
+      urgency: 'info',
+      display_mode: 'banner',
+      status: 'review',
+      target_scope: 'category',
+      published_at: '2026-08-18T23:00:00.000Z',
+      sportSlug: 'roc-olympic-2026-badminton',
+      categorySlug: 'roc-olympic-2026-badminton-mixed-double',
+      cta_label: 'View category',
+      cta_url: '/sports/roc-olympic-2026-badminton/roc-olympic-2026-badminton-mixed-double',
+      share_title: 'Badminton Mixed Double Group A starts on Court 2',
+      share_description: 'Category update for ROC Olympic 2026 Badminton Mixed Double.',
+    },
+  ]
+
+  for (const announcementData of announcementSeeds) {
+    const existingAnnouncement = await findOne(payload, 'announcements', 'slug', announcementData.slug)
+    const matchId = announcementData.matchNumber
+      ? await resolveMatchId(announcementData.matchNumber)
+      : undefined
+    const data = {
+      title: announcementData.title,
+      slug: announcementData.slug,
+      summary: announcementData.summary,
+      body: announcementData.body,
+      urgency: announcementData.urgency,
+      display_mode: announcementData.display_mode,
+      status: announcementData.status,
+      target_scope: announcementData.target_scope,
+      published_at: announcementData.published_at,
+      expires_at: announcementData.expires_at,
+      event_id: eventId,
+      sport_id: announcementData.sportSlug ? sportIds.get(announcementData.sportSlug) : undefined,
+      category_id: announcementData.categorySlug
+        ? categoryIds.get(announcementData.categorySlug)
+        : undefined,
+      match_id: matchId,
+      cta_label: announcementData.cta_label,
+      cta_url: announcementData.cta_url,
+      share_title: announcementData.share_title,
+      share_description: announcementData.share_description,
+    }
+
+    if (existingAnnouncement) {
+      await payload.update({
+        collection: 'announcements',
+        id: getId(existingAnnouncement),
+        data,
+      })
+    } else {
+      await payload.create({
+        collection: 'announcements',
+        data,
+      })
+    }
   }
 
   const upsertMatchSet = async (setData: DemoMatchSetSeedLike, matchId: SeedId) => {
@@ -1170,14 +1450,23 @@ const seed = async () => {
     })
   }
 
+  const padelMenStageId = stageIds.get('roc-olympic-2026-padel-men')
+  if (padelMenStageId) {
+    await recalculateSingleEliminationBracket(payload, {
+      stageId: padelMenStageId,
+    })
+  }
+
+  const padelWomenStageId = stageIds.get('roc-olympic-2026-padel-women')
+  if (padelWomenStageId) {
+    await recalculateSingleEliminationBracket(payload, {
+      stageId: padelWomenStageId,
+    })
+  }
+
   payload.logger.info('ROC Olympic 2026 demo event structure is ready')
   console.log('ROC GMS seed complete.')
 }
 
-try {
-  await seed()
-} catch (error) {
-  console.error('SEED DEBUG:', JSON.stringify(error, null, 2))
-  throw error
-}
+await seed()
 process.exit(0)

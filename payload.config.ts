@@ -6,6 +6,8 @@ import sharp from 'sharp'
 import { fileURLToPath } from 'url'
 
 import { AuditLogs } from './src/collections/AuditLogs'
+import { Announcements } from './src/collections/Announcements'
+import { Articles } from './src/collections/Articles'
 import { Brackets } from './src/collections/Brackets'
 import { Clubs } from './src/collections/Clubs'
 import { Comments } from './src/collections/Comments'
@@ -17,6 +19,7 @@ import { Events } from './src/collections/Events'
 import { Groups } from './src/collections/Groups'
 import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
+import { Media } from './src/collections/Media'
 import { Players } from './src/collections/Players'
 import { Rosters } from './src/collections/Rosters'
 import { Rulesets } from './src/collections/Rulesets'
@@ -59,6 +62,9 @@ export default buildConfig({
     MatchSets,
     Standings,
     Brackets,
+    Media,
+    Articles,
+    Announcements,
     DocumentationAssets,
     Comments,
     AuditLogs,

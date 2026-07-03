@@ -5,6 +5,12 @@ import { ArrowLeft, MapPin } from 'lucide-react'
 import { getMatchDetail } from '../../matchDetailData'
 import { Card, CardTitle } from '@/components/ui/card'
 import { ShareButtons } from '@/components/share-buttons'
+import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
+import {
+  getRelatedPublicArticles,
+  getRelationshipId,
+  getScopedPublicAnnouncements,
+} from '../../contentData'
 import { formatDateTime, getRelationshipLabel } from '../../workspaces/workspaceComponents'
 import {
   DocumentationGallery,
@@ -17,6 +23,15 @@ import {
 export const dynamic = 'force-dynamic'
 
 type MatchPageParams = Promise<{ matchNumber: string }>
+
+const getCategoryHref = (sport: unknown, category: unknown) => {
+  const sportSlug =
+    sport && typeof sport === 'object' && 'slug' in sport ? String(sport.slug || '') : ''
+  const categorySlug =
+    category && typeof category === 'object' && 'slug' in category ? String(category.slug || '') : ''
+
+  return sportSlug && categorySlug ? `/sports/${sportSlug}/${categorySlug}` : ''
+}
 
 export default async function PublicMatchDetailPage({ params }: { params: MatchPageParams }) {
   const { matchNumber } = await params
@@ -35,28 +50,56 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
   )
   const shareTitle = `${getRelationshipLabel(match.participant_a_entry_id)} vs ${getRelationshipLabel(
     match.participant_b_entry_id,
-  )} · ${match.match_number}`
+  )} / ${match.match_number}`
+  const categoryHref = getCategoryHref(match.sport_id, match.category_id)
+  const eventId = getRelationshipId(match.event_id)
+  const sportId = getRelationshipId(match.sport_id)
+  const categoryId = getRelationshipId(match.category_id)
+  const matchId = match.id
+  const [announcements, relatedArticles] = await Promise.all([
+    getScopedPublicAnnouncements({
+      eventId,
+      sportId,
+      categoryId,
+      matchId,
+      limit: 4,
+    }),
+    getRelatedPublicArticles({
+      eventId,
+      sportId,
+      categoryId,
+      matchId,
+      limit: 3,
+    }),
+  ])
 
   return (
     <main className="font-sans text-ink">
       <section className="px-4 pt-4 pb-6">
         <div className="mx-auto max-w-3xl">
-          <Link
-            href="/schedule"
-            className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Back to schedule
-          </Link>
+          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
+            <Link
+              href="/schedule"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to schedule
+            </Link>
+            {categoryHref ? (
+              <Link href={categoryHref} className="text-sm font-semibold text-blue hover:underline">
+                View category page
+              </Link>
+            ) : null}
+          </div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-            {getRelationshipLabel(match.sport_id)} · {getRelationshipLabel(match.category_id)}
+            {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
           </p>
           <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">
             {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
             {getRelationshipLabel(match.participant_b_entry_id)}
           </h1>
           <p className="mt-2 text-sm text-ink-soft">
-            {match.match_number} · {match.round_name || 'Match'}
+            {match.match_number} / {match.round_name || 'Match'}
           </p>
         </div>
       </section>
@@ -86,9 +129,15 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
             <CardTitle>Venue</CardTitle>
             <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink">
               <MapPin className="h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
-              {getRelationshipLabel(match.venue_id)} · {getRelationshipLabel(match.court_id)}
+              {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
             </p>
           </Card>
+        </div>
+      </section>
+
+      <section className="px-4 pb-8" aria-label="Match announcements">
+        <div className="mx-auto max-w-3xl">
+          <AnnouncementFeed announcements={announcements} title="Match Updates" compact />
         </div>
       </section>
 
@@ -114,6 +163,19 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
           <PublicCommentList comments={publicComments} />
         </div>
       </section>
+
+      {relatedArticles.length > 0 ? (
+        <section className="px-4 pb-8" aria-label="Related articles">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-3 text-xl font-bold text-ink">Related Articles</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {relatedArticles.map((article) => (
+                <ArticleCard key={article.id} article={article} />
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="px-4 pb-16" aria-label="Share this match">
         <div className="mx-auto max-w-3xl">

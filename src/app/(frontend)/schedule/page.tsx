@@ -4,7 +4,8 @@ import { Calendar, Clock, MapPin } from 'lucide-react'
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import {
   formatDateLabel,
@@ -18,6 +19,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 type SportDoc = RelationshipDoc & { slug?: string }
+type CategoryDoc = RelationshipDoc & { slug?: string }
 
 type ScheduleMatch = {
   id: string | number
@@ -26,7 +28,7 @@ type ScheduleMatch = {
   scheduled_start_at?: string | null
   status: string
   sport_id?: SportDoc | string | number | null
-  category_id?: RelationshipDoc | string | number | null
+  category_id?: CategoryDoc | string | number | null
   participant_a_entry_id?: RelationshipDoc | string | number | null
   participant_b_entry_id?: RelationshipDoc | string | number | null
   venue_id?: RelationshipDoc | string | number | null
@@ -80,6 +82,20 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
     if (right === 'unscheduled') return -1
     return left.localeCompare(right)
   })
+  const getCategoryHref = (match: ScheduleMatch) => {
+    if (
+      match.sport_id &&
+      typeof match.sport_id === 'object' &&
+      match.sport_id.slug &&
+      match.category_id &&
+      typeof match.category_id === 'object' &&
+      match.category_id.slug
+    ) {
+      return `/sports/${match.sport_id.slug}/${match.category_id.slug}`
+    }
+
+    return ''
+  }
 
   return (
     <main className="font-sans text-ink">
@@ -96,12 +112,12 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
         </div>
       </section>
 
-      <div className="sticky top-20 z-40 border-y border-line bg-paper/95 px-4 py-3 backdrop-blur">
+      <div className="sticky top-20 z-40 border-y border-line bg-paper px-4 py-3">
         <div className="mx-auto flex max-w-4xl gap-2 overflow-x-auto">
           <Link
             href="/schedule"
             className={cn(
-              'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+              'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold no-underline transition-colors',
               !activeSport ?
                 'border-green bg-green text-paper'
               : 'border-line bg-paper text-ink-soft hover:text-ink',
@@ -114,7 +130,7 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
               key={sport.id}
               href={`/schedule?sport=${sport.slug}`}
               className={cn(
-                'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold no-underline transition-colors',
                 activeSport?.slug === sport.slug ?
                   'border-green bg-green text-paper'
                 : 'border-line bg-paper text-ink-soft hover:text-ink',
@@ -147,13 +163,15 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
                       {label}
                     </h2>
                     <div className="flex flex-col gap-3">
-                      {rows.map((match) => (
-                        <Link key={match.id} href={`/matches/${match.match_number}`} className="block">
-                          <Card interactive accent="blue">
+                      {rows.map((match) => {
+                        const categoryHref = getCategoryHref(match)
+
+                        return (
+                          <Card key={match.id} interactive accent="blue">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <CardDescription>
-                                  {getRelationshipLabel(match.sport_id)} ·{' '}
+                                  {getRelationshipLabel(match.sport_id)} /{' '}
                                   {getRelationshipLabel(match.category_id)}
                                 </CardDescription>
                                 <CardTitle className="mt-1">
@@ -161,7 +179,7 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
                                   {getRelationshipLabel(match.participant_b_entry_id)}
                                 </CardTitle>
                                 <p className="mt-1 text-xs font-semibold text-ink-soft">
-                                  {match.match_number} · {match.round_name || 'Scheduled Match'}
+                                  {match.match_number} / {match.round_name || 'Scheduled Match'}
                                 </p>
                               </div>
                               <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -175,15 +193,25 @@ export default async function PublicSchedulePage({ searchParams }: SchedulePageP
                                   </span>
                                   <span className="inline-flex items-center gap-1">
                                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                                    {getRelationshipLabel(match.venue_id)} ·{' '}
+                                    {getRelationshipLabel(match.venue_id)} /{' '}
                                     {getRelationshipLabel(match.court_id)}
                                   </span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button asChild variant="secondary" size="sm">
+                                    <Link href={`/matches/${match.match_number}`}>Match detail</Link>
+                                  </Button>
+                                  {categoryHref ? (
+                                    <Button asChild variant="ghost" size="sm">
+                                      <Link href={categoryHref}>Category page</Link>
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
                           </Card>
-                        </Link>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )

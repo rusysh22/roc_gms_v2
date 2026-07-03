@@ -9,13 +9,16 @@
     "start": "next start",
     "payload": "payload",
     "seed": "payload run src/seed/index.ts",
+    "seed:reset-matches": "payload run src/scripts/resetDemoMatchData.ts",
     "brackets:recalculate": "payload run src/scripts/recalculateBrackets.ts",
     "standings:recalculate": "payload run src/scripts/recalculateStandings.ts",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "patch-package"
   },
   "dependencies": {
+    "@g-loot/react-tournament-brackets": "^1.0.31-rc",
     "@payloadcms/db-postgres": "3.85.2",
     "@payloadcms/next": "3.85.2",
     "@payloadcms/richtext-lexical": "3.85.2",
@@ -31,7 +34,9 @@
     "postcss": "^8.5.16",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "react-svg-pan-zoom": "^3.13.1",
     "sharp": "0.35.3",
+    "styled-components": "^6.4.3",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.2"
   },
@@ -39,6 +44,7 @@
     "@types/node": "26.1.0",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "patch-package": "^8.0.1",
     "typescript": "5.9.3"
   },
   "engines": {

@@ -79,6 +79,11 @@ export type DemoEntrySeed = {
   clubSlug?: string
   seed_number?: number
   status: string
+  // Only meaningful for group-stage categories with more than one group (e.g. Futsal Men). Match
+  // generation scopes round-robin pairing to entries sharing the same (categorySlug, groupName) -
+  // without this, entries from different groups would be paired against each other. Entries in
+  // single-group or non-grouped categories can omit this field.
+  groupName?: string
 }
 
 export const demoScenario = {
@@ -143,6 +148,14 @@ export const demoScenario = {
       icon: 'running',
       sport_type: 'track',
       defaultRulesetSlug: 'roc-olympic-2026-running-basic',
+    },
+    {
+      name: 'Padel',
+      slug: 'roc-olympic-2026-padel',
+      description: 'Doubles padel knockout - added to stress-test the bracket view at scale.',
+      icon: 'padel',
+      sport_type: 'court',
+      defaultRulesetSlug: 'roc-olympic-2026-padel-basic',
     },
   ],
   rulesets: [
@@ -236,6 +249,26 @@ export const demoScenario = {
       penalty_enabled: false,
       tie_breakers: [],
     },
+    {
+      name: 'Padel Basic',
+      slug: 'roc-olympic-2026-padel-basic',
+      sportSlug: 'roc-olympic-2026-padel',
+      description: 'Best of 3 sets, first to 6 games (win by 2), tiebreak at 6-6.',
+      score_type: 'sets',
+      allow_draw: false,
+      set_based: true,
+      timer_enabled: false,
+      points_win: 1,
+      points_draw: 0,
+      points_loss: 0,
+      best_of: 3,
+      target_score: 6,
+      max_score: 7,
+      deuce_enabled: true,
+      overtime_enabled: true,
+      penalty_enabled: false,
+      tie_breakers: ['set_difference', 'set_for', 'score_difference', 'score_for'],
+    },
   ],
   categories: [
     {
@@ -308,6 +341,30 @@ export const demoScenario = {
       max_roster_size: 1,
       rulesetSlug: 'roc-olympic-2026-running-basic',
       format_type: 'time_trial',
+      status: 'open',
+    },
+    {
+      name: 'Padel Men',
+      slug: 'roc-olympic-2026-padel-men',
+      sportSlug: 'roc-olympic-2026-padel',
+      participant_mode: 'pair',
+      roster_required: false,
+      min_roster_size: 2,
+      max_roster_size: 2,
+      rulesetSlug: 'roc-olympic-2026-padel-basic',
+      format_type: 'single_elimination',
+      status: 'open',
+    },
+    {
+      name: 'Padel Women',
+      slug: 'roc-olympic-2026-padel-women',
+      sportSlug: 'roc-olympic-2026-padel',
+      participant_mode: 'pair',
+      roster_required: false,
+      min_roster_size: 2,
+      max_roster_size: 2,
+      rulesetSlug: 'roc-olympic-2026-padel-basic',
+      format_type: 'single_elimination',
       status: 'open',
     },
   ],
@@ -393,6 +450,7 @@ export const demoScenario = {
     { name: 'Futsal Field', address: 'ROC Office Campus, Sports Area', description: 'Outdoor futsal field.', is_virtual: false },
     { name: 'Meeting Room A', address: 'ROC Office Campus, Annex Building', description: 'Table tennis and chess venue.', is_virtual: false },
     { name: 'Track Field', address: 'ROC Office Campus, Sports Area', description: 'Outdoor running track.', is_virtual: false },
+    { name: 'Padel Court Complex', address: 'ROC Office Campus, Sports Area', description: 'Dedicated padel courts.', is_virtual: false },
   ],
   courts: [
     { name: 'Court 1', venueName: 'Main Hall', sportSlug: 'roc-olympic-2026-badminton', capacity: 20 },
@@ -401,6 +459,8 @@ export const demoScenario = {
     { name: 'Table 1', venueName: 'Meeting Room A', sportSlug: 'roc-olympic-2026-table-tennis', capacity: 10 },
     { name: 'Board 1', venueName: 'Meeting Room A', sportSlug: 'roc-olympic-2026-chess', capacity: 4 },
     { name: 'Track Lane 1', venueName: 'Track Field', sportSlug: 'roc-olympic-2026-running', capacity: 30 },
+    { name: 'Padel Court 1', venueName: 'Padel Court Complex', sportSlug: 'roc-olympic-2026-padel', capacity: 8 },
+    { name: 'Padel Court 2', venueName: 'Padel Court Complex', sportSlug: 'roc-olympic-2026-padel', capacity: 8 },
   ],
   stages: [
     { name: 'Knockout', categorySlug: 'roc-olympic-2026-badminton-men-single', stage_type: 'single_elimination', order: 1, status: 'published' },
@@ -409,6 +469,8 @@ export const demoScenario = {
     { name: 'Knockout', categorySlug: 'roc-olympic-2026-table-tennis-open', stage_type: 'single_elimination', order: 1, status: 'published' },
     { name: 'Round Robin', categorySlug: 'roc-olympic-2026-chess-open', stage_type: 'round_robin', order: 1, status: 'published' },
     { name: 'Heats', categorySlug: 'roc-olympic-2026-running-100m', stage_type: 'time_trial', order: 1, status: 'published' },
+    { name: 'Knockout', categorySlug: 'roc-olympic-2026-padel-men', stage_type: 'single_elimination', order: 1, status: 'published' },
+    { name: 'Knockout', categorySlug: 'roc-olympic-2026-padel-women', stage_type: 'single_elimination', order: 1, status: 'published' },
   ],
   groups: [
     { name: 'Group A', stageCategorySlug: 'roc-olympic-2026-badminton-mixed-double', order: 1 },
@@ -429,19 +491,19 @@ export const demoScenario = {
     { display_name: 'Kirana Dewanti (Withdrawn)', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-011', clubSlug: 'roc-olympic-2026-operations', status: 'withdrawn' },
 
     // Badminton Mixed Double - 3 pairs, full round robin.
-    { display_name: 'IT Smash Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-it-smash-pair', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed' },
-    { display_name: 'Marketing Mix Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-marketing-mix-pair', clubSlug: 'roc-olympic-2026-marketing', seed_number: 2, status: 'confirmed' },
-    { display_name: 'HR Rally Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-hr-rally-pair', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed' },
+    { display_name: 'IT Smash Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-it-smash-pair', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed', groupName: 'Group A' },
+    { display_name: 'Marketing Mix Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-marketing-mix-pair', clubSlug: 'roc-olympic-2026-marketing', seed_number: 2, status: 'confirmed', groupName: 'Group A' },
+    { display_name: 'HR Rally Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-hr-rally-pair', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed', groupName: 'Group A' },
 
     // Futsal Men Group A - 4 confirmed teams/clubs, full round robin.
-    { display_name: 'IT Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-it-futsal-squad', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed' },
-    { display_name: 'Finance Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-finance-futsal-squad', clubSlug: 'roc-olympic-2026-finance', seed_number: 2, status: 'confirmed' },
-    { display_name: 'HR Club', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'club', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed' },
-    { display_name: 'Marketing Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-marketing-futsal-squad', clubSlug: 'roc-olympic-2026-marketing', seed_number: 4, status: 'confirmed' },
+    { display_name: 'IT Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-it-futsal-squad', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed', groupName: 'Group A' },
+    { display_name: 'Finance Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-finance-futsal-squad', clubSlug: 'roc-olympic-2026-finance', seed_number: 2, status: 'confirmed', groupName: 'Group A' },
+    { display_name: 'HR Club', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'club', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed', groupName: 'Group A' },
+    { display_name: 'Marketing Futsal Squad', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-marketing-futsal-squad', clubSlug: 'roc-olympic-2026-marketing', seed_number: 4, status: 'confirmed', groupName: 'Group A' },
 
     // Futsal Men Group B - a mostly-empty group with a real team waiting on a TBD opponent.
-    { display_name: 'Legal Futsal Crew', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-legal-futsal-crew', clubSlug: 'roc-olympic-2026-legal', seed_number: 1, status: 'confirmed' },
-    { display_name: 'TBD Futsal Opponent', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'tbd', status: 'pending' },
+    { display_name: 'Legal Futsal Crew', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'team', teamSlug: 'roc-olympic-2026-legal-futsal-crew', clubSlug: 'roc-olympic-2026-legal', seed_number: 1, status: 'confirmed', groupName: 'Group B' },
+    { display_name: 'TBD Futsal Opponent', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'tbd', status: 'pending', groupName: 'Group B' },
 
     // Table Tennis Open Single - 4 entries, partially completed bracket (one TBD final slot).
     { display_name: 'Kartika Sari', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-014', clubSlug: 'roc-olympic-2026-operations', seed_number: 1, status: 'confirmed' },
@@ -458,6 +520,43 @@ export const demoScenario = {
     // Running 100m - reuses two existing players in a lightweight, non-bracket format.
     { display_name: 'Andi Pratama (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerEmployeeId: 'ROC-2026-001', clubSlug: 'roc-olympic-2026-it-club', status: 'confirmed' },
     { display_name: 'Budi Santoso (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerEmployeeId: 'ROC-2026-002', clubSlug: 'roc-olympic-2026-finance', status: 'confirmed' },
+
+    // Padel Men - 32 pair entries, a clean power-of-two bracket (no byes). Pair "teams" here are
+    // plain display-name entries (no Team/Player records) since the goal is bracket-scale testing,
+    // not participant realism.
+    ...[
+      'Jakarta Smash', 'Bandung Ace', 'Surabaya Power', 'Medan Rally', 'Semarang Spin',
+      'Makassar Net', 'Yogyakarta Drive', 'Bali Bandeja', 'Palembang Vibora', 'Malang Chiquita',
+      'Bogor Globo', 'Padang Cross', 'Manado Lob', 'Pontianak Volley', 'Batam Smash Club',
+      'Balikpapan Aces', 'Denpasar Rally Team', 'Solo Power Padel', 'Bekasi Net Force',
+      'Depok Spin Kings', 'Tangerang Drive Club', 'Cirebon Smashers', 'Sidoarjo Volley Crew',
+      'Pekanbaru Padel United', 'Jambi Ace Squad', 'Banjarmasin Rally Club', 'Mataram Power Duo',
+      'Kupang Net Warriors', 'Ambon Smash Duo', 'Ternate Padel Crew', 'Sorong Rally Kings',
+      'Jayapura Padel Elite',
+    ].map((displayName, index) => ({
+      display_name: displayName,
+      categorySlug: 'roc-olympic-2026-padel-men',
+      entry_type: 'pair',
+      seed_number: index + 1,
+      status: 'confirmed',
+    })),
+
+    // Padel Women - 24 pair entries. bracketSize rounds up to 32, so the top 8 seeds get a bye
+    // straight into Round of 16 - a deliberate real-world edge case for the bracket view.
+    ...[
+      'Jakarta Bandeja Putri', 'Bandung Ace Ladies', 'Surabaya Power Women', 'Medan Rally Girls',
+      'Semarang Spin Queens', 'Makassar Net Divas', 'Yogyakarta Smash Sisters', 'Bali Chiquita Club',
+      'Palembang Vibora Ladies', 'Malang Globo Girls', 'Bogor Cross Queens', 'Padang Lob Ladies',
+      'Manado Volley Sisters', 'Pontianak Ace Duo', 'Batam Smash Ladies', 'Balikpapan Rally Queens',
+      'Denpasar Power Sisters', 'Solo Spin Girls', 'Bekasi Net Queens', 'Depok Drive Ladies',
+      'Tangerang Smash Duo', 'Cirebon Volley Ladies', 'Sidoarjo Padel Belles', 'Pekanbaru Rally Divas',
+    ].map((displayName, index) => ({
+      display_name: displayName,
+      categorySlug: 'roc-olympic-2026-padel-women',
+      entry_type: 'pair',
+      seed_number: index + 1,
+      status: 'confirmed',
+    })),
   ] satisfies DemoEntrySeed[],
   rosterSeeds: [
     { teamSlug: 'roc-olympic-2026-it-smash-pair', employeeId: 'ROC-2026-001', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'captain' },
@@ -657,6 +756,190 @@ export const demoScenario = {
       is_public: true,
       documentation_status: 'not_started',
     },
+
+    // Padel Men - Round of 16 / Quarter Final / Semi Final / Final placeholders (TBD until Round
+    // 1's singleEliminationResults are processed and real advancement fills them in).
+    ...Array.from({ length: 8 }, (_, i) => ({
+      match_number: `ROC-PDM-R16-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Round of 16',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-men',
+      stageCategorySlug: 'roc-olympic-2026-padel-men',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-20T01:00:00.000Z',
+      scheduled_end_at: '2026-08-20T02:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: i % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    ...Array.from({ length: 4 }, (_, i) => ({
+      match_number: `ROC-PDM-QF-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Quarter Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-men',
+      stageCategorySlug: 'roc-olympic-2026-padel-men',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-20T04:00:00.000Z',
+      scheduled_end_at: '2026-08-20T05:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: i % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      match_number: `ROC-PDM-SF-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Semi Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-men',
+      stageCategorySlug: 'roc-olympic-2026-padel-men',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-21T04:00:00.000Z',
+      scheduled_end_at: '2026-08-21T05:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: 'Padel Court 1',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    {
+      match_number: 'ROC-PDM-001',
+      round_name: 'Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-men',
+      stageCategorySlug: 'roc-olympic-2026-padel-men',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-21T07:00:00.000Z',
+      scheduled_end_at: '2026-08-21T08:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: 'Padel Court 1',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'needed',
+    },
+
+    // Padel Women - byes, modeled the way the bracket component expects (see D024): each bye seed
+    // gets its own synthetic "First Round" match with only one participant and status 'walkover'
+    // (self-advancing), exactly like a real Round 1 slot, instead of just leaving a Round of 16
+    // slot half-empty. Match-number sort order controls which Round of 16 slot each one feeds:
+    // the 8 real Round 1 matches (ROC-PDW-R1-001..008, auto-generated) sort before these 8 BYE
+    // matches, so real winners land in Round of 16 slots 1-4 and byes land in slots 5-8.
+    ...[
+      'Jakarta Bandeja Putri', 'Bandung Ace Ladies', 'Surabaya Power Women', 'Medan Rally Girls',
+      'Semarang Spin Queens', 'Makassar Net Divas', 'Yogyakarta Smash Sisters', 'Bali Chiquita Club',
+    ].map((byeName, i) => ({
+      match_number: `ROC-PDW-R1-BYE-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'First Round',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA: byeName,
+      participantB: undefined,
+      winner: byeName,
+      score_summary: `${byeName} advances on a bye`,
+      scheduled_start_at: undefined,
+      scheduled_end_at: undefined,
+      venueName: undefined,
+      courtName: undefined,
+      status: 'walkover',
+      is_public: true,
+      documentation_status: 'not_required',
+    })),
+    // Round of 16: slots 1-4 wait on the real Round 1 matches (TBD vs TBD, unplayed); slots 5-8 are
+    // already known since both sides arrived on a bye.
+    ...Array.from({ length: 4 }, (_, i) => ({
+      match_number: `ROC-PDW-R16-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Round of 16',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-20T01:00:00.000Z',
+      scheduled_end_at: '2026-08-20T02:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: i % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    ...(
+      [
+        ['Jakarta Bandeja Putri', 'Bandung Ace Ladies'],
+        ['Surabaya Power Women', 'Medan Rally Girls'],
+        ['Semarang Spin Queens', 'Makassar Net Divas'],
+        ['Yogyakarta Smash Sisters', 'Bali Chiquita Club'],
+      ] as const
+    ).map(([participantA, participantB], i) => ({
+      match_number: `ROC-PDW-R16-${String(i + 5).padStart(3, '0')}`,
+      round_name: 'Round of 16',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA,
+      participantB,
+      scheduled_start_at: '2026-08-20T02:30:00.000Z',
+      scheduled_end_at: '2026-08-20T03:30:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: i % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    ...Array.from({ length: 4 }, (_, i) => ({
+      match_number: `ROC-PDW-QF-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Quarter Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-20T04:00:00.000Z',
+      scheduled_end_at: '2026-08-20T05:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: i % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      match_number: `ROC-PDW-SF-${String(i + 1).padStart(3, '0')}`,
+      round_name: 'Semi Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-21T04:00:00.000Z',
+      scheduled_end_at: '2026-08-21T05:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'not_started',
+    })),
+    {
+      match_number: 'ROC-PDW-001',
+      round_name: 'Final',
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      participantA: undefined,
+      participantB: undefined,
+      scheduled_start_at: '2026-08-21T09:00:00.000Z',
+      scheduled_end_at: '2026-08-21T10:00:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: 'Padel Court 2',
+      status: 'scheduled',
+      is_public: true,
+      documentation_status: 'needed',
+    },
   ] satisfies DemoMatchSeed[],
 
   matchGeneration: [
@@ -706,6 +989,24 @@ export const demoScenario = {
       categorySlug: 'roc-olympic-2026-chess-open',
       stageCategorySlug: 'roc-olympic-2026-chess-open',
       roundNamePrefix: 'Round Robin',
+    },
+    {
+      generation_type: 'single_elimination',
+      matchNumberPrefix: 'ROC-PDM-R1',
+      startNumber: 1,
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-men',
+      stageCategorySlug: 'roc-olympic-2026-padel-men',
+      roundName: 'First Round',
+    },
+    {
+      generation_type: 'single_elimination',
+      matchNumberPrefix: 'ROC-PDW-R1',
+      startNumber: 1,
+      sportSlug: 'roc-olympic-2026-padel',
+      categorySlug: 'roc-olympic-2026-padel-women',
+      stageCategorySlug: 'roc-olympic-2026-padel-women',
+      roundName: 'First Round',
     },
   ],
 
@@ -992,5 +1293,46 @@ export const demoScenario = {
       is_public: true,
       documentation_status: 'approved',
     },
+
+    // Padel Men Round 1 - chalk results (lower seed always wins) so Round of 16 fills in with real
+    // names via the same attemptSingleEliminationWinnerAdvancement path Badminton uses above.
+    // Quarter Final onward is intentionally left TBD - Round 1 + a filled-in Round of 16 is already
+    // a representative 5-round bracket for display testing.
+    ...(
+      [
+        ['Jakarta Smash', [[6, 4], [6, 3]]],
+        ['Bandung Ace', [[7, 6], [6, 4]]],
+        ['Surabaya Power', [[6, 2], [6, 3]]],
+        ['Medan Rally', [[4, 6], [6, 3], [6, 2]]],
+        ['Semarang Spin', [[6, 3], [7, 6]]],
+        ['Makassar Net', [[6, 1], [6, 4]]],
+        ['Yogyakarta Drive', [[6, 4], [3, 6], [6, 3]]],
+        ['Bali Bandeja', [[6, 2], [6, 1]]],
+        ['Palembang Vibora', [[6, 4], [6, 2]]],
+        ['Malang Chiquita', [[7, 5], [6, 4]]],
+        ['Bogor Globo', [[6, 3], [6, 2]]],
+        ['Padang Cross', [[6, 4], [6, 3]]],
+        ['Manado Lob', [[6, 2], [7, 6]]],
+        ['Pontianak Volley', [[6, 3], [6, 4]]],
+        ['Batam Smash Club', [[6, 1], [6, 3]]],
+        ['Balikpapan Aces', [[6, 4], [6, 2]]],
+      ] as const
+    ).map(([winner, sets], index) => ({
+      matchNumber: `ROC-PDM-R1-${String(index + 1).padStart(3, '0')}`,
+      winner,
+      score_summary: `${winner} wins in ${sets.length === 2 ? 'straight sets' : 'three sets'}`,
+      sets: sets.map(([a, b], setIndex) => ({
+        matchNumber: `ROC-PDM-R1-${String(index + 1).padStart(3, '0')}`,
+        set_number: setIndex + 1,
+        participant_a_score: a,
+        participant_b_score: b,
+      })),
+      scheduled_start_at: '2026-08-19T01:00:00.000Z',
+      scheduled_end_at: '2026-08-19T02:30:00.000Z',
+      venueName: 'Padel Court Complex',
+      courtName: index % 2 === 0 ? 'Padel Court 1' : 'Padel Court 2',
+      is_public: true,
+      documentation_status: 'approved',
+    })),
   ] satisfies DemoSingleEliminationResultSeed[],
 }

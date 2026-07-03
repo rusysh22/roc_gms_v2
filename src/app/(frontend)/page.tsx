@@ -22,6 +22,8 @@ import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
+import { AnnouncementFeed, ArticleCard } from './contentComponents'
+import { getPublicArticles, getScopedPublicAnnouncements } from './contentData'
 import { formatStatus, getRelationshipLabel, type RelationshipDoc } from './workspaces/workspaceComponents'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +41,13 @@ type SportDoc = {
   name: string
   slug: string
   sport_type: string
+}
+
+type CategoryDoc = {
+  id: string | number
+  name: string
+  slug: string
+  sport_id: string | number | { id: string | number }
 }
 
 type HomeMatch = {
@@ -83,7 +92,7 @@ const formatMatchTime = (value?: string | null) => {
 export default async function HomePage() {
   const payload = await getPayload({ config })
 
-  const [eventsResult, liveNextResult, sportsResult] = await Promise.all([
+  const [eventsResult, liveNextResult, sportsResult, articles] = await Promise.all([
     payload.find({
       collection: 'events',
       limit: 1,
@@ -118,6 +127,7 @@ export default async function HomePage() {
       sort: 'name',
       where: { is_active: { equals: true } },
     }),
+    getPublicArticles(3),
   ])
 
   const event = eventsResult.docs[0] as EventDoc | undefined
@@ -133,18 +143,23 @@ export default async function HomePage() {
       })
     : null
 
-  const categoryCountBySport = new Map<string, number>()
-  for (const category of (categoriesResult?.docs ?? []) as unknown as Array<{
-    sport_id: string | number | { id: string | number }
-  }>) {
+  const categories = (categoriesResult?.docs ?? []) as unknown as CategoryDoc[]
+  const categoriesBySport = new Map<string, CategoryDoc[]>()
+  for (const category of categories) {
     const sportId = typeof category.sport_id === 'object' ? category.sport_id.id : category.sport_id
     const key = String(sportId)
-    categoryCountBySport.set(key, (categoryCountBySport.get(key) || 0) + 1)
+    const rows = categoriesBySport.get(key) || []
+    rows.push(category)
+    categoriesBySport.set(key, rows)
   }
 
   const liveMatches = matches.filter((match) => LIVE_STATUSES.includes(match.status))
   const nextMatches = matches.filter((match) => !LIVE_STATUSES.includes(match.status))
   const orderedMatches = [...liveMatches, ...nextMatches]
+  const announcements = await getScopedPublicAnnouncements({
+    eventId: event?.id,
+    limit: 3,
+  })
 
   return (
     <main className="font-sans text-ink">
@@ -174,7 +189,7 @@ export default async function HomePage() {
             </h1>
             <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-soft sm:text-lg">
               {event?.description ||
-                'Follow every match, standing, and bracket from the office olympiad — live scores, schedules, and results in one place.'}
+                'Follow every match, standing, and bracket from the office olympiad - live scores, schedules, and results in one place.'}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild>
@@ -233,7 +248,7 @@ export default async function HomePage() {
                       <CardHeader>
                         <div className="flex items-center justify-between gap-2">
                           <CardDescription>
-                            {getRelationshipLabel(match.sport_id)} ·{' '}
+                            {getRelationshipLabel(match.sport_id)} /{' '}
                             {getRelationshipLabel(match.category_id)}
                           </CardDescription>
                           <StatusBadge tone={isLive ? 'gold' : getMatchStatusTone(match.status)}>
@@ -265,6 +280,8 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <AnnouncementFeed announcements={announcements} title="Latest Announcements" />
+
       <section className="px-4 pb-16" aria-labelledby="sports-title">
         <div className="mx-auto max-w-5xl">
           <h2 id="sports-title" className="mb-5 text-xl font-bold text-ink sm:text-2xl">
@@ -277,28 +294,74 @@ export default async function HomePage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {sports.map((sport) => {
                 const Icon = SPORT_ICONS[sport.sport_type] || Trophy
-                const categoryCount = categoryCountBySport.get(String(sport.id)) || 0
+                const sportCategories = categoriesBySport.get(String(sport.id)) || []
+                const primaryCategoryHref =
+                  sportCategories.length === 1 ?
+                    `/sports/${sport.slug}/${sportCategories[0].slug}`
+                  : '/sports'
 
                 return (
-                  <Link key={sport.id} href={`/schedule?sport=${sport.slug}`} className="block">
-                    <Card interactive accent="blue" className="h-full">
-                      <CardHeader>
-                        <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-mist text-green">
-                          <Icon className="h-5 w-5" aria-hidden="true" />
-                        </span>
-                        <CardTitle>{sport.name}</CardTitle>
-                        <CardDescription>
-                          {categoryCount} {categoryCount === 1 ? 'category' : 'categories'}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardFooter className="text-sm font-semibold text-blue">
-                        View schedule
-                        <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" />
-                      </CardFooter>
-                    </Card>
-                  </Link>
+                  <Card key={sport.id} className="h-full">
+                    <CardHeader>
+                      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-mist text-green">
+                        <Icon className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <CardTitle>{sport.name}</CardTitle>
+                      <CardDescription>
+                        {sportCategories.length}{' '}
+                        {sportCategories.length === 1 ? 'category' : 'categories'}
+                      </CardDescription>
+                    </CardHeader>
+                    <div className="mt-3 flex flex-col gap-2">
+                      {sportCategories.slice(0, 3).map((category) => (
+                        <Link
+                          key={category.id}
+                          href={`/sports/${sport.slug}/${category.slug}`}
+                          className="group flex items-center justify-between gap-2 rounded-card border border-line px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-blue"
+                        >
+                          <span className="truncate">{category.name}</span>
+                          <ChevronRight
+                            className="h-4 w-4 shrink-0 text-ink-soft group-hover:text-blue"
+                            aria-hidden="true"
+                          />
+                        </Link>
+                      ))}
+                    </div>
+                    <CardFooter className="gap-4 text-sm font-semibold">
+                      <Link href={primaryCategoryHref} className="text-blue hover:underline">
+                        View categories
+                      </Link>
+                    </CardFooter>
+                  </Card>
                 )
               })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="px-4 pb-16" aria-labelledby="articles-title">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h2 id="articles-title" className="text-xl font-bold text-ink sm:text-2xl">
+              Latest Articles
+            </h2>
+            <Link
+              href="/articles"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+            >
+              All articles
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+
+          {articles.length === 0 ? (
+            <Card className="text-sm text-ink-soft">Articles will appear here after publishing.</Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {articles.map((article) => (
+                <ArticleCard key={article.id} article={article} />
+              ))}
             </div>
           )}
         </div>

@@ -7,8 +7,65 @@ export const dynamic = 'force-dynamic'
 
 export default async function ContentAdminWorkspacePage() {
   const payload = await getPayload({ config })
-  const [events, publicMatches, documentationNeeded] = await Promise.all([
+  const [
+    events,
+    articles,
+    publishedArticles,
+    reviewArticles,
+    announcements,
+    publishedAnnouncements,
+    activeAlerts,
+    publicMatches,
+    documentationNeeded,
+  ] = await Promise.all([
     payload.find({ collection: 'events', limit: 1 }),
+    payload.find({ collection: 'articles', limit: 1 }),
+    payload.find({
+      collection: 'articles',
+      limit: 1,
+      where: {
+        status: {
+          equals: 'published',
+        },
+      },
+    }),
+    payload.find({
+      collection: 'articles',
+      limit: 1,
+      where: {
+        status: {
+          equals: 'review',
+        },
+      },
+    }),
+    payload.find({ collection: 'announcements', limit: 1 }),
+    payload.find({
+      collection: 'announcements',
+      limit: 1,
+      where: {
+        status: {
+          equals: 'published',
+        },
+      },
+    }),
+    payload.find({
+      collection: 'announcements',
+      limit: 1,
+      where: {
+        and: [
+          {
+            status: {
+              equals: 'published',
+            },
+          },
+          {
+            urgency: {
+              equals: 'urgent',
+            },
+          },
+        ],
+      },
+    }),
     payload.find({
       collection: 'matches',
       limit: 1,
@@ -37,41 +94,51 @@ export default async function ContentAdminWorkspacePage() {
         <p className="eyebrow">Content Admin Workspace</p>
         <h1 id="content-admin-title">Content Operations</h1>
         <p className="summary">
-          A shell for future recaps, announcements, share previews, and match documentation review.
-          Article and announcement CMS features remain intentionally out of scope for this phase.
+          Prepare articles, announcements, share previews, and match documentation from one focused
+          content desk. Public reading pages and notification workflows are still scheduled for the
+          next Phase 6 passes.
         </p>
         <div className="actions">
-          <a href="/schedule">Review Public Schedule</a>
-          <a href="/admin">Backoffice</a>
+          <a href="/admin/collections/articles">Edit Articles</a>
+          <a href="/admin/collections/announcements">Edit Announcements</a>
+          <a href="/admin/collections/media">Media Library</a>
         </div>
       </section>
 
       <section className="workspace-stats" aria-label="Content summary">
         <StatBlock label="Events" value={events.totalDocs} />
+        <StatBlock label="Articles" value={articles.totalDocs} tone="good" />
+        <StatBlock label="Announcements" value={announcements.totalDocs} tone="warn" />
         <StatBlock label="Public Matches" value={publicMatches.totalDocs} tone="good" />
         <StatBlock label="Docs Needed" value={documentationNeeded.totalDocs} tone="warn" />
       </section>
 
       <section className="workspace-grid workspace-grid--three">
         <article className="workspace-panel">
-          <h2>Recap Queue</h2>
+          <h2>Article Readiness</h2>
           <p>
-            Use published matches as the first source for later recap and winner announcement work.
+            {publishedArticles.totalDocs} published article(s) and {reviewArticles.totalDocs} item(s)
+            in review. Use the CMS editor for event stories, match recaps, cover images, and share
+            metadata.
           </p>
+          <a href="/admin/collections/articles">Open article editor</a>
         </article>
         <article className="workspace-panel">
-          <h2>Share Readiness</h2>
+          <h2>Announcement Readiness</h2>
           <p>
-            Public schedule links are available now; article, announcement, WhatsApp, Teams, and
-            email publishing will come in a later content phase.
+            {publishedAnnouncements.totalDocs} published announcement(s), including{' '}
+            {activeAlerts.totalDocs} urgent alert(s). Targeting is ready for event, sport, category,
+            and match updates.
           </p>
+          <a href="/admin/collections/announcements">Open announcement editor</a>
         </article>
         <article className="workspace-panel">
-          <h2>Documentation Watch</h2>
+          <h2>Share Assets</h2>
           <p>
-            Matches marked as needing documentation are visible for future media follow-up without
-            enabling uploads yet.
+            Upload reusable article covers and share images in the media library. Public article
+            pages, announcement feeds, email, and calendar export remain deliberately outside 6A.
           </p>
+          <a href="/admin/collections/media">Open media library</a>
         </article>
       </section>
     </main>

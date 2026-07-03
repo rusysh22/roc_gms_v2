@@ -38,20 +38,20 @@ export default async function PublicBracketsPage() {
   return (
     <main className="font-sans text-ink">
       <section className="px-4 pt-4 pb-8">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
             Public Brackets
           </p>
           <h1 className="text-3xl font-extrabold sm:text-4xl">ROC Olympic 2026 Brackets</h1>
           <p className="mt-3 max-w-xl text-base text-ink-soft">
             Single-elimination brackets rendered from match records. Status, scores, and winners
-            stay sourced from the match data — nothing here is edited directly.
+            stay sourced from the match data - nothing here is edited directly.
           </p>
         </div>
       </section>
 
       <section className="px-4 pb-16" aria-label="Tournament brackets">
-        <div className="mx-auto flex max-w-5xl flex-col gap-10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-10">
           {brackets.length === 0 ? (
             <Card className="text-sm text-ink-soft">
               No public brackets are available yet. Brackets appear after an elimination stage is

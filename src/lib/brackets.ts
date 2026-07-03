@@ -48,6 +48,7 @@ export type BracketMatchCard = {
   id: Id
   match_number: string
   round_name: string
+  scheduled_start_at?: string
   status: string
   winner_entry_id?: Id
   score_summary?: string
@@ -303,6 +304,7 @@ export const buildSingleEliminationBracketLayout = async (
       id: match.id,
       match_number: match.match_number,
       round_name: roundName,
+      scheduled_start_at: match.scheduled_start_at || undefined,
       status: match.status,
       winner_entry_id: winnerId,
       score_summary: match.score_summary || undefined,

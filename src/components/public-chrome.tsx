@@ -16,6 +16,9 @@ const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler']
 
 const PUBLIC_NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/' },
+  { label: 'Sports', href: '/sports' },
+  { label: 'Articles', href: '/articles' },
+  { label: 'Announcements', href: '/announcements' },
   { label: 'Schedule', href: '/schedule' },
   { label: 'Standings', href: '/standings' },
   { label: 'Brackets', href: '/brackets' },
@@ -30,6 +33,9 @@ export interface PublicChromeProps {
 export function PublicChrome({ brand, children }: PublicChromeProps) {
   const pathname = usePathname()
   const showChrome = !CHROME_EXCLUDED_PREFIXES.some((prefix) => pathname?.startsWith(prefix))
+  const activeHref =
+    pathname === '/' ? '/'
+    : PUBLIC_NAV_ITEMS.find((item) => item.href !== '/' && pathname?.startsWith(item.href))?.href
 
   if (!showChrome) {
     return <>{children}</>
@@ -40,7 +46,7 @@ export function PublicChrome({ brand, children }: PublicChromeProps) {
       <NavBar
         brand={brand}
         items={PUBLIC_NAV_ITEMS}
-        activeHref={pathname ?? undefined}
+        activeHref={activeHref}
         cta={
           <Button asChild size="sm">
             <Link href="/schedule">View Schedule</Link>

@@ -39,11 +39,11 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
     <header className={cn('sticky top-4 z-50 flex justify-center px-4 font-sans', className)}>
       <div
         className={cn(
-          'flex w-full max-w-3xl items-center justify-between gap-4 rounded-full border border-line bg-paper/90 px-4 py-2 shadow-sm backdrop-blur transition-shadow duration-200',
+          'flex w-full max-w-3xl items-center justify-between gap-4 rounded-full border border-line bg-paper px-4 py-2 shadow-sm transition-shadow duration-200',
           scrolled && 'shadow-md',
         )}
       >
-        <Link href="/" className="flex items-center gap-2 pl-2 text-sm font-extrabold text-ink">
+        <Link href="/" className="flex items-center gap-2 pl-2 text-sm font-extrabold text-ink no-underline">
           {brand}
         </Link>
 
@@ -56,7 +56,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'rounded-full px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-ink',
+                  'rounded-full px-4 py-2 text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink',
                   isActive && 'bg-green text-paper hover:text-paper',
                 )}
               >
@@ -106,7 +106,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
                       onClick={() => setOpen(false)}
                       aria-current={isActive ? 'page' : undefined}
                       className={cn(
-                        'rounded-full px-4 py-3 text-base font-semibold text-ink-soft transition-colors hover:bg-mist hover:text-ink',
+                        'rounded-full px-4 py-3 text-base font-semibold text-ink-soft no-underline transition-colors hover:bg-mist hover:text-ink',
                         isActive && 'bg-green text-paper hover:bg-green hover:text-paper',
                       )}
                     >

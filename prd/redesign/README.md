@@ -1,8 +1,9 @@
 # ROC GMS V2 - Public Redesign Plan (Draft)
 
 Owner: Rusydani
-Status: R0 (Design Foundation), R1 (Public Landing & Navigation), and R2 (Public Feature Pages)
-complete; PD1-PD4 promoted to `prd/decision-log.md` D020-D023; R3-R4 not started
+Status: R0 (Design Foundation), R1 (Public Landing & Navigation), R2 (Public Feature Pages), R3
+(Interaction & Motion), and the Public Sport Category Flow are complete; PD1-PD4 promoted to
+`prd/decision-log.md` D020-D023; R4 not started
 Last updated: 2026-07-03
 Relates to: `prd/README.md` (section 21, UX direction), `prd/implementation-plan.md` (Phase 6/7/8),
 `prd/decision-log.md`
@@ -265,6 +266,13 @@ assumption the winner-advancement module already relies on (D018) — real for p
 brackets, best-effort for irregular ones (byes, odd counts). Champion-path connector highlighting is
 exact (derived from participant identity, not the index assumption). See `prd/session-handoff.md`
 for what was built, the workspace-isolation approach, and outstanding follow-ups.
+
+Public Sport Category Flow status (2026-07-03): accepted and complete as an extension of R2 public
+feature pages. `/sports` is the public sport/category index, and
+`/sports/[sportSlug]/[categorySlug]` is the category detail route with sticky tabs for Bracket or
+Standings, Schedule, and Details & Rules. The flow uses existing sport, category, stage, bracket,
+standing, match, and ruleset data only; no new Payload collections or mutation flows were added.
+Homepage, schedule, and match detail now link into category detail where clean slugs are available.
 
 ### R3 — Interaction & Motion polish (size: S–M, runs alongside Phase 6/7)
 - [x] Hover/tap transitions on cards and buttons

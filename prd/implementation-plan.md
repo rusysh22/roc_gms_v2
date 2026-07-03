@@ -2,8 +2,8 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 5F bracket and standing impact polish complete  
-Last updated: 2026-07-02  
+Status: Phase 6B complete; ready for Phase 6C email template and calendar export foundation  
+Last updated: 2026-07-03  
 Source of truth: `prd/README.md`
 
 ## 1. Purpose
@@ -241,26 +241,37 @@ Goal:
 
 Make event information publishable and shareable.
 
+Execution note:
+
+Use `prd/phase-6-content-sharing.md` as the detailed execution guide. Phase 6 should be split into
+small sessions so schema, public pages, and communication helpers are not mixed in one large change.
+
+Recommended sequence:
+
+- Phase 6A: Content schema and editor foundation.
+- Phase 6B: Public content pages and sharing.
+- Phase 6C: Email template and calendar export foundation.
+
 Tasks:
 
-- [ ] Add `Article`.
-- [ ] Add rich text editor.
-- [ ] Add article public page.
-- [ ] Add `Announcement`.
-- [ ] Add announcement feed/banner.
-- [ ] Add share metadata fields.
-- [ ] Add WhatsApp share link.
-- [ ] Add Teams share link.
-- [ ] Add email share.
+- [x] Add `Article`.
+- [x] Add rich text editor.
+- [x] Add article public page.
+- [x] Add `Announcement`.
+- [x] Add announcement feed/banner.
+- [x] Add share metadata fields.
+- [x] Add WhatsApp share link.
+- [x] Add Teams share link.
+- [x] Add email share.
 - [ ] Add basic email template.
 - [ ] Add `.ics` calendar export foundation.
 
 Acceptance criteria:
 
 - [ ] Content Admin can publish article.
-- [ ] Article has clean public mobile reading layout.
-- [ ] Links preview well in share contexts.
-- [ ] Announcement can target event/sport/category/match.
+- [x] Article has clean public mobile reading layout.
+- [x] Links preview well in share contexts.
+- [x] Announcement can target event/sport/category/match.
 
 Suggested commit:
 

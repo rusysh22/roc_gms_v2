@@ -29,7 +29,7 @@ export function Footer({ brand, tagline, links = [], className }: FooterProps) {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-semibold text-ink-soft transition-colors hover:text-ink"
+                className="text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
               >
                 {link.label}
               </Link>
