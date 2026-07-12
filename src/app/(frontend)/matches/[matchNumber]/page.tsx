@@ -1,188 +1,34 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { ArrowLeft, MapPin } from 'lucide-react'
+import { getPayload } from 'payload'
+import { notFound, redirect } from 'next/navigation'
 
-import { getMatchDetail } from '../../matchDetailData'
-import { Card, CardTitle } from '@/components/ui/card'
-import { ShareButtons } from '@/components/share-buttons'
-import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
-import {
-  getRelatedPublicArticles,
-  getRelationshipId,
-  getScopedPublicAnnouncements,
-} from '../../contentData'
-import { formatDateTime, getRelationshipLabel } from '../../workspaces/workspaceComponents'
-import {
-  DocumentationGallery,
-  PublicBracketImpactPanel,
-  PublicCommentList,
-  PublicStandingImpactPanel,
-  ScoreCard,
-} from './publicMatchComponents'
+import config from '@payload-config'
+import { getRelationshipId } from '../../contentData'
+import { getDefaultPublicEvent, getPublicEventBySlug } from '../../events/publicEvents'
 
-export const dynamic = 'force-dynamic'
-
-type MatchPageParams = Promise<{ matchNumber: string }>
-
-const getCategoryHref = (sport: unknown, category: unknown) => {
-  const sportSlug =
-    sport && typeof sport === 'object' && 'slug' in sport ? String(sport.slug || '') : ''
-  const categorySlug =
-    category && typeof category === 'object' && 'slug' in category ? String(category.slug || '') : ''
-
-  return sportSlug && categorySlug ? `/sports/${sportSlug}/${categorySlug}` : ''
-}
-
-export default async function PublicMatchDetailPage({ params }: { params: MatchPageParams }) {
+// Legacy flat URL, kept alive so old bookmarks/shared links don't break - redirects to the
+// match's own event under /events/[slug]/matches/[matchNumber] (falls back to the default event
+// if the match can't be resolved directly, so the link still lands somewhere sensible).
+export default async function LegacyMatchRedirect({
+  params,
+}: {
+  params: Promise<{ matchNumber: string }>
+}) {
   const { matchNumber } = await params
-  const result = await getMatchDetail(matchNumber)
-
-  if (!result || !result.match.is_public) {
+  const payload = await getPayload({ config })
+  const result = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 1,
+    where: { match_number: { equals: matchNumber } },
+  })
+  const eventId = getRelationshipId(result.docs[0]?.event_id as never)
+  const event = eventId
+    ? await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+    : null
+  const resolvedEvent = event ? await getPublicEventBySlug(payload, String(event.slug)) : null
+  const fallbackEvent = resolvedEvent || (await getDefaultPublicEvent(payload))
+  if (!fallbackEvent) {
     notFound()
   }
-
-  const { match, matchSets, documentationAssets, comments, standingImpact, bracketImpact } = result
-  const publicDocumentationAssets = documentationAssets.filter(
-    (asset) => asset.visibility === 'public',
-  )
-  const publicComments = comments.filter(
-    (comment) => comment.comment_type === 'public' && comment.status === 'approved',
-  )
-  const shareTitle = `${getRelationshipLabel(match.participant_a_entry_id)} vs ${getRelationshipLabel(
-    match.participant_b_entry_id,
-  )} / ${match.match_number}`
-  const categoryHref = getCategoryHref(match.sport_id, match.category_id)
-  const eventId = getRelationshipId(match.event_id)
-  const sportId = getRelationshipId(match.sport_id)
-  const categoryId = getRelationshipId(match.category_id)
-  const matchId = match.id
-  const [announcements, relatedArticles] = await Promise.all([
-    getScopedPublicAnnouncements({
-      eventId,
-      sportId,
-      categoryId,
-      matchId,
-      limit: 4,
-    }),
-    getRelatedPublicArticles({
-      eventId,
-      sportId,
-      categoryId,
-      matchId,
-      limit: 3,
-    }),
-  ])
-
-  return (
-    <main className="font-sans text-ink">
-      <section className="px-4 pt-4 pb-6">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
-            <Link
-              href="/schedule"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Back to schedule
-            </Link>
-            {categoryHref ? (
-              <Link href={categoryHref} className="text-sm font-semibold text-blue hover:underline">
-                View category page
-              </Link>
-            ) : null}
-          </div>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-            {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
-          </p>
-          <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">
-            {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
-            {getRelationshipLabel(match.participant_b_entry_id)}
-          </h1>
-          <p className="mt-2 text-sm text-ink-soft">
-            {match.match_number} / {match.round_name || 'Match'}
-          </p>
-        </div>
-      </section>
-
-      <section className="px-4 pb-8" aria-label="Score">
-        <div className="mx-auto max-w-3xl">
-          <ScoreCard match={match} matchSets={matchSets} />
-        </div>
-      </section>
-
-      <section className="px-4 pb-8" aria-label="Schedule and venue">
-        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
-          <Card>
-            <CardTitle>Schedule</CardTitle>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-soft">Starts</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-soft">Ends</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at)}</dd>
-              </div>
-            </dl>
-          </Card>
-          <Card>
-            <CardTitle>Venue</CardTitle>
-            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink">
-              <MapPin className="h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
-              {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
-            </p>
-          </Card>
-        </div>
-      </section>
-
-      <section className="px-4 pb-8" aria-label="Match announcements">
-        <div className="mx-auto max-w-3xl">
-          <AnnouncementFeed announcements={announcements} title="Match Updates" compact />
-        </div>
-      </section>
-
-      {standingImpact || bracketImpact ? (
-        <section className="px-4 pb-8" aria-label="Competition impact">
-          <div className="mx-auto flex max-w-3xl flex-col gap-4">
-            <PublicStandingImpactPanel impact={standingImpact} />
-            <PublicBracketImpactPanel impact={bracketImpact} />
-          </div>
-        </section>
-      ) : null}
-
-      <section className="px-4 pb-8" aria-label="Documentation">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-3 text-xl font-bold text-ink">Documentation</h2>
-          <DocumentationGallery assets={publicDocumentationAssets} />
-        </div>
-      </section>
-
-      <section className="px-4 pb-8" aria-label="Comments">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-3 text-xl font-bold text-ink">Comments</h2>
-          <PublicCommentList comments={publicComments} />
-        </div>
-      </section>
-
-      {relatedArticles.length > 0 ? (
-        <section className="px-4 pb-8" aria-label="Related articles">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="mb-3 text-xl font-bold text-ink">Related Articles</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {relatedArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} />
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="px-4 pb-16" aria-label="Share this match">
-        <div className="mx-auto max-w-3xl">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Share</p>
-          <ShareButtons title={shareTitle} />
-        </div>
-      </section>
-    </main>
-  )
+  redirect(`/events/${fallbackEvent.slug}/matches/${matchNumber}`)
 }

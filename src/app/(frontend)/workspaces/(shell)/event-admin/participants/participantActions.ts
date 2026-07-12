@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/participants'
@@ -12,7 +13,7 @@ const roles = new Set(['player', 'captain', 'coach', 'manager', 'substitute'])
 const statuses = new Set(['active', 'pending', 'inactive', 'withdrawn'])
 const refresh = () => { revalidatePath(page); revalidatePath('/workspaces/event-admin'); revalidatePath('/workspaces/scheduler') }
 
-const activeEvent = async (payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload']) => (await payload.find({ collection: 'events', depth: 0, limit: 1, sort: 'event_start_at' })).docs[0] as { id: string | number } | undefined
+const activeEvent = getActiveEvent
 const belongsToEvent = async (payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload'], collection: 'clubs' | 'players' | 'teams' | 'competition-categories', id: string, eventId: string | number) => {
   if (!id) return
   const doc = await payload.findByID({ collection, id, depth: 0 }) as { event_id?: string | number }

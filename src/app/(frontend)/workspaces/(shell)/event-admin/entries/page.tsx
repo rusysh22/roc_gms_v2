@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { PageHero, toOptions } from '../../../workspaceComponents'
+import { getActiveEvent } from '../../../activeEvent'
+import { NoActiveEventNotice, PageHero, toOptions } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { saveCompetitionEntryAction } from './entryActions'
 
@@ -34,16 +35,37 @@ export default async function EntriesPage({ searchParams }: { searchParams?: Sea
     return <WorkspaceUnauthorized workspaceName={access.workspaceName} allowedRoles={access.allowedRoles} />
   }
 
+  const activeEvent = await getActiveEvent(access.payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Event Setup"
+          title="Competition Entries"
+          summary="Create and maintain eligible scheduling participants using names and categories."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const params = searchParams ? await searchParams : {}
   const id = get(params, 'edit')
   const entryError = get(params, 'entryError')
   const entryUpdated = get(params, 'entryUpdated')
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [entries, categories, players, teams, clubs] = await Promise.all([
-    access.payload.find({ collection: 'competition-entries', depth: 1, limit: 300, sort: 'display_name' }),
-    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 100, sort: 'name' }),
-    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'clubs', depth: 0, limit: 300, sort: 'name' }),
+    access.payload.find({
+      collection: 'competition-entries',
+      depth: 1,
+      limit: 300,
+      sort: 'display_name',
+      where: eventWhere,
+    }),
+    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 100, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'clubs', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
   ])
   const entry = entries.docs.find((item) => String(item.id) === id)
   const sourceId =

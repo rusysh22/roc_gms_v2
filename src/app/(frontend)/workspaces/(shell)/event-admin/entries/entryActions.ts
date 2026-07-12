@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/entries'
@@ -12,7 +13,7 @@ const validStatuses = new Set(['pending', 'confirmed', 'waitlisted', 'withdrawn'
 
 export async function saveCompetitionEntryAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page })
-  const event = (await payload.find({ collection: 'events', depth: 0, limit: 1, sort: 'event_start_at' })).docs[0] as { id: string | number } | undefined
+  const event = await getActiveEvent(payload)
   const id = text(formData, 'id'); const displayName = text(formData, 'displayName'); const categoryId = text(formData, 'categoryId'); const entryType = text(formData, 'entryType'); const status = text(formData, 'status'); const sourceId = text(formData, 'sourceId')
   if (!event || !displayName || !categoryId || !validTypes.has(entryType) || !validStatuses.has(status)) redirect(`${page}?entryError=invalid_input`)
   try {

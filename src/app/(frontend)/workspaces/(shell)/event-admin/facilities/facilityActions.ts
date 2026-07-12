@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/facilities'
@@ -12,10 +13,7 @@ const text = (formData: FormData, name: string) => {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-const getEvent = async (payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload']) =>
-  (await payload.find({ collection: 'events', depth: 0, limit: 1, sort: 'event_start_at' })).docs[0] as
-    | { id: string | number }
-    | undefined
+const getEvent = getActiveEvent
 
 const revalidate = () => {
   revalidatePath(page)

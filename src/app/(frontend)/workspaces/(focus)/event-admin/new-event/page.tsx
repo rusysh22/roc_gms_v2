@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { BracketTree } from '../../../../brackets/bracketTree'
@@ -24,7 +25,7 @@ import { FocusHeader } from '../../FocusHeader'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction } from './eventActions'
 import { addRulesetAction, addSportAction } from './sportActions'
-import { addCategoryAction } from './categoryActions'
+import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
 import {
   addClubAction,
   addPlayerAction,
@@ -53,12 +54,14 @@ const STEPS = [
 const errorMessages: Record<string, string> = {
   invalid_event: 'Fill in the event name, start, and end fields.',
   invalid_date_range: 'Event end time must be after the start time (they cannot be the same).',
+  invalid_logo: 'That logo file is not an image. Upload a JPG, PNG, or WebP.',
   duplicate_slug: 'That slug is already used. Try a different name or slug.',
   missing_event: 'Start by creating the event first.',
   invalid_sport: 'Fill in a valid sport name and type.',
   invalid_ruleset: 'Fill in a valid ruleset name and score type.',
   invalid_relationship: 'The selected item does not belong to this event.',
   invalid_category: 'Fill in the required category fields.',
+  invalid_category_status: 'Choose a valid category status.',
   invalid_club: 'Fill in a valid club name.',
   invalid_team: 'Fill in a valid team name.',
   invalid_player: 'Fill in a valid player name.',
@@ -71,50 +74,88 @@ const errorMessages: Record<string, string> = {
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
 }
 
+// Wizard progress, redesigned as: a plain-language status line ("Step 3 of 7") that works on its
+// own on narrow screens, a slim animated bar under it for an at-a-glance sense of how much is
+// left, and - lg and up, where there's room - the full connected-circle stepper with every step
+// name spelled out. All three describe the same state; nothing here duplicates data fetching.
 const StepProgress = ({ eventId, current }: { eventId: string; current: string }) => {
   const currentIndex = STEPS.findIndex((step) => step.key === current)
+  const percent = Math.round(((currentIndex + 1) / STEPS.length) * 100)
+
   return (
-    <ol className="flex flex-wrap items-center gap-2" aria-label="Wizard progress">
-      {STEPS.map((step, index) => {
-        const reachable = index === 0 || Boolean(eventId)
-        const done = index < currentIndex
-        const active = index === currentIndex
-        const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
-        const pill = (
-          <span
-            className={cn(
-              'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold',
-              done && 'bg-green text-paper',
-              active && 'border-2 border-green text-green',
-              !done && !active && 'bg-mist text-ink-soft',
-            )}
-          >
-            {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
-          </span>
-        )
-        return (
-          <li key={step.key} className="flex items-center gap-2">
-            {reachable ? (
-              <Link
-                href={href}
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-2 py-1 text-xs font-bold no-underline transition-colors',
-                  active ? 'text-ink' : 'text-ink-soft hover:text-ink',
-                )}
-              >
-                {pill}
-                <span className="hidden sm:inline">{step.label}</span>
-              </Link>
-            ) : (
-              <span className="flex items-center gap-2 px-2 py-1 text-xs font-bold text-ink-soft/50">
-                {pill}
-                <span className="hidden sm:inline">{step.label}</span>
-              </span>
-            )}
-          </li>
-        )
-      })}
-    </ol>
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-3 text-xs font-bold text-ink-soft">
+        <span>
+          Step {currentIndex + 1} of {STEPS.length}
+          <span className="text-ink-soft/60"> · </span>
+          {STEPS[currentIndex]?.label}
+        </span>
+        <span className="tabular-nums">{percent}% complete</span>
+      </div>
+
+      <div
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Wizard progress"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-mist"
+      >
+        <div
+          className="h-full rounded-full bg-green transition-[width] duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <ol className="hidden items-start lg:flex" aria-label="Wizard steps">
+        {STEPS.map((step, index) => {
+          const reachable = index === 0 || Boolean(eventId)
+          const done = index < currentIndex
+          const active = index === currentIndex
+          const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
+          const pill = (
+            <span
+              className={cn(
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold transition-colors',
+                done && 'bg-green text-paper',
+                active && 'border-2 border-green bg-paper text-green',
+                !done && !active && 'bg-mist text-ink-soft',
+              )}
+            >
+              {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
+            </span>
+          )
+          return (
+            <li key={step.key} className={cn('flex items-center', index < STEPS.length - 1 && 'flex-1')}>
+              {reachable ? (
+                <Link
+                  href={href}
+                  className={cn(
+                    'flex flex-col items-center gap-1 no-underline',
+                    active ? 'text-ink' : 'text-ink-soft hover:text-ink',
+                  )}
+                >
+                  {pill}
+                  <span className="max-w-20 text-center text-[11px] font-bold leading-tight">
+                    {step.label}
+                  </span>
+                </Link>
+              ) : (
+                <span className="flex flex-col items-center gap-1 text-ink-soft/50">
+                  {pill}
+                  <span className="max-w-20 text-center text-[11px] font-bold leading-tight">
+                    {step.label}
+                  </span>
+                </span>
+              )}
+              {index < STEPS.length - 1 ? (
+                <div className={cn('mx-2 mt-3.5 h-0.5 flex-1 rounded-full', done ? 'bg-green' : 'bg-line')} />
+              ) : null}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
   )
 }
 
@@ -145,7 +186,7 @@ export default async function NewEventWizardPage({
   const wizardUpdated = get(params, 'wizardUpdated')
 
   const event = eventId
-    ? await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+    ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
     : null
   if (eventId && !event) {
     return (
@@ -158,15 +199,29 @@ export default async function NewEventWizardPage({
     )
   }
 
-  const currentStepLabel = STEPS.find((s) => s.key === step)?.label || 'New Event'
+  const eventLogo =
+    event?.logo && typeof event.logo === 'object' ? (event.logo as { url?: string; alt?: string }) : undefined
 
   return (
     <main className="flex min-h-svh flex-col">
       <FocusHeader
         backHref="/workspaces/event-admin"
         backLabel="Event Admin"
-        title={event ? event.name : 'New Event Wizard'}
-        subtitle={currentStepLabel}
+        title={
+          eventLogo?.url ? (
+            <span className="flex items-center gap-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
+              <img
+                src={eventLogo.url}
+                alt={eventLogo.alt || ''}
+                className="h-8 w-8 shrink-0 rounded-full border border-line object-cover"
+              />
+              {event?.name || 'New Event Wizard'}
+            </span>
+          ) : (
+            event?.name || 'New Event Wizard'
+          )
+        }
       >
         <StepProgress eventId={eventId} current={step} />
       </FocusHeader>
@@ -197,6 +252,7 @@ export default async function NewEventWizardPage({
             <BracketStep
               payload={payload}
               eventId={eventId}
+              eventSlug={String(event.slug || '')}
               categoryId={get(params, 'categoryId')}
               generated={get(params, 'wizardGenerated')}
               failed={get(params, 'wizardGenerateFailed')}
@@ -432,10 +488,15 @@ const StepActions = ({ children }: { children: ReactNode }) => (
 
 const EventStep = () => (
   <Card className="flex flex-col gap-4">
-    <CardTitle>1. Event details</CardTitle>
+    <div>
+      <CardTitle>1. Event details</CardTitle>
+      <p className="mt-1 text-sm text-ink-soft">
+        The basics for your event. You can add sports, categories, and participants next.
+      </p>
+    </div>
     <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
       <Field label="Event name" className="sm:col-span-2">
-        <Input name="name" required />
+        <Input name="name" required placeholder="e.g. ROC Olympic 2026" />
       </Field>
       <Field label="Slug (advanced)" className="sm:col-span-2">
         <Input name="slug" placeholder="generated-from-name" />
@@ -447,10 +508,16 @@ const EventStep = () => (
         <Input name="eventEnd" type="datetime-local" required />
       </Field>
       <Field label="Location">
-        <Input name="location" />
+        <Input name="location" placeholder="e.g. Main Sports Hall" />
       </Field>
       <Field label="Organizer">
-        <Input name="organizerName" />
+        <Input name="organizerName" placeholder="e.g. HR Committee" />
+      </Field>
+      <Field label="Event logo (optional)" className="sm:col-span-2">
+        <Input type="file" name="logo" accept="image/*" className="cursor-pointer" />
+        <p className="mt-1 text-xs text-ink-soft">
+          Shown next to your event name. You can also add or change this later.
+        </p>
       </Field>
       <div className="sm:col-span-2">
         <Button type="submit" className="w-full sm:w-auto">
@@ -561,6 +628,12 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
   )
 }
 
+const categoryStatusTone = (status: string): 'green' | 'blue' | 'gold' | 'neutral' => {
+  if (status === 'published') return 'green'
+  if (status === 'open' || status === 'locked') return 'blue'
+  return 'neutral'
+}
+
 const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
   const [sports, categories, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -664,18 +737,46 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
 
       <Card className="flex flex-col gap-2">
         <CardTitle>Categories in this event ({categories.totalDocs})</CardTitle>
+        <p className="text-xs font-semibold text-ink-soft">
+          New categories start as Draft and are not visible on the public site. Set a category to
+          Open, Locked, or Published once it's ready to show up there.
+        </p>
         {categories.docs.length === 0 ? (
           <EmptyState>No categories added yet.</EmptyState>
         ) : (
-          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
+          <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
             {categories.docs.map((category) => (
-              <div key={category.id} className="rounded-card border border-line bg-paper px-4 py-3">
-                <strong className="block text-sm font-bold text-ink">{category.name}</strong>
-                <span className="text-xs font-semibold text-ink-soft">
-                  {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
-                  {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
-                  {String(category.format_type).replaceAll('_', ' ')}
-                </span>
+              <div
+                key={category.id}
+                className="flex flex-col gap-3 rounded-card border border-line bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm font-bold text-ink">{category.name}</strong>
+                    <StatusBadge tone={categoryStatusTone(String(category.status))}>
+                      {String(category.status).replaceAll('_', ' ')}
+                    </StatusBadge>
+                  </div>
+                  <span className="text-xs font-semibold text-ink-soft">
+                    {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
+                    {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
+                    {String(category.format_type).replaceAll('_', ' ')}
+                  </span>
+                </div>
+                <form action={updateCategoryStatusAction} className="flex shrink-0 items-center gap-2">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="categoryId" value={String(category.id)} />
+                  <Select name="status" defaultValue={String(category.status)} className="h-9 text-xs">
+                    <option value="draft">Draft</option>
+                    <option value="open">Open</option>
+                    <option value="locked">Locked</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                  </Select>
+                  <Button type="submit" size="sm" variant="secondary">
+                    Save
+                  </Button>
+                </form>
               </div>
             ))}
           </div>
@@ -739,11 +840,7 @@ const ParticipantsStep = async ({
               Download Excel template
             </a>
           </Button>
-          <form
-            action={importParticipantsAction}
-            encType="multipart/form-data"
-            className="flex flex-wrap items-center gap-2"
-          >
+          <form action={importParticipantsAction} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="eventId" value={eventId} />
             <Input
               type="file"
@@ -1175,12 +1272,14 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
 const BracketStep = async ({
   payload,
   eventId,
+  eventSlug,
   categoryId,
   generated,
   failed,
 }: {
   payload: Payload
   eventId: string
+  eventSlug: string
   categoryId: string
   generated: string
   failed: string
@@ -1252,7 +1351,7 @@ const BracketStep = async ({
           <Link href="/workspaces/brackets">Go to Brackets Workspace</Link>
         </Button>
         <Button asChild>
-          <Link href="/workspaces/event-admin">Finish setup</Link>
+          <Link href={`/events/${eventSlug}`}>Finish Setup &amp; View Event Page</Link>
         </Button>
       </StepActions>
     </>

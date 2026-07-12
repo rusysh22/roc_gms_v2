@@ -2,7 +2,8 @@ import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
-import { PageHero, StatBlock, StatGrid } from '../../workspaceComponents'
+import { getActiveEvent } from '../../activeEvent'
+import { NoActiveEventNotice, PageHero, StatBlock, StatGrid } from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
 
 export const dynamic = 'force-dynamic'
@@ -23,8 +24,22 @@ export default async function ContentAdminWorkspacePage() {
   }
 
   const payload = access.payload
+  const activeEvent = await getActiveEvent(payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Content Admin Workspace"
+          title="Content Operations"
+          summary="Prepare articles, announcements, share previews, and match documentation from one focused content desk."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [
-    events,
     articles,
     publishedArticles,
     reviewArticles,
@@ -34,19 +49,30 @@ export default async function ContentAdminWorkspacePage() {
     publicMatches,
     documentationNeeded,
   ] = await Promise.all([
-    payload.find({ collection: 'events', limit: 1 }),
-    payload.find({ collection: 'articles', limit: 1 }),
-    payload.find({ collection: 'articles', limit: 1, where: { status: { equals: 'published' } } }),
-    payload.find({ collection: 'articles', limit: 1, where: { status: { equals: 'review' } } }),
-    payload.find({ collection: 'announcements', limit: 1 }),
-    payload.find({ collection: 'announcements', limit: 1, where: { status: { equals: 'published' } } }),
+    payload.find({ collection: 'articles', limit: 1, where: eventWhere }),
+    payload.find({
+      collection: 'articles',
+      limit: 1,
+      where: { and: [eventWhere, { status: { equals: 'published' } }] },
+    }),
+    payload.find({ collection: 'articles', limit: 1, where: { and: [eventWhere, { status: { equals: 'review' } }] } }),
+    payload.find({ collection: 'announcements', limit: 1, where: eventWhere }),
     payload.find({
       collection: 'announcements',
       limit: 1,
-      where: { and: [{ status: { equals: 'published' } }, { urgency: { equals: 'urgent' } }] },
+      where: { and: [eventWhere, { status: { equals: 'published' } }] },
     }),
-    payload.find({ collection: 'matches', limit: 1, where: { is_public: { equals: true } } }),
-    payload.find({ collection: 'matches', limit: 1, where: { documentation_status: { equals: 'needed' } } }),
+    payload.find({
+      collection: 'announcements',
+      limit: 1,
+      where: { and: [eventWhere, { status: { equals: 'published' } }, { urgency: { equals: 'urgent' } }] },
+    }),
+    payload.find({ collection: 'matches', limit: 1, where: { and: [eventWhere, { is_public: { equals: true } }] } }),
+    payload.find({
+      collection: 'matches',
+      limit: 1,
+      where: { and: [eventWhere, { documentation_status: { equals: 'needed' } }] },
+    }),
   ])
 
   return (
@@ -54,24 +80,24 @@ export default async function ContentAdminWorkspacePage() {
       <PageHero
         eyebrow="Content Admin Workspace"
         title="Content Operations"
-        summary="Prepare articles, announcements, share previews, and match documentation from one focused content desk. Public reading pages and notification workflows are still scheduled for the next Phase 6 passes."
+        summary="Prepare articles, announcements, share previews, and match documentation from one focused content desk - no Payload Admin required. Public reading pages and notification workflows are still scheduled for the next Phase 6 passes."
         actions={
           <>
             <Button asChild>
-              <Link href="/admin/collections/articles">Edit Articles</Link>
+              <Link href="/workspaces/content-admin/articles">Edit Articles</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="/admin/collections/announcements">Edit Announcements</Link>
+              <Link href="/workspaces/content-admin/announcements">Edit Announcements</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="/admin/collections/media">Media Library</Link>
+              <Link href="/workspaces/content-admin/media">Media Library</Link>
             </Button>
           </>
         }
       />
 
       <StatGrid>
-        <StatBlock label="Events" value={events.totalDocs} />
+        <StatBlock label="Active event" value={activeEvent.name || '—'} />
         <StatBlock label="Articles" value={articles.totalDocs} tone="good" />
         <StatBlock label="Announcements" value={announcements.totalDocs} tone="warn" />
         <StatBlock label="Public Matches" value={publicMatches.totalDocs} tone="good" />
@@ -86,7 +112,10 @@ export default async function ContentAdminWorkspacePage() {
             in review. Use the CMS editor for event stories, match recaps, cover images, and share
             metadata.
           </p>
-          <Link href="/admin/collections/articles" className="text-sm font-bold text-blue no-underline hover:underline">
+          <Link
+            href="/workspaces/content-admin/articles"
+            className="text-sm font-bold text-blue no-underline hover:underline"
+          >
             Open article editor →
           </Link>
         </Card>
@@ -98,7 +127,7 @@ export default async function ContentAdminWorkspacePage() {
             and match updates.
           </p>
           <Link
-            href="/admin/collections/announcements"
+            href="/workspaces/content-admin/announcements"
             className="text-sm font-bold text-blue no-underline hover:underline"
           >
             Open announcement editor →
@@ -110,7 +139,10 @@ export default async function ContentAdminWorkspacePage() {
             Upload reusable article covers and share images in the media library. Public article
             pages, announcement feeds, email, and calendar export remain deliberately outside 6A.
           </p>
-          <Link href="/admin/collections/media" className="text-sm font-bold text-blue no-underline hover:underline">
+          <Link
+            href="/workspaces/content-admin/media"
+            className="text-sm font-bold text-blue no-underline hover:underline"
+          >
             Open media library →
           </Link>
         </Card>

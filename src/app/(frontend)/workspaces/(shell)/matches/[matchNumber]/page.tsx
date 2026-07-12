@@ -120,12 +120,17 @@ export default async function AdminMatchDetailPage({
             <Button asChild variant="secondary" size="sm">
               <Link href="/workspaces/brackets">Brackets Workspace</Link>
             </Button>
-            <Button asChild variant="secondary" size="sm">
-              <Link href={`/admin/collections/matches/${match.id}`}>Edit in Backoffice</Link>
-            </Button>
             {match.is_public ? (
               <Button asChild variant="secondary" size="sm">
-                <Link href={`/matches/${match.match_number}`}>View Public Page</Link>
+                <Link
+                  href={
+                    match.event_id && typeof match.event_id === 'object' && 'slug' in match.event_id
+                      ? `/events/${(match.event_id as { slug?: string }).slug}/matches/${match.match_number}`
+                      : `/matches/${match.match_number}`
+                  }
+                >
+                  View Public Page
+                </Link>
               </Button>
             ) : null}
           </>

@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { PageHero, toOptions } from '../../../workspaceComponents'
+import { getActiveEvent } from '../../../activeEvent'
+import { NoActiveEventNotice, PageHero, toOptions } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { saveCourtAction, saveVenueAction } from './facilityActions'
 
@@ -56,16 +57,31 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
     return <WorkspaceUnauthorized workspaceName={access.workspaceName} allowedRoles={access.allowedRoles} />
   }
 
+  const activeEvent = await getActiveEvent(access.payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Event Setup"
+          title="Venues and Courts"
+          summary="Maintain the active event's locations and playable courts. Schedule-safe relationship validation runs on every save."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const params = searchParams ? await searchParams : {}
   const editVenue = param(params, 'venue')
   const editCourt = param(params, 'court')
   const facilityError = param(params, 'facilityError')
   const venueUpdated = param(params, 'venueUpdated')
   const courtUpdated = param(params, 'courtUpdated')
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [venues, courts, sports] = await Promise.all([
-    access.payload.find({ collection: 'venues', depth: 0, limit: 200, sort: 'name' }),
-    access.payload.find({ collection: 'courts', depth: 1, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'sports', depth: 0, limit: 100, sort: 'name' }),
+    access.payload.find({ collection: 'venues', depth: 0, limit: 200, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'courts', depth: 1, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'sports', depth: 0, limit: 100, sort: 'name', where: eventWhere }),
   ])
   const venue = venues.docs.find((item) => String(item.id) === editVenue)
   const court = courts.docs.find((item) => String(item.id) === editCourt)

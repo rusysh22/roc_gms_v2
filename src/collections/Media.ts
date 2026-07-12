@@ -18,6 +18,13 @@ export const Media: CollectionConfig = {
   },
   upload: {
     staticDir: path.resolve(process.cwd(), 'media/content'),
+    // Every upload (hero images, article/announcement covers, ...) gets downsized and
+    // re-encoded so nobody has to remember to compress an image before uploading it.
+    resizeOptions: { width: 1920, withoutEnlargement: true },
+    formatOptions: { format: 'webp', options: { quality: 82 } },
+    imageSizes: [
+      { name: 'thumbnail', width: 480, height: undefined, formatOptions: { format: 'webp', options: { quality: 82 } } },
+    ],
   },
   fields: [
     {

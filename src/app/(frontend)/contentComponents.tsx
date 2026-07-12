@@ -27,12 +27,18 @@ const urgencyTone = (urgency: string): StatusTone => {
   }
 }
 
-export const ArticleCard = ({ article }: { article: PublicArticle }) => {
+export const ArticleCard = ({
+  article,
+  basePath = '/articles',
+}: {
+  article: PublicArticle
+  basePath?: string
+}) => {
   const cover = getMedia(article.cover_image)
   const coverUrl = getMediaUrl(article.cover_image)
 
   return (
-    <Link href={`/articles/${article.slug}`} className="block h-full">
+    <Link href={`${basePath}/${article.slug}`} className="block h-full">
       <Card interactive accent="blue" className="flex h-full flex-col overflow-hidden p-0">
         {coverUrl ? (
           <div className="aspect-[16/9] overflow-hidden bg-mist">
@@ -82,9 +88,11 @@ export const ArticleRichText = ({ article }: { article: PublicArticle }) => {
 export const AnnouncementCard = ({
   announcement,
   compact = false,
+  basePath = '/announcements',
 }: {
   announcement: PublicAnnouncement
   compact?: boolean
+  basePath?: string
 }) => {
   const Icon = announcement.urgency === 'urgent' ? AlertTriangle : Megaphone
 
@@ -121,7 +129,7 @@ export const AnnouncementCard = ({
                 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             ) : null}
-            <Link href="/announcements" className="text-ink-soft no-underline hover:text-ink hover:underline">
+            <Link href={basePath} className="text-ink-soft no-underline hover:text-ink hover:underline">
               All announcements
             </Link>
           </div>
@@ -135,10 +143,12 @@ export const AnnouncementFeed = ({
   announcements,
   title = 'Announcements',
   compact = false,
+  basePath = '/announcements',
 }: {
   announcements: PublicAnnouncement[]
   title?: string
   compact?: boolean
+  basePath?: string
 }) => {
   if (announcements.length === 0) {
     return null
@@ -153,14 +163,19 @@ export const AnnouncementFeed = ({
             {title}
           </h2>
           {!compact ? (
-            <Link href="/announcements" className="text-sm font-semibold text-blue hover:underline">
+            <Link href={basePath} className="text-sm font-semibold text-blue hover:underline">
               View all
             </Link>
           ) : null}
         </div>
         <div className="grid grid-cols-1 gap-3">
           {announcements.map((announcement) => (
-            <AnnouncementCard key={announcement.id} announcement={announcement} compact={compact} />
+            <AnnouncementCard
+              key={announcement.id}
+              announcement={announcement}
+              compact={compact}
+              basePath={basePath}
+            />
           ))}
         </div>
       </div>

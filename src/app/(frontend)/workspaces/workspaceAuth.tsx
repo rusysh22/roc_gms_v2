@@ -147,8 +147,8 @@ export const WorkspaceUnauthorized = ({
         </p>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Link href="/admin" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-          Backoffice
+        <Link href="/workspaces" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+          Workspaces
         </Link>
         <Link href="/" className={buttonVariants({ variant: 'primary', size: 'sm' })}>
           Public Home

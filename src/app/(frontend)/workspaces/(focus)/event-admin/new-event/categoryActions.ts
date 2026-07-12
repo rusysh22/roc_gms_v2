@@ -7,6 +7,7 @@ import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
+const categoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
 const participantModes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd'])
 const formatTypes = new Set([
   'single_elimination',
@@ -99,5 +100,45 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardUpdated=1`)
+}
+
+// Categories are created as 'draft' and stay invisible on the public site until this is used to
+// move them to 'open'/'locked'/'published' - without it there was no in-app way to publish a
+// category once created (the wizard's create form doesn't expose status).
+export async function updateCategoryStatusAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const status = text(formData, 'status')
+  if (!categoryId || !categoryStatuses.has(status)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_category_status`)
+  }
+
+  const before = await payload.findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+  if (String(before.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
+  }
+
+  await payload.update({ collection: 'competition-categories', id: categoryId, data: { status } })
+  await recordAuditLog({
+    payload,
+    action: 'competition_category.status_update',
+    entityType: 'competition-categories',
+    entityId: categoryId,
+    before: { status: before.status },
+    after: { status },
+    actorUserId: user.id,
+  })
+
+  const event = await getWizardEvent(payload, eventId)
+  revalidatePath(wizardPage)
+  if (event?.slug) {
+    revalidatePath(`/events/${event.slug}/sports`)
+  }
   redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardUpdated=1`)
 }

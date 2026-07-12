@@ -3,13 +3,13 @@ import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
 import { PublicChrome } from '@/components/public-chrome'
+import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './styles.css'
 import './tailwind.css'
 
-// Self-hosted via next/font/google (D021). Only exposed as the `--font-jakarta-sans` CSS
-// variable on <html> for now - `styles.css` still sets `body { font-family: Inter, ... }`
-// explicitly, so existing pages keep rendering unchanged until a later redesign phase opts in.
+// Self-hosted via next/font/google (D021), exposed as the `--font-jakarta-sans` CSS variable
+// consumed by the `font-sans` Tailwind utility.
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-jakarta-sans',
@@ -25,11 +25,15 @@ type Props = {
   children: ReactNode
 }
 
-export default function FrontendLayout({ children }: Props) {
+export default async function FrontendLayout({ children }: Props) {
+  const user = await getCurrentPublicUser()
+
   return (
     <html lang="en" className={plusJakartaSans.variable}>
       <body>
-        <PublicChrome brand="ROC GMS">{children}</PublicChrome>
+        <PublicChrome brand="ROC GMS" user={user}>
+          {children}
+        </PublicChrome>
       </body>
     </html>
   )

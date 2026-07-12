@@ -9,7 +9,8 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { PageHero } from '../../../workspaceComponents'
+import { getActiveEvent } from '../../../activeEvent'
+import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { saveClubAction } from './clubActions'
 
@@ -34,12 +35,32 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
     return <WorkspaceUnauthorized workspaceName={access.workspaceName} allowedRoles={access.allowedRoles} />
   }
 
+  const activeEvent = await getActiveEvent(access.payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Event Setup"
+          title="Clubs"
+          summary="Create and maintain the clubs in the active event without using Advanced Data Administration."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const params = searchParams ? await searchParams : {}
   const query = get(params, 'q').toLowerCase()
   const editingId = get(params, 'edit')
   const clubError = get(params, 'clubError')
   const clubUpdated = get(params, 'clubUpdated')
-  const clubs = await access.payload.find({ collection: 'clubs', depth: 0, limit: 200, sort: 'name' })
+  const clubs = await access.payload.find({
+    collection: 'clubs',
+    depth: 0,
+    limit: 200,
+    sort: 'name',
+    where: { event_id: { equals: activeEvent.id } },
+  })
   const editing = clubs.docs.find((club) => String(club.id) === editingId)
   const visible = clubs.docs.filter(
     (club) => !query || `${club.name} ${club.slug}`.toLowerCase().includes(query),

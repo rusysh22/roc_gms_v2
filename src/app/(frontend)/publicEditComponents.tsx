@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { Edit3, ExternalLink } from 'lucide-react'
+import { Edit3 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import type { PublicEditState } from './publicEditState'
@@ -132,14 +132,11 @@ const StatusSelect = ({ defaultValue }: { defaultValue?: string | null }) => (
   </label>
 )
 
-const FormActions = ({ adminHref }: { adminHref: string }) => (
+const FormActions = ({ editHref }: { editHref: string }) => (
   <div className="flex flex-wrap items-center gap-2 pt-2">
     <Button type="submit" size="sm">Save preview</Button>
     <Button asChild variant="secondary" size="sm">
-      <Link href={adminHref} target="_blank" rel="noreferrer">
-        Full editor
-        <ExternalLink className="h-4 w-4" aria-hidden="true" />
-      </Link>
+      <Link href={editHref}>Full editor</Link>
     </Button>
   </div>
 )
@@ -174,7 +171,7 @@ export function EventPublicEditor({
           ))}
         </select>
       </label>
-      <FormActions adminHref={`/admin/collections/events/${id}`} />
+      <FormActions editHref="/workspaces/event-admin/details" />
     </form>
   )
 }
@@ -205,7 +202,7 @@ export function ArticlePublicEditor({
       <StatusSelect defaultValue={status} />
       <Field label="Share title" name="shareTitle" defaultValue={shareTitle} />
       <Field label="Share description" name="shareDescription" defaultValue={shareDescription} textarea />
-      <FormActions adminHref={`/admin/collections/articles/${id}`} />
+      <FormActions editHref={`/workspaces/content-admin/articles/${id}`} />
     </form>
   )
 }
@@ -239,7 +236,7 @@ export function AnnouncementPublicEditor({
       <StatusSelect defaultValue={status} />
       <Field label="Share title" name="shareTitle" defaultValue={shareTitle} />
       <Field label="Share description" name="shareDescription" defaultValue={shareDescription} textarea />
-      <FormActions adminHref={`/admin/collections/announcements/${id}`} />
+      <FormActions editHref={`/workspaces/content-admin/announcements/${id}`} />
     </form>
   )
 }

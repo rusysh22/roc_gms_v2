@@ -5,7 +5,15 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { PageHero, StatBlock, StatGrid, getRelationshipId, getRelationshipLabel } from '../../workspaceComponents'
+import { getActiveEvent } from '../../activeEvent'
+import {
+  NoActiveEventNotice,
+  PageHero,
+  StatBlock,
+  StatGrid,
+  getRelationshipId,
+  getRelationshipLabel,
+} from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
 import { recalculateBracketStageAction } from './bracketActions'
 
@@ -54,20 +62,35 @@ export default async function BracketsWorkspacePage({
     )
   }
 
+  const payload = access.payload
+  const activeEvent = await getActiveEvent(payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Brackets Workspace"
+          title="Single elimination bracket foundation"
+          summary="Generate cached bracket layout from single-elimination stage matches."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const query = searchParams ? await searchParams : {}
   const bracketUpdated = query.bracketUpdated === '1'
   const bracketError = query.bracketError === 'missing_stage'
   const updatedMatches = typeof query.matches === 'string' ? query.matches : '0'
-  const payload = access.payload
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [stagesResult, bracketsResult] = await Promise.all([
     payload.find({
       collection: 'stages',
       depth: 1,
       limit: 50,
       sort: ['category_id', 'order'],
-      where: { stage_type: { equals: 'single_elimination' } },
+      where: { and: [eventWhere, { stage_type: { equals: 'single_elimination' } }] },
     }),
-    payload.find({ collection: 'brackets', depth: 1, limit: 50, sort: ['category_id', 'stage_id'] }),
+    payload.find({ collection: 'brackets', depth: 1, limit: 50, sort: ['category_id', 'stage_id'], where: eventWhere }),
   ])
   const stages = stagesResult.docs as WorkspaceStage[]
   const brackets = bracketsResult.docs as WorkspaceBracket[]
@@ -82,13 +105,10 @@ export default async function BracketsWorkspacePage({
         actions={
           <>
             <Button asChild>
-              <Link href="/brackets">View Public Brackets</Link>
+              <Link href={`/events/${activeEvent.slug}/brackets`}>View Public Brackets</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="/champions">View Champions</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/admin/collections/brackets">Backoffice Brackets</Link>
+              <Link href={`/events/${activeEvent.slug}/schedule?tab=champions`}>View Champions</Link>
             </Button>
           </>
         }

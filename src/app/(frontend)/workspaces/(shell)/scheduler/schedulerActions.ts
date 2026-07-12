@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
 import { detectScheduleConflicts } from './conflicts'
 import type { WorkspaceMatch } from '../../workspaceComponents'
@@ -38,7 +39,7 @@ const refreshSchedule = () => {
 
 export async function createScheduledMatchAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: scheduleReturn })
-  const event = (await payload.find({ collection: 'events', depth: 0, limit: 1, sort: 'event_start_at' })).docs[0] as { id: string | number } | undefined
+  const event = await getActiveEvent(payload)
   const sportId = text(formData, 'sportId'); const categoryId = text(formData, 'categoryId')
   const participantA = text(formData, 'participantA'); const participantB = text(formData, 'participantB')
   const venueId = text(formData, 'venueId'); const courtId = text(formData, 'courtId')

@@ -1,7 +1,7 @@
-import { getPayload, type Where } from 'payload'
+import { getPayload, type Payload, type Where } from 'payload'
 
 import config from '@payload-config'
-import type { RelationshipDoc } from './workspaces/workspaceComponents'
+import { toOptions, type RelationshipDoc, type WorkspaceOption } from './workspaces/workspaceComponents'
 
 export type MediaDoc = RelationshipDoc & {
   alt?: string | null
@@ -133,6 +133,73 @@ export const renderLexicalParagraphs = (content?: LexicalContent | null) => {
   return paragraphs
 }
 
+// The in-app content editor only accepts plain-text paragraphs (blank line = new paragraph) -
+// this builds the minimal Lexical JSON shape the richText field expects so the existing
+// public-facing renderer (renderLexicalParagraphs) can display it unchanged.
+export const plainTextToLexicalContent = (text: string) => {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+  const source = paragraphs.length > 0 ? paragraphs : ['']
+
+  return {
+    root: {
+      type: 'root',
+      version: 1,
+      direction: 'ltr',
+      format: '',
+      indent: 0,
+      children: source.map((paragraphText) => ({
+        type: 'paragraph',
+        version: 1,
+        direction: 'ltr',
+        format: '',
+        indent: 0,
+        children: [
+          {
+            type: 'text',
+            version: 1,
+            text: paragraphText,
+            format: 0,
+            detail: 0,
+            mode: 'normal',
+            style: '',
+          },
+        ],
+      })),
+    },
+  }
+}
+
+export type ContentTaggingOptions = {
+  sports: WorkspaceOption[]
+  categories: WorkspaceOption[]
+  matches: WorkspaceOption[]
+}
+
+// Shared by the article and announcement editors so both can offer the same "tag this to a
+// sport / category / match within the active event" pickers without duplicating the queries.
+export const getContentTaggingOptions = async (
+  payload: Payload,
+  eventId: string | number,
+): Promise<ContentTaggingOptions> => {
+  const eventWhere = { event_id: { equals: eventId } }
+  const [sports, categories, matches] = await Promise.all([
+    payload.find({ collection: 'sports', depth: 0, limit: 200, where: eventWhere }),
+    payload.find({ collection: 'competition-categories', depth: 0, limit: 200, where: eventWhere }),
+    payload.find({ collection: 'matches', depth: 0, limit: 200, sort: 'match_number', where: eventWhere }),
+  ])
+
+  return {
+    sports: toOptions(sports.docs),
+    categories: toOptions(categories.docs),
+    matches: (matches.docs as { id: string | number; match_number: string }[])
+      .map((match) => ({ id: String(match.id), label: match.match_number }))
+      .filter((option) => option.id),
+  }
+}
+
 const publishedAtVisible = (nowIso: string): Where => ({
   published_at: {
     less_than_equal: nowIso,
@@ -153,30 +220,37 @@ const publicAnnouncementWhere = (nowIso: string): Where => ({
   ],
 })
 
-export const getPublicArticles = async (limit = 20) => {
+export const getPublicArticles = async (limit = 20, eventId?: string | number) => {
   const payload = await getPayload({ config })
+
+  const where: Where = eventId
+    ? { and: [publicArticleWhere(new Date().toISOString()), { event_id: { equals: eventId } }] }
+    : publicArticleWhere(new Date().toISOString())
 
   const articles = await payload.find({
     collection: 'articles',
     depth: 2,
     limit,
     sort: '-published_at',
-    where: publicArticleWhere(new Date().toISOString()),
+    where,
   })
 
   return articles.docs as PublicArticle[]
 }
 
-export const getPublicArticleBySlug = async (slug: string) => {
+export const getPublicArticleBySlug = async (slug: string, eventId?: string | number) => {
   const payload = await getPayload({ config })
+
+  const clauses: Where[] = [{ slug: { equals: slug } }, publicArticleWhere(new Date().toISOString())]
+  if (eventId) {
+    clauses.push({ event_id: { equals: eventId } })
+  }
 
   const articles = await payload.find({
     collection: 'articles',
     depth: 2,
     limit: 1,
-    where: {
-      and: [{ slug: { equals: slug } }, publicArticleWhere(new Date().toISOString())],
-    },
+    where: { and: clauses },
   })
 
   return articles.docs[0] as PublicArticle | undefined
@@ -185,35 +259,46 @@ export const getPublicArticleBySlug = async (slug: string) => {
 export const getPublicArticleBySlugForMode = async ({
   slug,
   includeUnpublished,
+  eventId,
 }: {
   slug: string
   includeUnpublished?: boolean
+  eventId?: string | number
 }) => {
   if (!includeUnpublished) {
-    return getPublicArticleBySlug(slug)
+    return getPublicArticleBySlug(slug, eventId)
   }
 
   const payload = await getPayload({ config })
+
+  const clauses: Where[] = [{ slug: { equals: slug } }]
+  if (eventId) {
+    clauses.push({ event_id: { equals: eventId } })
+  }
 
   const articles = await payload.find({
     collection: 'articles',
     depth: 2,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: clauses },
   })
 
   return articles.docs[0] as PublicArticle | undefined
 }
 
-export const getPublicAnnouncements = async (limit = 20) => {
+export const getPublicAnnouncements = async (limit = 20, eventId?: string | number) => {
   const payload = await getPayload({ config })
+
+  const where: Where = eventId
+    ? { and: [publicAnnouncementWhere(new Date().toISOString()), { event_id: { equals: eventId } }] }
+    : publicAnnouncementWhere(new Date().toISOString())
 
   const announcements = await payload.find({
     collection: 'announcements',
     depth: 2,
     limit,
     sort: ['-published_at', 'urgency'],
-    where: publicAnnouncementWhere(new Date().toISOString()),
+    where,
   })
 
   return announcements.docs as PublicAnnouncement[]
@@ -222,12 +307,14 @@ export const getPublicAnnouncements = async (limit = 20) => {
 export const getPublicAnnouncementsForMode = async ({
   includeUnpublished,
   limit = 20,
+  eventId,
 }: {
   includeUnpublished?: boolean
   limit?: number
+  eventId?: string | number
 }) => {
   if (!includeUnpublished) {
-    return getPublicAnnouncements(limit)
+    return getPublicAnnouncements(limit, eventId)
   }
 
   const payload = await getPayload({ config })
@@ -237,6 +324,7 @@ export const getPublicAnnouncementsForMode = async ({
     depth: 2,
     limit,
     sort: ['-published_at', 'urgency'],
+    where: eventId ? { event_id: { equals: eventId } } : undefined,
   })
 
   return announcements.docs as PublicAnnouncement[]

@@ -211,6 +211,7 @@ const getBracketImpact = (
   bracketData: SingleEliminationBracketData | undefined,
   advancement: WinnerAdvancementResult | null,
   champion: BracketChampion | null,
+  matchBasePath: string,
 ): BracketImpact | null => {
   const roundName = match.round_name || 'Single Elimination'
   if (!bracketData) {
@@ -234,7 +235,7 @@ const getBracketImpact = (
     currentMatch,
     nextMatchNumber: advancement?.targetMatchNumber,
     nextMatchHref: advancement?.targetMatchNumber
-      ? `/matches/${advancement.targetMatchNumber}`
+      ? `${matchBasePath}/${advancement.targetMatchNumber}`
       : undefined,
     nextTargetSlot: advancement?.targetSlot,
     nextReason:
@@ -246,15 +247,19 @@ const getBracketImpact = (
   }
 }
 
-export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailResult | null> => {
+export const getMatchDetail = async (
+  matchNumber: string,
+  eventId?: string | number,
+  matchBasePath = '/matches',
+): Promise<MatchDetailResult | null> => {
   const payload = await getPayload({ config })
   const matches = await payload.find({
     collection: 'matches',
     depth: 2,
     limit: 1,
-    where: {
-      match_number: { equals: matchNumber },
-    },
+    where: eventId
+      ? { and: [{ match_number: { equals: matchNumber } }, { event_id: { equals: eventId } }] }
+      : { match_number: { equals: matchNumber } },
   })
 
   const match = matches.docs[0] as MatchDetail | undefined
@@ -347,7 +352,7 @@ export const getMatchDetail = async (matchNumber: string): Promise<MatchDetailRe
       }
     }
 
-    bracketImpact = getBracketImpact(match, bracketData, advancement, champion)
+    bracketImpact = getBracketImpact(match, bracketData, advancement, champion, matchBasePath)
   }
 
   return {

@@ -218,6 +218,19 @@ export const PageHero = ({
   </section>
 )
 
+// Shown instead of a page's normal content when no event exists yet to scope its data to -
+// every master-data/transaction collection requires an event_id, so there is nothing to manage
+// until at least one event has been created.
+export const NoActiveEventNotice = () => (
+  <EmptyState>
+    No event exists yet.{' '}
+    <Link href="/workspaces/event-admin/new-event" className="font-bold text-blue underline">
+      Create your first event
+    </Link>{' '}
+    to start adding data here.
+  </EmptyState>
+)
+
 export const StatGrid = ({ children }: { children: ReactNode }) => (
   <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</section>
 )

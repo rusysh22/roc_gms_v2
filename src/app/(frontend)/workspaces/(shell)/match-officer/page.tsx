@@ -3,8 +3,10 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { getActiveEvent } from '../../activeEvent'
 import {
   MatchCard,
+  NoActiveEventNotice,
   StatBlock,
   StatGrid,
   PageHero,
@@ -36,12 +38,26 @@ export default async function MatchOfficerWorkspacePage() {
   }
 
   const payload = access.payload
+  const activeEvent = await getActiveEvent(payload)
+  if (!activeEvent) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <PageHero
+          eyebrow="Match Officer Workspace"
+          title="Match-Day Flow"
+          summary="Mobile-first match list for officers on venue duty."
+        />
+        <NoActiveEventNotice />
+      </div>
+    )
+  }
+
   const matches = await payload.find({
     collection: 'matches',
     depth: 2,
     limit: 50,
     sort: 'scheduled_start_at',
-    where: { scheduled_start_at: { exists: true } },
+    where: { and: [{ event_id: { equals: activeEvent.id } }, { scheduled_start_at: { exists: true } }] },
   })
 
   const scheduledMatches = (matches.docs as WorkspaceMatch[]).filter((match) =>

@@ -33,10 +33,19 @@ export const Events: CollectionConfig = {
       type: 'textarea',
     },
     {
-      name: 'banner_image',
-      type: 'text',
+      name: 'logo',
+      type: 'upload',
+      relationTo: 'media',
       admin: {
-        description: 'Temporary URL field until the media collection is added.',
+        description: 'Optional event logo/badge - shown next to the event name.',
+      },
+    },
+    {
+      name: 'banner_image',
+      type: 'upload',
+      relationTo: 'media',
+      admin: {
+        description: 'Hero image shown on this event\'s public page. Compressed automatically on upload.',
       },
     },
     {

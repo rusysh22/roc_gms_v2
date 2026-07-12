@@ -37,9 +37,25 @@ export async function createEventAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?step=event&wizardError=duplicate_slug`)
   }
 
+  let logoId: number | undefined
+  const logoFile = formData.get('logo')
+  if (logoFile instanceof File && logoFile.size > 0) {
+    if (!logoFile.type.startsWith('image/')) {
+      redirect(`${wizardPage}?step=event&wizardError=invalid_logo`)
+    }
+    const buffer = Buffer.from(await logoFile.arrayBuffer())
+    const media = await payload.create({
+      collection: 'media',
+      data: { alt: `${name} logo` },
+      file: { data: buffer, mimetype: logoFile.type, name: logoFile.name, size: logoFile.size },
+    })
+    logoId = Number(media.id)
+  }
+
   const data = {
     name,
     slug,
+    logo: logoId,
     event_start_at: new Date(start).toISOString(),
     event_end_at: new Date(end).toISOString(),
     location: location || undefined,

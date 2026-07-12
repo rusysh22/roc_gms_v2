@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/clubs'
@@ -13,7 +14,7 @@ const emailIsValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.t
 
 export async function saveClubAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page })
-  const event = (await payload.find({ collection: 'events', depth: 0, limit: 1, sort: 'event_start_at' })).docs[0] as { id: string | number } | undefined
+  const event = await getActiveEvent(payload)
   const id = text(formData, 'id'); const name = text(formData, 'name'); const requestedSlug = text(formData, 'slug'); const email = text(formData, 'contactEmail')
   const slug = slugify(requestedSlug || name)
   if (!event || !name || !slug || !emailIsValid(email)) redirect(`${page}?clubError=invalid_input`)

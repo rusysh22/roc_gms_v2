@@ -3,12 +3,14 @@ import { CheckCircle2, Circle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
+import { getActiveEvent } from '../../activeEvent'
 import { PageHero, StatBlock, StatGrid, formatDateTime } from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
 
 export const dynamic = 'force-dynamic'
 
 type EventDoc = {
+  id: string | number
   name?: string
   status?: string
   visibility?: string
@@ -48,33 +50,22 @@ export default async function EventAdminWorkspacePage() {
   }
 
   const payload = access.payload
-  const [
-    events,
-    sports,
-    categories,
-    rulesets,
-    clubs,
-    players,
-    teams,
-    entries,
-    venues,
-    courts,
-    matches,
-  ] = await Promise.all([
-    payload.find({ collection: 'events', limit: 1, sort: 'event_start_at' }),
-    payload.find({ collection: 'sports', limit: 1 }),
-    payload.find({ collection: 'competition-categories', limit: 1 }),
-    payload.find({ collection: 'rulesets', limit: 1 }),
-    payload.find({ collection: 'clubs', limit: 1 }),
-    payload.find({ collection: 'players', limit: 1 }),
-    payload.find({ collection: 'teams', limit: 1 }),
-    payload.find({ collection: 'competition-entries', limit: 1 }),
-    payload.find({ collection: 'venues', limit: 1 }),
-    payload.find({ collection: 'courts', limit: 1 }),
-    payload.find({ collection: 'matches', limit: 1 }),
-  ])
+  const event = (await getActiveEvent(payload)) as EventDoc | null
+  const eventWhere = event ? { event_id: { equals: event.id } } : undefined
+  const [sports, categories, rulesets, clubs, players, teams, entries, venues, courts, matches] =
+    await Promise.all([
+      payload.find({ collection: 'sports', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'competition-categories', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'rulesets', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'clubs', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'players', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'teams', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'competition-entries', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'venues', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'courts', limit: 1, where: eventWhere }),
+      payload.find({ collection: 'matches', limit: 1, where: eventWhere }),
+    ])
 
-  const event = events.docs[0] as EventDoc | undefined
   const readiness = [
     Boolean(event),
     sports.totalDocs > 0,
@@ -102,14 +93,22 @@ export default async function EventAdminWorkspacePage() {
               <Link href="/workspaces/event-admin/new-event">Create New Event</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link href="/admin/collections/events">Manage Event</Link>
+              <Link href="/workspaces/event-admin/details">Manage Event</Link>
             </Button>
-            <Button asChild variant="secondary">
-              <Link href="/admin/collections/sports">Sports</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/admin/collections/competition-categories">Categories</Link>
-            </Button>
+            {event ? (
+              <>
+                <Button asChild variant="secondary">
+                  <Link href={`/workspaces/event-admin/new-event?eventId=${event.id}&step=sports`}>
+                    Sports
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link href={`/workspaces/event-admin/new-event?eventId=${event.id}&step=categories`}>
+                    Categories
+                  </Link>
+                </Button>
+              </>
+            ) : null}
           </>
         }
       />

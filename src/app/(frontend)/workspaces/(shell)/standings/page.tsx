@@ -4,7 +4,15 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { PageHero, StatBlock, StatGrid, getRelationshipId, getRelationshipLabel } from '../../workspaceComponents'
+import { getActiveEvent } from '../../activeEvent'
+import {
+  NoActiveEventNotice,
+  PageHero,
+  StatBlock,
+  StatGrid,
+  getRelationshipId,
+  getRelationshipLabel,
+} from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
 import { recalculateStandingScopeAction } from './standingActions'
 
@@ -56,25 +64,41 @@ export default async function StandingsWorkspacePage({
     )
   }
 
+  const payload = access.payload
+  const activeEvent = await getActiveEvent(payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Standings Workspace"
+          title="Group standings foundation"
+          summary="Recalculate cached standings for group-stage and round-robin scopes."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const query = searchParams ? await searchParams : {}
   const standingUpdated = query.standingUpdated === '1'
   const standingError = query.standingError === 'missing_scope'
   const updatedRows = typeof query.rows === 'string' ? query.rows : '0'
-  const payload = access.payload
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [stagesResult, groupsResult, standingsResult] = await Promise.all([
     payload.find({
       collection: 'stages',
       depth: 1,
       limit: 100,
       sort: ['category_id', 'order'],
-      where: { stage_type: { in: ['group_stage', 'round_robin', 'league', 'swiss'] } },
+      where: { and: [eventWhere, { stage_type: { in: ['group_stage', 'round_robin', 'league', 'swiss'] } }] },
     }),
-    payload.find({ collection: 'groups', depth: 1, limit: 100, sort: ['stage_id', 'order'] }),
+    payload.find({ collection: 'groups', depth: 1, limit: 100, sort: ['stage_id', 'order'], where: eventWhere }),
     payload.find({
       collection: 'standings',
       depth: 1,
       limit: 200,
       sort: ['category_id', 'stage_id', 'group_id', 'rank'],
+      where: eventWhere,
     }),
   ])
   const stages = stagesResult.docs as WorkspaceStage[]
@@ -90,14 +114,11 @@ export default async function StandingsWorkspacePage({
       <PageHero
         eyebrow="Standings Workspace"
         title="Group standings foundation"
-        summary="Recalculate cached standings for group-stage and round-robin scopes. Payload Admin remains the fallback editor for raw standing rows."
+        summary="Recalculate cached standings for group-stage and round-robin scopes."
         actions={
           <>
             <Button asChild>
-              <Link href="/standings">View Public Standings</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/admin/collections/standings">Backoffice Standings</Link>
+              <Link href={`/events/${activeEvent.slug}/schedule?tab=standings`}>View Public Standings</Link>
             </Button>
           </>
         }

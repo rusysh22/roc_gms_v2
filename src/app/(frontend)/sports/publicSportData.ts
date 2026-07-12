@@ -107,7 +107,7 @@ export const standingFormatTypes = new Set([
   'league',
 ])
 
-export const getSportCategories = async () => {
+export const getSportCategories = async (eventId: string | number) => {
   const payload = await getPayload({ config })
 
   const [sportsResult, categoriesResult] = await Promise.all([
@@ -116,14 +116,16 @@ export const getSportCategories = async () => {
       depth: 0,
       limit: 50,
       sort: 'name',
-      where: { is_active: { equals: true } },
+      where: { and: [{ event_id: { equals: eventId } }, { is_active: { equals: true } }] },
     }),
     payload.find({
       collection: 'competition-categories',
       depth: 1,
       limit: 200,
       sort: ['sport_id', 'name'],
-      where: { status: { in: ['open', 'locked', 'published'] } },
+      where: {
+        and: [{ event_id: { equals: eventId } }, { status: { in: ['open', 'locked', 'published'] } }],
+      },
     }),
   ])
 
@@ -134,6 +136,7 @@ export const getSportCategories = async () => {
 }
 
 export const getCategoryDetail = async (
+  eventId: string | number,
   sportSlug: string,
   categorySlug: string,
 ): Promise<CategoryDetailData | null> => {
@@ -144,7 +147,11 @@ export const getCategoryDetail = async (
     depth: 0,
     limit: 1,
     where: {
-      and: [{ slug: { equals: sportSlug } }, { is_active: { equals: true } }],
+      and: [
+        { event_id: { equals: eventId } },
+        { slug: { equals: sportSlug } },
+        { is_active: { equals: true } },
+      ],
     },
   })
   const sport = sportsResult.docs[0] as SportDoc | undefined

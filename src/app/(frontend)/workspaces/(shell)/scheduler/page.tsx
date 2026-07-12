@@ -1,31 +1,47 @@
 import type { Where } from 'payload'
 import Link from 'next/link'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, ChevronDown } from 'lucide-react'
 
+import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { getMatchStatusTone, StatusBadge } from '@/components/ui/status-badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { getActiveEvent } from '../../activeEvent'
 import {
-  MatchCard,
+  NoActiveEventNotice,
   StatBlock,
   StatGrid,
   PageHero,
   WorkspaceMatch,
   WorkspaceOption,
   formatDateLabel,
+  formatDateTime,
+  formatStatus,
   formatTimeOnly,
   getDateKey,
   getRelationshipLabel,
   toOptions,
 } from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
+import { AddMatchDialog } from './AddMatchDialog'
+import { RescheduleMatchDialog } from './RescheduleMatchDialog'
 import { ConflictWarning, detectScheduleConflicts } from './conflicts'
-import { createScheduledMatchAction, rescheduleMatchAction } from './schedulerActions'
 
 export const dynamic = 'force-dynamic'
+
+const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled'])
+
+const scheduleErrorMessages: Record<string, string> = {
+  invalid_match: 'Fill in every field with valid values before creating the match.',
+  invalid_relationship: 'One of the selected sport, category, participants, venue, or court does not belong to this event or category.',
+  conflict: 'That time would create a venue or participant conflict.',
+  invalid_reschedule: 'Fill in the new time, venue, court, and a reason.',
+  reschedule_not_allowed: "This match's current status can no longer be rescheduled here.",
+}
 
 type SchedulerSearchParams = Promise<Record<string, string | string[] | undefined>>
 
@@ -77,14 +93,31 @@ export default async function SchedulerWorkspacePage({
     )
   }
 
+  const payload = access.payload
+  const activeEvent = await getActiveEvent(payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Scheduler Workspace"
+          title="Schedule Command Queue"
+          summary="Create and reschedule matches using the guided forms below."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const params = searchParams ? await searchParams : {}
   const sport = getParam(params, 'sport')
   const category = getParam(params, 'category')
   const venue = getParam(params, 'venue')
   const court = getParam(params, 'court')
   const status = getParam(params, 'status')
-  const payload = access.payload
-  const filterClauses: Where[] = []
+  const scheduleError = getParam(params, 'scheduleError')
+  const scheduleCreated = getParam(params, 'scheduleCreated') === '1'
+  const scheduleRescheduled = getParam(params, 'scheduleRescheduled') === '1'
+  const filterClauses: Where[] = [{ event_id: { equals: activeEvent.id } }]
 
   if (sport) filterClauses.push({ sport_id: { equals: sport } })
   if (category) filterClauses.push({ category_id: { equals: category } })
@@ -92,15 +125,16 @@ export default async function SchedulerWorkspacePage({
   if (court) filterClauses.push({ court_id: { equals: court } })
   if (status) filterClauses.push({ status: { equals: status } })
 
-  const where = filterClauses.length > 0 ? { and: filterClauses } : undefined
+  const where = { and: filterClauses }
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [matches, sports, categories, venues, courts, entries, allMatches] = await Promise.all([
     payload.find({ collection: 'matches', depth: 2, limit: 100, sort: 'scheduled_start_at', where }),
-    payload.find({ collection: 'sports', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'competition-categories', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'venues', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'courts', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'competition-entries', limit: 200, sort: 'display_name' }),
-    payload.find({ collection: 'matches', depth: 2, limit: 300, sort: 'scheduled_start_at' }),
+    payload.find({ collection: 'sports', limit: 100, sort: 'name', where: eventWhere }),
+    payload.find({ collection: 'competition-categories', limit: 100, sort: 'name', where: eventWhere }),
+    payload.find({ collection: 'venues', limit: 100, sort: 'name', where: eventWhere }),
+    payload.find({ collection: 'courts', limit: 100, sort: 'name', where: eventWhere }),
+    payload.find({ collection: 'competition-entries', limit: 200, sort: 'display_name', where: eventWhere }),
+    payload.find({ collection: 'matches', depth: 2, limit: 300, sort: 'scheduled_start_at', where: eventWhere }),
   ])
 
   const queueMatches = matches.docs as WorkspaceMatch[]
@@ -110,6 +144,8 @@ export default async function SchedulerWorkspacePage({
     id: matchStatus,
     label: matchStatus.replaceAll('_', ' '),
   }))
+  const venueOptions = toOptions(venues.docs)
+  const courtOptions = toOptions(courts.docs)
 
   const conflicts = detectScheduleConflicts(allMatches.docs as WorkspaceMatch[])
   const alertConflicts = conflicts.filter((conflict) => conflict.severity === 'alert')
@@ -136,58 +172,102 @@ export default async function SchedulerWorkspacePage({
     }
   })
 
+  const renderQueueTable = (rows: WorkspaceMatch[], emptyMessage: string) =>
+    rows.length === 0 ? (
+      <EmptyState>{emptyMessage}</EmptyState>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Match</TableHead>
+            <TableHead>Participants</TableHead>
+            <TableHead>Schedule</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((match) => (
+            <TableRow key={match.id}>
+              <TableCell>
+                <Link
+                  href={`/workspaces/matches/${match.match_number}`}
+                  className="font-bold text-blue no-underline hover:underline"
+                >
+                  {match.match_number}
+                </Link>
+                <p className="text-xs text-ink-soft">
+                  {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
+                </p>
+              </TableCell>
+              <TableCell>
+                <span className="font-semibold">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+                <span className="text-ink-soft"> vs </span>
+                <span className="font-semibold">{getRelationshipLabel(match.participant_b_entry_id)}</span>
+              </TableCell>
+              <TableCell>
+                {match.scheduled_start_at ? (
+                  <>
+                    <p className="font-semibold whitespace-nowrap">{formatDateTime(match.scheduled_start_at)}</p>
+                    <p className="text-xs text-ink-soft">
+                      {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
+                    </p>
+                  </>
+                ) : (
+                  <span className="text-ink-soft">Not scheduled</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
+              </TableCell>
+              <TableCell>
+                {RESCHEDULABLE_STATUSES.has(match.status) ? (
+                  <RescheduleMatchDialog match={match} venues={venueOptions} courts={courtOptions} />
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+
   return (
     <>
       <PageHero
         eyebrow="Scheduler Workspace"
         title="Schedule Command Queue"
-        summary="Create and reschedule matches using the guided forms below. Every submission validates relationships, time order, conflicts, lifecycle state, and records an audit entry."
+        summary="Monitor the queue, resolve conflicts, and reschedule matches. Every submission validates relationships, time order, conflicts, and lifecycle state, and records an audit entry."
         actions={
-          <Button asChild>
-            <Link href="/schedule">Public Schedule</Link>
-          </Button>
+          <>
+            <AddMatchDialog
+              sports={toOptions(sports.docs)}
+              categories={toOptions(categories.docs)}
+              entries={toOptions(entries.docs)}
+              venues={venueOptions}
+              courts={courtOptions}
+            />
+            <Button asChild variant="secondary">
+              <Link href={`/events/${activeEvent.slug}/schedule`}>Public Schedule</Link>
+            </Button>
+          </>
         }
       />
 
-      <Card className="mb-6 flex flex-col gap-4">
-        <div>
-          <CardTitle>Add Match</CardTitle>
-          <p className="text-xs font-semibold text-ink-soft">
-            The active event is derived automatically. Use business names, never IDs.
-          </p>
-        </div>
-        <form action={createScheduledMatchAction} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Match number">
-            <Input name="matchNumber" required placeholder="FB-001" />
-          </Field>
-          <FilterSelect label="Sport" name="sportId" value="" options={toOptions(sports.docs)} />
-          <FilterSelect label="Category" name="categoryId" value="" options={toOptions(categories.docs)} />
-          <FilterSelect label="Participant A" name="participantA" value="" options={toOptions(entries.docs)} />
-          <FilterSelect label="Participant B" name="participantB" value="" options={toOptions(entries.docs)} />
-          <Field label="Start">
-            <Input name="scheduledStart" type="datetime-local" required />
-          </Field>
-          <Field label="End">
-            <Input name="scheduledEnd" type="datetime-local" required />
-          </Field>
-          <FilterSelect label="Venue" name="venueId" value="" options={toOptions(venues.docs)} />
-          <FilterSelect label="Court" name="courtId" value="" options={toOptions(courts.docs)} />
-          <Field label="Status">
-            <Select name="status" defaultValue="scheduled">
-              <option value="draft">Draft</option>
-              <option value="ready_for_scheduling">Ready for scheduling</option>
-              <option value="scheduled">Scheduled</option>
-            </Select>
-          </Field>
-          <label className="flex items-center gap-2 self-end pb-2.5 text-sm font-semibold text-ink">
-            <input type="checkbox" name="isPublic" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
-            Public schedule
-          </label>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <Button type="submit">Create match</Button>
-          </div>
-        </form>
-      </Card>
+      {scheduleError && scheduleErrorMessages[scheduleError] ? (
+        <AlertBanner tone="error" className="mb-4">
+          {scheduleErrorMessages[scheduleError]}
+        </AlertBanner>
+      ) : null}
+      {scheduleCreated ? (
+        <AlertBanner tone="success" className="mb-4">
+          Match created.
+        </AlertBanner>
+      ) : null}
+      {scheduleRescheduled ? (
+        <AlertBanner tone="success" className="mb-4">
+          Match rescheduled.
+        </AlertBanner>
+      ) : null}
 
       <StatGrid>
         <StatBlock label="Visible Matches" value={queueMatches.length} />
@@ -200,78 +280,49 @@ export default async function SchedulerWorkspacePage({
         />
       </StatGrid>
 
-      <Card className="mb-6 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle>Conflict Warnings</CardTitle>
-          <span className="text-sm font-extrabold text-ink-soft">{conflicts.length}</span>
-        </div>
-        <p className="text-xs font-semibold text-ink-soft">
-          Warnings only. Nothing is blocked from being scheduled yet. Checked across all matches, not just the current
-          filter.
-        </p>
-        {conflicts.length === 0 ? (
-          <EmptyState>No conflicts detected across current matches.</EmptyState>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {conflicts.map((conflict: ConflictWarning) => (
-              <li
-                key={conflict.id}
-                className={
-                  conflict.severity === 'alert'
-                    ? 'flex items-start gap-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700'
-                    : 'flex items-start gap-2 rounded-card border border-gold/40 bg-mist px-3 py-2 text-sm font-semibold text-ink'
-                }
-              >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                {conflict.message}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card className="mb-6 flex flex-col gap-4">
-        <CardTitle>Calendar Lanes</CardTitle>
-        {dayLanes.length === 0 ? (
-          <EmptyState>No scheduled matches yet to display on the calendar.</EmptyState>
-        ) : (
-          dayLanes.map((day) => (
-            <div key={day.dayKey} className="flex flex-col gap-2">
-              <h3 className="text-sm font-extrabold text-ink">{day.dateLabel}</h3>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {day.lanes.map((lane) => (
-                  <div key={lane.label} className="rounded-card border border-line bg-mist p-3">
-                    <p className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">{lane.label}</p>
-                    <div className="flex flex-col gap-2">
-                      {lane.matches.map((match) => (
-                        <div
-                          key={match.id}
-                          className="flex items-center justify-between gap-2 rounded-card border border-line bg-paper px-3 py-2 text-xs"
-                        >
-                          <span className="font-bold text-ink-soft">{formatTimeOnly(match.scheduled_start_at)}</span>
-                          <strong className="font-extrabold text-ink">{match.match_number}</strong>
-                          <span className="min-w-0 truncate text-right font-semibold text-ink-soft">
-                            {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
-                            {getRelationshipLabel(match.participant_b_entry_id)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-      </Card>
+      {conflicts.length > 0 ? (
+        <details className="group mb-6 rounded-panel border border-line bg-paper">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 text-sm font-extrabold text-ink [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <AlertTriangle
+                className={alertConflicts.length > 0 ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-gold'}
+                aria-hidden="true"
+              />
+              {conflicts.length} conflict warning{conflicts.length === 1 ? '' : 's'}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="flex flex-col gap-2 border-t border-line p-4">
+            <p className="text-xs font-semibold text-ink-soft">
+              Warnings only. Nothing is blocked from being scheduled yet. Checked across all matches, not just the
+              current filter.
+            </p>
+            <ul className="flex flex-col gap-2">
+              {conflicts.map((conflict: ConflictWarning) => (
+                <li
+                  key={conflict.id}
+                  className={
+                    conflict.severity === 'alert'
+                      ? 'flex items-start gap-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700'
+                      : 'flex items-start gap-2 rounded-card border border-gold/40 bg-mist px-3 py-2 text-sm font-semibold text-ink'
+                  }
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  {conflict.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </details>
+      ) : null}
 
       <Card className="mb-6 flex flex-col gap-4">
         <CardTitle>Filter Queue</CardTitle>
         <form className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5" action="/workspaces/scheduler">
           <FilterSelect label="Sport" name="sport" value={sport} options={toOptions(sports.docs)} />
           <FilterSelect label="Category" name="category" value={category} options={toOptions(categories.docs)} />
-          <FilterSelect label="Venue" name="venue" value={venue} options={toOptions(venues.docs)} />
-          <FilterSelect label="Court" name="court" value={court} options={toOptions(courts.docs)} />
+          <FilterSelect label="Venue" name="venue" value={venue} options={venueOptions} />
+          <FilterSelect label="Court" name="court" value={court} options={courtOptions} />
           <FilterSelect label="Status" name="status" value={status} options={statusOptions} />
           <div className="flex gap-2 sm:col-span-3 lg:col-span-5">
             <Button type="submit">Apply</Button>
@@ -282,66 +333,61 @@ export default async function SchedulerWorkspacePage({
         </form>
       </Card>
 
-      <section className="mb-6 grid gap-4 lg:grid-cols-2" aria-label="Match scheduling queue">
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-extrabold text-ink">Unscheduled</h2>
-            <span className="text-sm font-extrabold text-ink-soft">{unscheduledMatches.length}</span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {unscheduledMatches.length === 0 ? (
-              <EmptyState>No unscheduled matches match these filters.</EmptyState>
-            ) : (
-              unscheduledMatches.map((match) => <MatchCard key={match.id} match={match} detailsHref={null} />)
-            )}
-          </div>
+      <section className="mb-6 flex flex-col gap-3" aria-label="Unscheduled matches">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-ink">Unscheduled</h2>
+          <span className="text-sm font-extrabold text-ink-soft">{unscheduledMatches.length}</span>
         </div>
-
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-extrabold text-ink">Scheduled</h2>
-            <span className="text-sm font-extrabold text-ink-soft">{scheduledMatches.length}</span>
-          </div>
-          <div className="flex flex-col gap-3">
-            {scheduledMatches.length === 0 ? (
-              <EmptyState>No scheduled matches match these filters.</EmptyState>
-            ) : (
-              scheduledMatches.map((match) => <MatchCard key={match.id} match={match} detailsHref={null} />)
-            )}
-          </div>
-        </div>
+        {renderQueueTable(unscheduledMatches, 'No unscheduled matches match these filters.')}
       </section>
 
-      <Card className="flex flex-col gap-4">
-        <div>
-          <CardTitle>Reschedule Match</CardTitle>
-          <p className="text-xs font-semibold text-ink-soft">
-            Only draft, ready-for-scheduling, and scheduled matches may be changed here.
-          </p>
+      <section className="mb-6 flex flex-col gap-3" aria-label="Scheduled matches">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-ink">Scheduled</h2>
+          <span className="text-sm font-extrabold text-ink-soft">{scheduledMatches.length}</span>
         </div>
-        <form action={rescheduleMatchAction} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <FilterSelect
-            label="Match"
-            name="matchNumber"
-            value=""
-            options={queueMatches.map((match) => ({ id: match.match_number, label: match.match_number }))}
-          />
-          <Field label="New start">
-            <Input name="scheduledStart" type="datetime-local" required />
-          </Field>
-          <Field label="New end">
-            <Input name="scheduledEnd" type="datetime-local" required />
-          </Field>
-          <FilterSelect label="Venue" name="venueId" value="" options={toOptions(venues.docs)} />
-          <FilterSelect label="Court" name="courtId" value="" options={toOptions(courts.docs)} />
-          <Field label="Reason">
-            <Input name="reason" required />
-          </Field>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <Button type="submit">Confirm reschedule</Button>
-          </div>
-        </form>
-      </Card>
+        {renderQueueTable(scheduledMatches, 'No scheduled matches match these filters.')}
+      </section>
+
+      <details className="group rounded-panel border border-line bg-paper">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 text-sm font-extrabold text-ink [&::-webkit-details-marker]:hidden">
+          Calendar view
+          <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-line p-4">
+          {dayLanes.length === 0 ? (
+            <EmptyState>No scheduled matches yet to display on the calendar.</EmptyState>
+          ) : (
+            dayLanes.map((day) => (
+              <div key={day.dayKey} className="flex flex-col gap-2">
+                <h3 className="text-sm font-extrabold text-ink">{day.dateLabel}</h3>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {day.lanes.map((lane) => (
+                    <div key={lane.label} className="rounded-card border border-line bg-mist p-3">
+                      <p className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">{lane.label}</p>
+                      <div className="flex flex-col gap-2">
+                        {lane.matches.map((match) => (
+                          <div
+                            key={match.id}
+                            className="flex items-center justify-between gap-2 rounded-card border border-line bg-paper px-3 py-2 text-xs"
+                          >
+                            <span className="font-bold text-ink-soft">{formatTimeOnly(match.scheduled_start_at)}</span>
+                            <strong className="font-extrabold text-ink">{match.match_number}</strong>
+                            <span className="min-w-0 truncate text-right font-semibold text-ink-soft">
+                              {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                              {getRelationshipLabel(match.participant_b_entry_id)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </details>
     </>
   )
 }

@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { PageHero, toOptions, type WorkspaceOption } from '../../../workspaceComponents'
+import { getActiveEvent } from '../../../activeEvent'
+import { NoActiveEventNotice, PageHero, toOptions, type WorkspaceOption } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { savePlayerAction, saveRosterAction, saveTeamAction } from './participantActions'
 
@@ -68,17 +69,32 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
     return <WorkspaceUnauthorized workspaceName={access.workspaceName} allowedRoles={access.allowedRoles} />
   }
 
+  const activeEvent = await getActiveEvent(access.payload)
+  if (!activeEvent) {
+    return (
+      <>
+        <PageHero
+          eyebrow="Event Setup"
+          title="Players, Teams, and Rosters"
+          summary="Build eligible participants and team memberships for the active event. Changes are validated and audited."
+        />
+        <NoActiveEventNotice />
+      </>
+    )
+  }
+
   const params = searchParams ? await searchParams : {}
   const kind = get(params, 'kind')
   const edit = get(params, 'edit')
   const participantError = get(params, 'participantError')
   const anyUpdated = get(params, 'playerUpdated') || get(params, 'teamUpdated') || get(params, 'rosterUpdated')
+  const eventWhere = { event_id: { equals: activeEvent.id } }
   const [players, teams, rosters, clubs, categories] = await Promise.all([
-    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'rosters', depth: 1, limit: 500, sort: '-createdAt' }),
-    access.payload.find({ collection: 'clubs', depth: 0, limit: 300, sort: 'name' }),
-    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 100, sort: 'name' }),
+    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'rosters', depth: 1, limit: 500, sort: '-createdAt', where: eventWhere }),
+    access.payload.find({ collection: 'clubs', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 100, sort: 'name', where: eventWhere }),
   ])
   const player = kind === 'player' ? players.docs.find((x) => String(x.id) === edit) : undefined
   const team = kind === 'team' ? teams.docs.find((x) => String(x.id) === edit) : undefined
