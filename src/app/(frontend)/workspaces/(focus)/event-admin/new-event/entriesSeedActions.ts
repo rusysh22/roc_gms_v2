@@ -7,8 +7,10 @@ import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
 
+// "pair" entries are backed by Teams (not bare Players) because Rosters always require a
+// team_id - a doubles pair is modeled as a 2-player team.
 const sourceCollectionByMode = (mode: string): 'teams' | 'clubs' | 'players' =>
-  mode === 'team' ? 'teams'
+  mode === 'team' || mode === 'pair' ? 'teams'
   : mode === 'club' ? 'clubs'
   : 'players'
 

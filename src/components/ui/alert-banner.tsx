@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -7,16 +7,20 @@ import { cn } from '@/lib/utils'
 // never maps "loss"/error to red for match results) - but plain validation/error banners still
 // need one, so this follows the exact stock red-50/200/700 already used by the Live Score page's
 // own error banner (the one place in the app that needed it before this component existed).
-export type AlertTone = 'success' | 'error'
+// "info" reuses the blue token, which the design system already reserves for
+// secondary/informational meaning (see prd/redesign/README.md section 4).
+export type AlertTone = 'success' | 'error' | 'info'
 
 const toneClasses: Record<AlertTone, string> = {
   success: 'border-green/30 bg-mist text-green',
   error: 'border-red-200 bg-red-50 text-red-700',
+  info: 'border-blue/30 bg-mist text-blue',
 }
 
 const toneIcon: Record<AlertTone, React.ElementType> = {
   success: CheckCircle2,
   error: AlertTriangle,
+  info: Info,
 }
 
 export interface AlertBannerProps extends React.HTMLAttributes<HTMLDivElement> {

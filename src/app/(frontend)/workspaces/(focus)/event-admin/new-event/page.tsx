@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { BracketTree } from '../../../../brackets/bracketTree'
 import {
+  getRelationshipId,
   getRelationshipLabel,
   toOptions,
   type RelationshipDoc,
@@ -24,7 +25,12 @@ import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal
 import { createEventAction } from './eventActions'
 import { addRulesetAction, addSportAction } from './sportActions'
 import { addCategoryAction } from './categoryActions'
-import { addClubAction, addPlayerAction, addTeamAction } from './participantActions'
+import {
+  addClubAction,
+  addPlayerAction,
+  addTeamAction,
+  importParticipantsAction,
+} from './participantActions'
 import { addEntryAction, saveSeedOrderAction, shuffleSeedsAction } from './entriesSeedActions'
 import { generateMatchesAction } from './generateActions'
 
@@ -58,6 +64,8 @@ const errorMessages: Record<string, string> = {
   invalid_player: 'Fill in a valid player name.',
   invalid_entry: 'Choose a category and a participant to add.',
   duplicate_entry: 'That participant is already entered in this category.',
+  invalid_import_file: 'Upload a valid .xlsx file exported from the template.',
+  empty_import: 'That file has no rows in its Clubs, Teams, or Players sheets.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
   unsupported_format:
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
@@ -173,7 +181,14 @@ export default async function NewEventWizardPage({
           {step === 'event' ? <EventStep /> : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
           {step === 'categories' && event ? <CategoriesStep payload={payload} eventId={eventId} /> : null}
-          {step === 'participants' && event ? <ParticipantsStep payload={payload} eventId={eventId} /> : null}
+          {step === 'participants' && event ? (
+            <ParticipantsStep
+              payload={payload}
+              eventId={eventId}
+              imported={get(params, 'wizardImported')}
+              importSkipped={get(params, 'wizardImportSkipped')}
+            />
+          ) : null}
           {step === 'entries' && event ? (
             <EntriesStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
           ) : null}
@@ -488,49 +503,51 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-extrabold text-ink">Sports in this event ({sports.totalDocs})</h2>
         {sports.docs.length === 0 ? <EmptyState>No sports added yet.</EmptyState> : null}
-        {sports.docs.map((sport) => (
-          <Card key={sport.id} className="flex flex-col gap-4">
-            <div>
-              <p className="text-sm font-extrabold text-ink">{sport.name}</p>
-              <p className="text-xs font-semibold text-ink-soft">
-                Rulesets: {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
-              </p>
-            </div>
-            <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
-              <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="sportId" value={sport.id} />
-              <Field label="Ruleset name" className="sm:col-span-2">
-                <Input name="name" required placeholder={`${sport.name} Standard`} />
-              </Field>
-              <Field label="Score type">
-                <Select name="scoreType" defaultValue="points">
-                  <option value="points">Points</option>
-                  <option value="goals">Goals</option>
-                  <option value="sets">Sets</option>
-                  <option value="time">Time</option>
-                  <option value="result">Result</option>
-                  <option value="custom">Custom</option>
-                </Select>
-              </Field>
-              <Field label="Best of">
-                <Input name="bestOf" type="number" min="1" />
-              </Field>
-              <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <input name="setBased" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
-                Set based
-              </label>
-              <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <input name="allowDraw" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
-                Allow draw
-              </label>
-              <div className="sm:col-span-2">
-                <Button type="submit" variant="secondary">
-                  Add ruleset
-                </Button>
+        <div className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto pr-1">
+          {sports.docs.map((sport) => (
+            <Card key={sport.id} className="flex flex-col gap-4">
+              <div>
+                <p className="text-sm font-extrabold text-ink">{sport.name}</p>
+                <p className="text-xs font-semibold text-ink-soft">
+                  Rulesets: {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
+                </p>
               </div>
-            </form>
-          </Card>
-        ))}
+              <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="sportId" value={sport.id} />
+                <Field label="Ruleset name" className="sm:col-span-2">
+                  <Input name="name" required placeholder={`${sport.name} Standard`} />
+                </Field>
+                <Field label="Score type">
+                  <Select name="scoreType" defaultValue="points">
+                    <option value="points">Points</option>
+                    <option value="goals">Goals</option>
+                    <option value="sets">Sets</option>
+                    <option value="time">Time</option>
+                    <option value="result">Result</option>
+                    <option value="custom">Custom</option>
+                  </Select>
+                </Field>
+                <Field label="Best of">
+                  <Input name="bestOf" type="number" min="1" />
+                </Field>
+                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <input name="setBased" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
+                  Set based
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <input name="allowDraw" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
+                  Allow draw
+                </label>
+                <div className="sm:col-span-2">
+                  <Button type="submit" variant="secondary">
+                    Add ruleset
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          ))}
+        </div>
       </div>
 
       <StepActions>
@@ -650,7 +667,7 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
         {categories.docs.length === 0 ? (
           <EmptyState>No categories added yet.</EmptyState>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
             {categories.docs.map((category) => (
               <div key={category.id} className="rounded-card border border-line bg-paper px-4 py-3">
                 <strong className="block text-sm font-bold text-ink">{category.name}</strong>
@@ -676,15 +693,72 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
   )
 }
 
-const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+const ParticipantsStep = async ({
+  payload,
+  eventId,
+  imported,
+  importSkipped,
+}: {
+  payload: Payload
+  eventId: string
+  imported?: string
+  importSkipped?: string
+}) => {
   const [clubs, teams, players] = await Promise.all([
     payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
-    payload.find({ collection: 'teams', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
-    payload.find({ collection: 'players', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'players', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
   ])
 
   return (
     <>
+      <AlertBanner tone="info">
+        Clubs, teams, and players added here are shared across the whole event. You&apos;ll pick
+        exactly which of them compete in each sport &amp; category in the next step (Entries &amp;
+        Seeding).
+      </AlertBanner>
+
+      {imported ? (
+        <AlertBanner tone="success">
+          Imported {imported} row(s) from the Excel file.
+          {importSkipped ? ` ${importSkipped} row(s) were skipped (duplicates or invalid data).` : ''}
+        </AlertBanner>
+      ) : null}
+
+      <Card className="flex flex-col gap-3">
+        <div>
+          <CardTitle>Bulk import from Excel</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            Got a lot of clubs, teams, or players? Download the template, fill it in, and upload it
+            here - everything gets tied to this event automatically.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button asChild variant="secondary" size="sm">
+            <a href="/workspaces/event-admin/new-event/participants-template" download>
+              Download Excel template
+            </a>
+          </Button>
+          <form
+            action={importParticipantsAction}
+            encType="multipart/form-data"
+            className="flex flex-wrap items-center gap-2"
+          >
+            <input type="hidden" name="eventId" value={eventId} />
+            <Input
+              type="file"
+              name="file"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              required
+              className="h-auto w-auto cursor-pointer border-none px-0 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-mist file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-ink"
+            />
+            <Button type="submit" size="sm">
+              Import
+            </Button>
+          </form>
+        </div>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="flex flex-col gap-4">
           <CardTitle>4. Add a club</CardTitle>
@@ -701,7 +775,7 @@ const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventI
             </Field>
             <Button type="submit">Add club</Button>
           </form>
-          <div className="flex flex-col gap-2">
+          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {clubs.docs.map((club) => (
               <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
                 <strong className="text-sm font-bold text-ink">{club.name}</strong>
@@ -732,12 +806,16 @@ const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventI
             </Field>
             <Button type="submit">Add team</Button>
           </form>
-          <div className="flex flex-col gap-2">
-            {teams.docs.map((team) => (
-              <div key={team.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                <strong className="text-sm font-bold text-ink">{team.name}</strong>
-              </div>
-            ))}
+          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+            {teams.docs.map((team) => {
+              const clubLabel = getRelationshipLabel(team.club_id as RelationshipDoc, '')
+              return (
+                <div key={team.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                  <strong className="block text-sm font-bold text-ink">{team.name}</strong>
+                  {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                </div>
+              )
+            })}
           </div>
         </Card>
       </div>
@@ -775,12 +853,16 @@ const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventI
             <Button type="submit">Add player</Button>
           </div>
         </form>
-        <div className="flex flex-col gap-2">
-          {players.docs.map((player) => (
-            <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
-              <strong className="text-sm font-bold text-ink">{player.name}</strong>
-            </div>
-          ))}
+        <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+          {players.docs.map((player) => {
+            const clubLabel = getRelationshipLabel(player.club_id as RelationshipDoc, '')
+            return (
+              <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                <strong className="block text-sm font-bold text-ink">{player.name}</strong>
+                {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+              </div>
+            )
+          })}
         </div>
       </Card>
 
@@ -795,11 +877,13 @@ const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventI
   )
 }
 
+// "pair" entries are backed by Teams (not bare Players) because Rosters always require a
+// team_id - a doubles pair is modeled as a 2-player team.
 const ParticipantModeToCollection: Record<string, 'teams' | 'clubs' | 'players'> = {
   team: 'teams',
   club: 'clubs',
+  pair: 'teams',
   individual: 'players',
-  pair: 'players',
   open: 'players',
   tbd: 'players',
 }
@@ -815,13 +899,17 @@ const EntriesStep = async ({
 }) => {
   const categories = await payload.find({
     collection: 'competition-categories',
-    depth: 0,
+    depth: 1,
     limit: 200,
     where: { event_id: { equals: eventId } },
     sort: 'name',
   })
   const selectedCategoryId = categoryId || String(categories.docs[0]?.id || '')
   const selectedCategory = categories.docs.find((c) => String(c.id) === selectedCategoryId)
+  const categoryOptions = categories.docs.map((category) => ({
+    id: String(category.id),
+    label: `${getRelationshipLabel(category.sport_id as RelationshipDoc)} — ${category.name}`,
+  }))
 
   if (!selectedCategory) {
     return (
@@ -832,11 +920,13 @@ const EntriesStep = async ({
   }
 
   const collection = ParticipantModeToCollection[String(selectedCategory.participant_mode)] || 'players'
+  // depth: 1 on sourceDocs populates each team/player's own club_id. depth: 2 on entries reaches
+  // one level further (entry -> team/player -> club) so both lists can show a club caption.
   const [sourceDocs, entries] = await Promise.all([
-    payload.find({ collection, depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection, depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({
       collection: 'competition-entries',
-      depth: 0,
+      depth: 2,
       limit: 300,
       where: { category_id: { equals: selectedCategoryId } },
       sort: 'seed_number',
@@ -845,26 +935,50 @@ const EntriesStep = async ({
 
   const enteredSourceIds = new Set(
     entries.docs.map((entry) =>
-      String(
-        collection === 'teams' ? entry.team_id
-        : collection === 'clubs' ? entry.club_id
-        : entry.player_id,
+      getRelationshipId(
+        collection === 'teams' ? (entry.team_id as RelationshipDoc)
+        : collection === 'clubs' ? (entry.club_id as RelationshipDoc)
+        : (entry.player_id as RelationshipDoc),
       ),
     ),
   )
   const availableSources = sourceDocs.docs.filter((doc) => !enteredSourceIds.has(String(doc.id)))
   const collectionLabel = collection === 'teams' ? 'teams' : collection === 'clubs' ? 'clubs' : 'players'
 
+  // A club-mode entry's own name already IS the club - only surface a secondary club caption for
+  // team/pair (via club_id) and individual (via nested team_id/player_id.club_id) participants.
+  const getSourceClubLabel = (doc: Record<string, unknown>) =>
+    collection === 'clubs'
+      ? undefined
+      : getRelationshipLabel(doc.club_id as RelationshipDoc, '') || undefined
+
+  const getEntryClubLabel = (entry: Record<string, unknown>) => {
+    if (collection === 'clubs') {
+      return undefined
+    }
+    const nested =
+      entry.team_id && typeof entry.team_id === 'object' ? (entry.team_id as Record<string, unknown>)
+      : entry.player_id && typeof entry.player_id === 'object' ? (entry.player_id as Record<string, unknown>)
+      : undefined
+    return nested ? getRelationshipLabel(nested.club_id as RelationshipDoc, '') || undefined : undefined
+  }
+
   return (
     <>
       <Card className="flex flex-col gap-4">
-        <CardTitle>5. Entries &amp; seeding</CardTitle>
+        <div>
+          <CardTitle>5. Entries &amp; seeding</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            This is where participants get assigned into a specific sport &amp; category. Pick one
+            below, then add entries and seed them underneath.
+          </p>
+        </div>
         <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="step" value="entries" />
-          <Field label="Category" className="min-w-[200px] flex-1">
+          <Field label="Sport & category" className="min-w-[240px] flex-1">
             <Select name="categoryId" defaultValue={selectedCategoryId}>
-              {toOptions(categories.docs).map((category) => (
+              {categoryOptions.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.label}
                 </option>
@@ -878,26 +992,51 @@ const EntriesStep = async ({
       </Card>
 
       <Card className="flex flex-col gap-2">
-        <CardTitle>Add {collectionLabel} as entries</CardTitle>
-        {availableSources.length === 0 ? (
-          <EmptyState>Everyone eligible is already entered, or none exist yet.</EmptyState>
+        <CardTitle>
+          Add {collectionLabel} as entries into {getRelationshipLabel(selectedCategory as RelationshipDoc)}
+        </CardTitle>
+        <p className="text-xs text-ink-soft">
+          This category&apos;s participant mode ({String(selectedCategory.participant_mode)}) only
+          accepts {collectionLabel} as entries.
+        </p>
+        {sourceDocs.totalDocs === 0 ? (
+          <EmptyState>
+            No {collectionLabel} exist for this event yet.{' '}
+            <Link
+              href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}
+              className="font-bold text-blue underline"
+            >
+              Go back to step 4
+            </Link>{' '}
+            to add some, then come back here.
+          </EmptyState>
+        ) : availableSources.length === 0 ? (
+          <EmptyState>All {collectionLabel} in this event are already entered here.</EmptyState>
         ) : (
-          <div className="flex flex-col gap-2">
-            {availableSources.map((source) => (
-              <form
-                action={addEntryAction}
-                key={source.id}
-                className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
-              >
-                <input type="hidden" name="eventId" value={eventId} />
-                <input type="hidden" name="categoryId" value={selectedCategoryId} />
-                <input type="hidden" name="sourceId" value={source.id} />
-                <strong className="min-w-0 truncate text-sm font-bold text-ink">{source.name}</strong>
-                <Button type="submit" size="sm" variant="secondary">
-                  Add as entry
-                </Button>
-              </form>
-            ))}
+          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
+            {availableSources.map((source) => {
+              const clubLabel = getSourceClubLabel(source)
+              return (
+                <form
+                  action={addEntryAction}
+                  key={source.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
+                >
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                  <input type="hidden" name="sourceId" value={source.id} />
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-bold text-ink">{source.name}</strong>
+                    {clubLabel ? (
+                      <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
+                    ) : null}
+                  </div>
+                  <Button type="submit" size="sm" variant="secondary">
+                    Add as entry
+                  </Button>
+                </form>
+              )
+            })}
           </div>
         )}
       </Card>
@@ -918,17 +1057,25 @@ const EntriesStep = async ({
             <form action={saveSeedOrderAction} className="flex flex-col gap-3">
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
+              <div className="max-h-80 overflow-y-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10">
                   <TableRow>
                     <TableHead>Participant</TableHead>
                     <TableHead>Seed</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries.docs.map((entry) => (
+                  {entries.docs.map((entry) => {
+                    const clubLabel = getEntryClubLabel(entry)
+                    return (
                     <TableRow key={entry.id}>
-                      <TableCell className="font-bold">{entry.display_name}</TableCell>
+                      <TableCell className="font-bold">
+                        {entry.display_name}
+                        {clubLabel ? (
+                          <span className="block text-xs font-normal text-ink-soft">{clubLabel}</span>
+                        ) : null}
+                      </TableCell>
                       <TableCell>
                         <Input
                           name={`seed_${entry.id}`}
@@ -939,9 +1086,11 @@ const EntriesStep = async ({
                         />
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
+              </div>
               <div>
                 <Button type="submit">Save Order</Button>
               </div>
@@ -992,7 +1141,7 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
           manually in the Scheduler workspace.
         </p>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
         {categoriesWithCounts.map(({ category, confirmedCount }) => (
           <form
             action={generateMatchesAction}
@@ -1134,7 +1283,7 @@ const RoundRobinFixtureList = async ({ payload, stageId }: { payload: Payload; s
       {matches.docs.length === 0 ? (
         <EmptyState>No fixtures generated yet.</EmptyState>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-1">
           {matches.docs.map((match) => (
             <div key={match.id} className="rounded-card border border-line bg-paper px-4 py-3">
               <strong className="block text-sm font-bold text-ink">{match.match_number}</strong>

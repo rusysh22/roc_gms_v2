@@ -2,10 +2,13 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { Crown } from 'lucide-react'
+import { Crown, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketRound } from '@/lib/brackets'
+import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { updateBracketMatchAction } from './bracketModalActions'
 
@@ -36,6 +39,7 @@ const formatMatchDate = (value?: string) => {
 type GLootParticipant = {
   id: string
   name: string
+  subLabel?: string
   isWinner: boolean
   status: 'PLAYED' | null
   resultText: string | null
@@ -51,6 +55,8 @@ type GLootMatch = {
   href?: string
   participantAName?: string
   participantBName?: string
+  participantASubLabel?: string
+  participantBSubLabel?: string
   participants: GLootParticipant[]
 }
 
@@ -160,10 +166,13 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
           href: realMatch.detail_href,
           participantAName: realMatch.participant_a.label,
           participantBName: realMatch.participant_b.label,
+          participantASubLabel: realMatch.participant_a.subLabel,
+          participantBSubLabel: realMatch.participant_b.subLabel,
           participants: [
             {
               id: String(byeParticipant.id),
               name: byeParticipant.label,
+              subLabel: byeParticipant.subLabel,
               isWinner: true,
               status: null,
               resultText: null,
@@ -189,6 +198,7 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
         participants.push({
           id: String(participant.id),
           name: participant.label,
+          subLabel: participant.subLabel,
           isWinner: participant.isWinner,
           status: score !== undefined || participant.isWinner ? 'PLAYED' : null,
           resultText:
@@ -219,6 +229,7 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
 type GLootPartyProp = {
   id?: string | number
   name?: string
+  subLabel?: string
   resultText?: string | null
 }
 
@@ -304,6 +315,11 @@ const CustomMatch = ({
         >
           <div style={{ color: topColor, fontWeight: topWon ? 700 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {topParty?.name}
+            {topParty?.subLabel ? (
+              <span style={{ marginLeft: 6, fontSize: '0.7rem', fontWeight: 400, opacity: 0.65 }}>
+                {topParty.subLabel}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: 'flex', height: '100%', padding: '0 1rem', alignItems: 'center', justifyContent: 'center', width: '20%', color: topColor, fontWeight: 700 }}>
             {topParty?.resultText}
@@ -326,6 +342,11 @@ const CustomMatch = ({
         >
           <div style={{ color: bottomColor, fontWeight: bottomWon ? 700 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {bottomParty?.name}
+            {bottomParty?.subLabel ? (
+              <span style={{ marginLeft: 6, fontSize: '0.7rem', fontWeight: 400, opacity: 0.65 }}>
+                {bottomParty.subLabel}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: 'flex', height: '100%', padding: '0 1rem', alignItems: 'center', justifyContent: 'center', width: '20%', color: bottomColor, fontWeight: 700 }}>
             {bottomParty?.resultText}
@@ -425,15 +446,105 @@ export const BracketTree = ({
     <div>
       <ChampionBanner champion={champion} />
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/50" />
-          <Dialog.Content className="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-xl -translate-y-1/2 rounded-panel bg-paper p-6 shadow-xl" aria-describedby={undefined}>
-            <Dialog.Title className="text-xl font-extrabold text-ink">{selectedMatch?.name || 'Match details'}</Dialog.Title>
-            <p className="mt-1 text-sm text-ink-soft">{selectedMatch?.participantAName || 'TBD'} vs {selectedMatch?.participantBName || 'TBD'}</p>
-            {selectedMatch ? <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <form action={updateBracketMatchAction} className="grid gap-3 rounded-card border border-line p-4"><input type="hidden" name="intent" value="score" /><input type="hidden" name="matchId" value={selectedMatch.id} /><input type="hidden" name="matchNumber" value={selectedMatch.name} /><h3 className="font-bold">Update result</h3><p className="text-xs text-ink-soft">Winner is determined automatically from the higher score.</p><label><span>{selectedMatch.participantAName || 'Participant A'}</span><input name="scoreA" type="number" min="0" required /></label><label><span>{selectedMatch.participantBName || 'Participant B'}</span><input name="scoreB" type="number" min="0" required /></label><label className="flex gap-2"><input name="addSet" type="checkbox" /><span>Add a new set</span></label><button type="submit">Save result</button></form>
-              <form action={updateBracketMatchAction} className="grid gap-3 rounded-card border border-line p-4"><input type="hidden" name="intent" value="schedule" /><input type="hidden" name="matchId" value={selectedMatch.id} /><input type="hidden" name="matchNumber" value={selectedMatch.name} /><h3 className="font-bold">Set schedule</h3><label><span>Start</span><input name="scheduledStart" type="datetime-local" required /></label><label><span>End</span><input name="scheduledEnd" type="datetime-local" required /></label><button type="submit">Save schedule</button></form>
-            </div> : null}
-            <Dialog.Close asChild><button type="button" className="mt-5">Close</button></Dialog.Close>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm" />
+          <Dialog.Content
+            className="fixed inset-x-4 top-1/2 z-50 mx-auto flex max-h-[85vh] w-auto max-w-xl -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-panel border border-line bg-paper p-6 shadow-xl outline-none"
+            aria-describedby={undefined}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Match details</p>
+                <Dialog.Title className="mt-0.5 truncate text-xl font-extrabold text-ink">
+                  {selectedMatch?.name || 'Match'}
+                </Dialog.Title>
+              </div>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-mist hover:text-ink"
+                >
+                  <X className="h-4.5 w-4.5" aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+
+            {selectedMatch ? (
+              <>
+                <div className="flex items-center justify-between gap-3 rounded-card bg-mist px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-ink">
+                      {selectedMatch.participantAName || 'TBD'}
+                    </p>
+                    {selectedMatch.participantASubLabel ? (
+                      <p className="truncate text-xs text-ink-soft">{selectedMatch.participantASubLabel}</p>
+                    ) : null}
+                  </div>
+                  <span className="shrink-0 text-xs font-bold text-ink-soft">vs</span>
+                  <div className="min-w-0 text-right">
+                    <p className="truncate text-sm font-bold text-ink">
+                      {selectedMatch.participantBName || 'TBD'}
+                    </p>
+                    {selectedMatch.participantBSubLabel ? (
+                      <p className="truncate text-xs text-ink-soft">{selectedMatch.participantBSubLabel}</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <form
+                    action={updateBracketMatchAction}
+                    className="flex flex-col gap-3 rounded-card border border-line p-4"
+                  >
+                    <input type="hidden" name="intent" value="score" />
+                    <input type="hidden" name="matchId" value={selectedMatch.id} />
+                    <input type="hidden" name="matchNumber" value={selectedMatch.name} />
+                    <div>
+                      <h3 className="text-sm font-extrabold text-ink">Update result</h3>
+                      <p className="text-xs text-ink-soft">
+                        Winner is determined automatically from the higher score.
+                      </p>
+                    </div>
+                    <Field label={selectedMatch.participantAName || 'Participant A'}>
+                      <Input name="scoreA" type="number" min="0" required />
+                    </Field>
+                    <Field label={selectedMatch.participantBName || 'Participant B'}>
+                      <Input name="scoreB" type="number" min="0" required />
+                    </Field>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                      <input
+                        name="addSet"
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                      />
+                      Add a new set
+                    </label>
+                    <Button type="submit" className="mt-1">
+                      Save result
+                    </Button>
+                  </form>
+
+                  <form
+                    action={updateBracketMatchAction}
+                    className="flex flex-col gap-3 rounded-card border border-line p-4"
+                  >
+                    <input type="hidden" name="intent" value="schedule" />
+                    <input type="hidden" name="matchId" value={selectedMatch.id} />
+                    <input type="hidden" name="matchNumber" value={selectedMatch.name} />
+                    <h3 className="text-sm font-extrabold text-ink">Set schedule</h3>
+                    <Field label="Start">
+                      <Input name="scheduledStart" type="datetime-local" required />
+                    </Field>
+                    <Field label="End">
+                      <Input name="scheduledEnd" type="datetime-local" required />
+                    </Field>
+                    <Button type="submit" variant="secondary" className="mt-auto">
+                      Save schedule
+                    </Button>
+                  </form>
+                </div>
+              </>
+            ) : null}
           </Dialog.Content>
         </Dialog.Portal>
       <div ref={containerRef} className="overflow-hidden rounded-panel border border-line">

@@ -36,9 +36,16 @@ type BracketMatchSet = {
   participant_b_score?: number | null
 }
 
+type CompetitionEntryDoc = RelationshipDoc & {
+  entry_type?: string | null
+  team_id?: (RelationshipDoc & { club_id?: RelationshipDoc | Id | null }) | Id | null
+  player_id?: (RelationshipDoc & { club_id?: RelationshipDoc | Id | null }) | Id | null
+}
+
 export type BracketParticipant = {
   id?: Id
   label: string
+  subLabel?: string
   seed?: number
   isWinner: boolean
   isPlaceholder: boolean
@@ -173,16 +180,57 @@ const buildSetScore = (sets: BracketMatchSet[]) => {
 const buildParticipant = (
   value: RelationshipDoc | Id | null | undefined,
   winnerId: Id | undefined,
+  clubLabelByEntryId: Map<string, string>,
 ): BracketParticipant => {
   const participantId = getRelationshipId(value)
 
   return {
     id: participantId,
     label: getRelationshipLabel(value),
+    subLabel: participantId ? clubLabelByEntryId.get(String(participantId)) : undefined,
     seed: getRelationshipSeed(value),
     isWinner: idsEqual(participantId, winnerId),
     isPlaceholder: !participantId,
   }
+}
+
+// A club-mode entry's own label already IS the club name, so only team/pair (via team_id) and
+// individual (via player_id) entries get a secondary club caption - looked up in one batched query
+// per bracket render rather than raising the whole matches query's depth (which would also
+// needlessly deep-populate event_id/category_id/stage_id on every match row).
+const collectEntryClubLabels = async (
+  payload: Payload,
+  entryIds: Id[],
+): Promise<Map<string, string>> => {
+  const clubLabelByEntryId = new Map<string, string>()
+  if (entryIds.length === 0) {
+    return clubLabelByEntryId
+  }
+
+  const entries = await payload.find({
+    collection: 'competition-entries',
+    depth: 2,
+    limit: entryIds.length,
+    where: { id: { in: entryIds } },
+  })
+
+  for (const entry of entries.docs as CompetitionEntryDoc[]) {
+    if (entry.entry_type === 'club') {
+      continue
+    }
+
+    const nested =
+      entry.team_id && typeof entry.team_id === 'object' ? entry.team_id
+      : entry.player_id && typeof entry.player_id === 'object' ? entry.player_id
+      : undefined
+    const club = nested?.club_id
+    const clubLabel = club && typeof club === 'object' ? club.name : undefined
+    if (clubLabel) {
+      clubLabelByEntryId.set(String(entry.id), clubLabel)
+    }
+  }
+
+  return clubLabelByEntryId
 }
 
 export const detectSingleEliminationChampion = (
@@ -281,28 +329,36 @@ export const buildSingleEliminationBracketLayout = async (
     },
   })
   const matches = matchesResult.docs as BracketMatch[]
-  const rounds = new Map<string, BracketMatchCard[]>()
   const entryIds = new Set<string>()
-
-  for (const match of matches) {
-    const matchSets = await payload.find({
-      collection: 'match-sets',
-      depth: 0,
-      limit: 50,
-      sort: 'set_number',
-      where: {
-        match_id: {
-          equals: match.id,
+  const matchesWithSets = await Promise.all(
+    matches.map(async (match) => {
+      const matchSets = await payload.find({
+        collection: 'match-sets',
+        depth: 0,
+        limit: 50,
+        sort: 'set_number',
+        where: {
+          match_id: {
+            equals: match.id,
+          },
         },
-      },
-    })
+      })
+
+      const participantAId = getRelationshipId(match.participant_a_entry_id)
+      const participantBId = getRelationshipId(match.participant_b_entry_id)
+      if (participantAId) entryIds.add(String(participantAId))
+      if (participantBId) entryIds.add(String(participantBId))
+
+      return { match, matchSets: matchSets.docs as unknown as BracketMatchSet[] }
+    }),
+  )
+
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, Array.from(entryIds))
+
+  const rounds = new Map<string, BracketMatchCard[]>()
+  for (const { match, matchSets } of matchesWithSets) {
     const roundName = match.round_name || 'Single Elimination'
     const winnerId = getRelationshipId(match.winner_entry_id)
-    const participantAId = getRelationshipId(match.participant_a_entry_id)
-    const participantBId = getRelationshipId(match.participant_b_entry_id)
-
-    if (participantAId) entryIds.add(String(participantAId))
-    if (participantBId) entryIds.add(String(participantBId))
 
     const roundMatches = rounds.get(roundName) || []
     roundMatches.push({
@@ -313,10 +369,10 @@ export const buildSingleEliminationBracketLayout = async (
       status: match.status,
       winner_entry_id: winnerId,
       score_summary: match.score_summary || undefined,
-      set_score: buildSetScore(matchSets.docs as unknown as BracketMatchSet[]),
+      set_score: buildSetScore(matchSets),
       detail_href: `/matches/${match.match_number}`,
-      participant_a: buildParticipant(match.participant_a_entry_id, winnerId),
-      participant_b: buildParticipant(match.participant_b_entry_id, winnerId),
+      participant_a: buildParticipant(match.participant_a_entry_id, winnerId, clubLabelByEntryId),
+      participant_b: buildParticipant(match.participant_b_entry_id, winnerId, clubLabelByEntryId),
     })
     rounds.set(roundName, roundMatches)
   }
