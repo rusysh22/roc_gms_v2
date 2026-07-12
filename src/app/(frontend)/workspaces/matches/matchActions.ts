@@ -1,15 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { headers as getHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload, type Payload } from 'payload'
+import type { Payload } from 'payload'
 
-import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
+import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import { isValidTransition } from './matchLifecycle'
 
 type MinimalMatch = {
@@ -33,6 +32,7 @@ type MinimalStage = {
 
 type MinimalMatchSet = {
   id: string | number
+  match_id?: string | number | null
   set_number: number
   participant_a_score?: number | null
   participant_b_score?: number | null
@@ -57,8 +57,12 @@ const parseScore = (value: FormDataEntryValue | null) => {
   return Math.round(parsed)
 }
 
-const findMatchByNumber = async (matchNumber: string) => {
-  const payload = await getPayload({ config })
+const getSafeReturnTo = (formData: FormData, fallback: string) => {
+  const returnTo = toStringField(formData.get('returnTo'))
+  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : fallback
+}
+
+const findMatchByNumber = async (payload: Payload, matchNumber: string) => {
   const matches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -76,12 +80,6 @@ const revalidateMatch = (matchNumber: string) => {
   revalidatePath('/brackets')
   revalidatePath('/workspaces/standings')
   revalidatePath('/workspaces/brackets')
-}
-
-const getActorUserId = async (payload: Payload): Promise<string | number | null> => {
-  const headersList = await getHeaders()
-  const { user } = await payload.auth({ headers: headersList })
-  return user?.id ?? null
 }
 
 const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
@@ -223,19 +221,27 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
   const matchNumber = toStringField(formData.get('matchNumber'))
   const targetStatus = toStringField(formData.get('targetStatus'))
   const winnerSide = toStringField(formData.get('winnerSide'))
+  const returnTo = getSafeReturnTo(
+    formData,
+    matchNumber ? `/workspaces/matches/${matchNumber}` : '/workspaces/match-officer',
+  )
 
   if (!matchNumber || !targetStatus) {
-    redirect(`/workspaces/matches/${matchNumber || ''}?matchError=invalid_request`)
+    redirect(`${returnTo}?matchError=invalid_request`)
   }
 
-  const { payload, match } = await findMatchByNumber(matchNumber)
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
 
   if (!match) {
-    redirect(`/workspaces/matches/${matchNumber}?matchError=not_found`)
+    redirect(`${returnTo}?matchError=not_found`)
   }
 
   if (!isValidTransition(match.status, targetStatus)) {
-    redirect(`/workspaces/matches/${matchNumber}?matchError=invalid_transition`)
+    redirect(`${returnTo}?matchError=invalid_transition`)
   }
 
   const updateData: Record<string, unknown> = { status: targetStatus }
@@ -274,7 +280,7 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     data: updateData,
   })
 
-  const actorUserId = await getActorUserId(payload)
+  const actorUserId = user.id
 
   await recordAuditLog({
     payload,
@@ -295,7 +301,7 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
   })
 
   revalidateMatch(matchNumber)
-  redirect(`/workspaces/matches/${matchNumber}?matchUpdated=1`)
+  redirect(`${returnTo}?matchUpdated=1`)
 }
 
 export async function updateMatchSetScoreAction(formData: FormData): Promise<void> {
@@ -303,21 +309,31 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
   const matchSetId = toStringField(formData.get('matchSetId'))
   const winnerSide = toStringField(formData.get('winnerSide'))
   const notes = toStringField(formData.get('notes'))
+  const revisionReason = toStringField(formData.get('revisionReason'))
   const participantAScore = parseScore(formData.get('participantAScore'))
   const participantBScore = parseScore(formData.get('participantBScore'))
 
+  const returnTo = getSafeReturnTo(
+    formData,
+    `/workspaces/matches/${matchNumber || ''}`,
+  )
+
   if (!matchNumber || !matchSetId) {
-    redirect(`/workspaces/matches/${matchNumber || ''}?matchError=invalid_request`)
+    redirect(`${returnTo}?matchError=invalid_request`)
   }
 
   if (participantAScore === null || participantBScore === null) {
-    redirect(`/workspaces/matches/${matchNumber}?matchError=invalid_score`)
+    redirect(`${returnTo}?matchError=invalid_score`)
   }
 
-  const { payload, match } = await findMatchByNumber(matchNumber)
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
 
   if (!match) {
-    redirect(`/workspaces/matches/${matchNumber}?matchError=not_found`)
+    redirect(`${returnTo}?matchError=not_found`)
   }
 
   const winnerEntryId =
@@ -332,6 +348,18 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     id: matchSetId,
     depth: 0,
   })) as MinimalMatchSet
+
+  if (String(existingSet.match_id || '') !== String(match.id)) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const lockedResult = ['finished', 'result_published'].includes(match.status)
+  const canReviseFinishedScore = user.roles?.some((role) =>
+    ['super_admin', 'event_admin'].includes(role),
+  )
+  if (lockedResult && (!canReviseFinishedScore || !revisionReason)) {
+    redirect(`${returnTo}?matchError=${canReviseFinishedScore ? 'revision_reason_required' : 'revision_requires_approval'}`)
+  }
 
   const beforeSnapshot = {
     participant_a_score: existingSet.participant_a_score ?? null,
@@ -352,15 +380,15 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     data: afterSnapshot,
   })
 
-  const actorUserId = await getActorUserId(payload)
+  const actorUserId = user.id
 
   await recordAuditLog({
     payload,
-    action: 'match_set.score_update',
+    action: lockedResult ? 'match_set.score_revision' : 'match_set.score_update',
     entityType: 'match-sets',
     entityId: matchSetId,
     before: beforeSnapshot,
-    after: afterSnapshot,
+    after: { ...afterSnapshot, revision_reason: lockedResult ? revisionReason : null },
     actorUserId,
   })
 
@@ -373,20 +401,28 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
   })
 
   revalidateMatch(matchNumber)
-  redirect(`/workspaces/matches/${matchNumber}?matchUpdated=1`)
+  redirect(`${returnTo}?matchUpdated=1`)
 }
 
 export async function addMatchSetAction(formData: FormData): Promise<void> {
   const matchNumber = toStringField(formData.get('matchNumber'))
+  const returnTo = getSafeReturnTo(
+    formData,
+    matchNumber ? `/workspaces/matches/${matchNumber}` : '/workspaces/scheduler',
+  )
 
   if (!matchNumber) {
-    redirect('/workspaces/scheduler?matchError=invalid_request')
+    redirect(`${returnTo}?matchError=invalid_request`)
   }
 
-  const { payload, match } = await findMatchByNumber(matchNumber)
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
 
   if (!match) {
-    redirect(`/workspaces/matches/${matchNumber}?matchError=not_found`)
+    redirect(`${returnTo}?matchError=not_found`)
   }
 
   const existingSets = await payload.find({
@@ -410,7 +446,7 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     },
   })
 
-  const actorUserId = await getActorUserId(payload)
+  const actorUserId = user.id
 
   await recordAuditLog({
     payload,
@@ -435,5 +471,5 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
   })
 
   revalidateMatch(matchNumber)
-  redirect(`/workspaces/matches/${matchNumber}?matchUpdated=1`)
+  redirect(`${returnTo}?matchUpdated=1`)
 }

@@ -1,12 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { headers as getHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload } from 'payload'
 
-import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
+import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 
 const ALLOWED_ADMIN_COMMENT_TYPES = new Set(['internal', 'official_note'])
 
@@ -32,7 +30,10 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
     redirect(`/workspaces/matches/${matchNumber}?commentError=missing_body`)
   }
 
-  const payload = await getPayload({ config })
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo: `/workspaces/matches/${matchNumber}`,
+  })
   const matches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -45,11 +46,9 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
     redirect(`/workspaces/matches/${matchNumber}?commentError=not_found`)
   }
 
-  const headersList = await getHeaders()
-  const { user } = await payload.auth({ headers: headersList })
-  const actorUserId = user?.id ?? null
+  const actorUserId = user.id
   const resolvedAuthorName =
-    authorName === 'System / Unknown' && user && 'name' in user && typeof user.name === 'string'
+    authorName === 'System / Unknown' && typeof user.name === 'string'
       ? user.name
       : authorName
 

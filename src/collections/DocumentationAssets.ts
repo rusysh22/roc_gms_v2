@@ -1,7 +1,7 @@
 import path from 'path'
 import type { CollectionConfig } from 'payload'
 
-import { canManageMatches } from '@/access/roles'
+import { canManageMatches, canReadDocumentation } from '@/access/roles'
 
 export const DocumentationAssets: CollectionConfig = {
   slug: 'documentation-assets',
@@ -13,7 +13,7 @@ export const DocumentationAssets: CollectionConfig = {
   access: {
     create: canManageMatches,
     delete: canManageMatches,
-    read: () => true,
+    read: canReadDocumentation,
     update: canManageMatches,
   },
   upload: {

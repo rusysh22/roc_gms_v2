@@ -3,7 +3,7 @@
 Owner: Rusydani  
 Project: `roc_gms_v2`  
 Status: Active  
-Last updated: 2026-07-03 (D024 added)
+Last updated: 2026-07-03 (D026 added)
 
 ## 1. Purpose
 
@@ -648,6 +648,70 @@ Future Phase 7 hardening can add richer side-panel UX, true draft preview routin
 collections, field-level permission messaging, autosave/review workflow, and more editable regions.
 Every public edit mutation should continue to enforce role checks server-side and write audit logs.
 
+### D025 - Live score foundation reuses audited match-set mutations before realtime
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Phase 8 starts with `/workspaces/matches/[matchNumber]/live-score`, a full-screen Match Officer route
+that reuses the existing match lifecycle and match-set score Server Actions. The live-score screen
+passes a safe `returnTo` path into those actions so point changes and set creation return to the
+full-screen route, while preserving the existing server-side validation, audit logging, standing cache
+refresh, bracket cache refresh, and winner advancement behavior. The first UI foundation supports
+selected-participant scoring, a large add-point action, a decrement/undo-style action zone, set
+creation, quick lifecycle buttons, and confirmed final result publishing. WebSocket/SSE, public live
+polling, offline mode, and a separate score-action event stream are deferred.
+
+Reason:
+
+Reusing the existing audited mutation path keeps Phase 8 small and avoids creating a second scoring
+truth source before the foundation is proven on mobile.
+
+Impact:
+
+Future live-score hardening can add dedicated score-action history, true undo of the last audited
+action, public polling or realtime broadcast, timers/period clocks, and sport-specific scoring rules.
+Those additions should keep Match/MatchSet as the authoritative persisted score state unless a later
+decision changes the model.
+
+### D026 - Custom workspaces use shared server-side role guards
+
+Date: 2026-07-03  
+Status: accepted
+
+Decision:
+
+Custom workspace routes and workspace Server Actions now use a shared guard in
+`src/app/(frontend)/workspaces/workspaceAuth.tsx`. Anonymous users are redirected to
+`/admin/login?redirect=<workspace path>`. Authenticated users without the required role see an
+unauthorized workspace state on pages, and Server Actions redirect before reading or writing
+protected data. The guard hydrates the authenticated user through Payload Local API with
+`overrideAccess` before checking roles so non-super-admin users are not accidentally denied because
+the `users.roles` field is hidden by field access rules.
+
+Workspace role mapping:
+
+- Event Admin: `super_admin`, `event_admin`
+- Scheduler: `super_admin`, `event_admin`, `scheduler`
+- Match Officer, match detail, live score, match/documentation/comment mutations:
+  `super_admin`, `event_admin`, `match_officer`
+- Content Admin: `super_admin`, `event_admin`, `content_admin`
+- Brackets and Standings: `super_admin`, `event_admin`
+
+Reason:
+
+The previous workspace pages and mutation actions were usable without consistent session and role
+checks. Hardening this layer before more live-score or advanced-format work prevents public or
+wrong-role users from reaching operational controls or posting directly to Server Actions.
+
+Impact:
+
+Future workspace pages and Server Actions should use `requireWorkspaceAccess` and
+`assertWorkspaceActionAccess` rather than calling `payload.auth()` ad hoc. Public routes remain open
+unless they are explicitly admin preview/edit surfaces.
+
 ## 3. Pending Decisions
 
 - Decide whether public comments require login.
@@ -658,3 +722,11 @@ Every public edit mutation should continue to enforce role checks server-side an
 - Decide public-facing copy language (Bahasa Indonesia, English, or bilingual) - `prd/redesign/README.md`
   section 8 open question; internal code/routes/db stay English per D001 either way.
 - Decide rollout shape for redesign PRs (one large PR per R-phase vs. page-by-page within R2).
+# 2026-07-11 — Security and guided workflow hardening
+
+- Public documentation reads are restricted at the Payload collection boundary to `visibility = public`; authenticated backoffice users retain their appropriate access.
+- Public match API reads are restricted to `is_public = true`. Match-set data is backoffice-only at the API boundary; public match pages must use their existing public match data flow rather than exposing set records broadly.
+- Finished/result-published score changes are treated as revisions: only super admins and event admins can apply them, and a reason is required. Match officers can continue entering ongoing scores but receive a clear escalation error for locked results.
+- Scheduler access includes the standings and brackets workspaces because those recalculation tools align with schedule-management responsibility. Scheduler cards deliberately do not link to Match Officer-only detail routes.
+- `content_admin` cannot edit event public fields. Article and announcement inline editing remains authorized for content admins.
+- The initial guided interface scope is Club create/edit and Scheduler match create/reschedule. Hard deletion and reschedule history UI are deferred; create/reschedule events are retained as structured audit logs.

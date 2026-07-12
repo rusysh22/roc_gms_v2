@@ -13,6 +13,7 @@ services:
         condition: service_started
     environment:
       DATABASE_URL: postgres://roc_gms:roc_gms_password@postgres:5432/roc_gms
+      # Local-only demo default. Production must supply PAYLOAD_SECRET and DATABASE_URL.
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-development-secret-change-me}
       NEXT_PUBLIC_SERVER_URL: http://localhost:3000
       PAYLOAD_ADMIN_AUTOLOGIN: ${PAYLOAD_ADMIN_AUTOLOGIN:-false}

@@ -1,3 +1,13 @@
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+import { Crown } from 'lucide-react'
+
+import { cn } from '@/lib/utils'
+import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
 export type RelationshipDoc = {
   id?: string | number
   name?: string
@@ -189,6 +199,36 @@ export const toOptions = (docs: unknown[]): WorkspaceOption[] =>
     })
     .filter((option) => option.id)
 
+export const PageHero = ({
+  eyebrow,
+  title,
+  summary,
+  actions,
+}: {
+  eyebrow: string
+  title: ReactNode
+  summary?: ReactNode
+  actions?: ReactNode
+}) => (
+  <section className="mb-6">
+    <p className="text-xs font-bold tracking-wide text-green uppercase">{eyebrow}</p>
+    <h1 className="mt-1 text-2xl font-extrabold text-ink md:text-3xl">{title}</h1>
+    {summary ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">{summary}</p> : null}
+    {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}
+  </section>
+)
+
+export const StatGrid = ({ children }: { children: ReactNode }) => (
+  <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</section>
+)
+
+const statTextTone: Record<'default' | 'good' | 'warn' | 'alert', string> = {
+  default: 'text-ink',
+  good: 'text-green',
+  warn: 'text-gold',
+  alert: 'text-red-600',
+}
+
 export const StatBlock = ({
   label,
   value,
@@ -198,90 +238,101 @@ export const StatBlock = ({
   value: string | number
   tone?: 'default' | 'good' | 'warn' | 'alert'
 }) => (
-  <div className={`workspace-stat workspace-stat--${tone}`}>
-    <span>{label}</span>
-    <strong>{value}</strong>
-  </div>
+  <Card className="flex flex-col gap-1">
+    <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">{label}</span>
+    <strong className={cn('text-2xl font-extrabold tabular-nums', statTextTone[tone])}>{value}</strong>
+  </Card>
 )
 
 export const MatchCard = ({
   match,
   compact = false,
+  detailsHref,
 }: {
   match: WorkspaceMatch
   compact?: boolean
+  detailsHref?: string | null
 }) => (
-  <article className={compact ? 'match-card match-card--compact' : 'match-card'}>
-    <div className="match-card__topline">
-      <span>{getRelationshipLabel(match.sport_id)}</span>
-      <span>{formatStatus(match.status)}</span>
+  <Card interactive={detailsHref !== null} className={cn('flex flex-col gap-3', compact && 'gap-2 p-3')}>
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+        {getRelationshipLabel(match.sport_id)}
+      </span>
+      <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
     </div>
 
     <div>
-      <p className="match-meta">{getRelationshipLabel(match.category_id)}</p>
-      <h2>{match.match_number}</h2>
-      <p className="match-round">{match.round_name || 'Match'}</p>
+      <p className="text-xs font-semibold text-ink-soft">{getRelationshipLabel(match.category_id)}</p>
+      <h2 className="text-lg font-extrabold text-ink">{match.match_number}</h2>
+      <p className="text-sm font-semibold text-ink-soft">{match.round_name || 'Match'}</p>
     </div>
 
-    <div className="match-participants">
-      <span>{getRelationshipLabel(match.participant_a_entry_id)}</span>
-      <strong>vs</strong>
-      <span>{getRelationshipLabel(match.participant_b_entry_id)}</span>
+    <div className="flex items-center justify-between gap-2 rounded-card bg-mist px-3 py-2 text-sm font-bold text-ink">
+      <span className="min-w-0 truncate">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+      <span className="shrink-0 text-xs font-bold text-ink-soft">vs</span>
+      <span className="min-w-0 truncate text-right">{getRelationshipLabel(match.participant_b_entry_id)}</span>
     </div>
 
-    <dl className="match-details">
-      <div>
-        <dt>Time</dt>
-        <dd>{formatDateTime(match.scheduled_start_at)}</dd>
-      </div>
-      <div>
-        <dt>Venue</dt>
-        <dd>{getRelationshipLabel(match.venue_id)}</dd>
-      </div>
-      <div>
-        <dt>Court</dt>
-        <dd>{getRelationshipLabel(match.court_id)}</dd>
-      </div>
-      <div>
-        <dt>Source</dt>
-        <dd>{formatStatus(match.generation_source || 'manual')}</dd>
-      </div>
-    </dl>
+    {compact ? null : (
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <div>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Time</dt>
+          <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
+        </div>
+        <div>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Venue</dt>
+          <dd className="font-semibold text-ink">{getRelationshipLabel(match.venue_id)}</dd>
+        </div>
+        <div>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Court</dt>
+          <dd className="font-semibold text-ink">{getRelationshipLabel(match.court_id)}</dd>
+        </div>
+        <div>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Source</dt>
+          <dd className="font-semibold text-ink">{formatStatus(match.generation_source || 'manual')}</dd>
+        </div>
+      </dl>
+    )}
 
-    <a className="match-card__details-link" href={`/workspaces/matches/${match.match_number}`}>
-      Match details
-    </a>
-  </article>
+    {detailsHref !== null ? (
+      <Link
+        href={detailsHref || `/workspaces/matches/${match.match_number}`}
+        className="text-sm font-bold text-blue no-underline hover:underline"
+      >
+        Match details →
+      </Link>
+    ) : null}
+  </Card>
 )
 
 export const MatchSetsTable = ({ sets }: { sets: WorkspaceMatchSet[] }) => {
   if (sets.length === 0) {
-    return <p className="empty-state">No match sets recorded yet.</p>
+    return <EmptyState>No match sets recorded yet.</EmptyState>
   }
 
   return (
-    <table className="match-sets-table">
-      <thead>
-        <tr>
-          <th>Set</th>
-          <th>Participant A</th>
-          <th>Participant B</th>
-          <th>Winner</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Set</TableHead>
+          <TableHead>Participant A</TableHead>
+          <TableHead>Participant B</TableHead>
+          <TableHead>Winner</TableHead>
+          <TableHead>Notes</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {sets.map((set) => (
-          <tr key={set.id}>
-            <td>{set.set_number}</td>
-            <td>{set.participant_a_score ?? '-'}</td>
-            <td>{set.participant_b_score ?? '-'}</td>
-            <td>{getRelationshipLabel(set.winner_entry_id, 'Not decided')}</td>
-            <td>{set.notes || '-'}</td>
-          </tr>
+          <TableRow key={set.id}>
+            <TableCell className="font-extrabold">{set.set_number}</TableCell>
+            <TableCell className="tabular-nums">{set.participant_a_score ?? '-'}</TableCell>
+            <TableCell className="tabular-nums">{set.participant_b_score ?? '-'}</TableCell>
+            <TableCell>{getRelationshipLabel(set.winner_entry_id, 'Not decided')}</TableCell>
+            <TableCell className="text-ink-soft">{set.notes || '-'}</TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   )
 }
 
@@ -295,59 +346,59 @@ export const StandingImpactPanel = ({
   }
 
   return (
-    <article className="workspace-panel match-detail-grid__wide impact-panel">
-      <h2>Standing Impact</h2>
-      <p className="match-meta">{impact.scopeLabel}</p>
+    <Card className="flex flex-col gap-3">
+      <div>
+        <p className="text-sm font-extrabold text-ink">Standing Impact</p>
+        <p className="text-xs font-semibold text-ink-soft">{impact.scopeLabel}</p>
+      </div>
       {impact.rows.length === 0 ? (
-        <p className="empty-state">
+        <EmptyState>
           {impact.reason || 'Standings are not calculated yet for this match scope.'}
-        </p>
+        </EmptyState>
       ) : (
         <>
-          <div className="impact-summary-grid" aria-label="Match participant standing summary">
-            {impact.participantRows.length === 0 ? (
-              <p className="empty-state">This match's participants are not in the standing cache yet.</p>
-            ) : (
-              impact.participantRows.map((row) => (
-                <div className="impact-summary-card" key={row.id}>
-                  <span>{getRelationshipLabel(row.entry_id)}</span>
-                  <strong>#{row.rank}</strong>
-                  <small>
+          {impact.participantRows.length === 0 ? (
+            <EmptyState>This match's participants are not in the standing cache yet.</EmptyState>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2" aria-label="Match participant standing summary">
+              {impact.participantRows.map((row) => (
+                <div key={row.id} className="rounded-card border border-line bg-mist px-3 py-2">
+                  <p className="truncate text-sm font-bold text-ink">{getRelationshipLabel(row.entry_id)}</p>
+                  <p className="text-lg font-extrabold text-green">#{row.rank}</p>
+                  <p className="text-xs font-semibold text-ink-soft">
                     {row.points} pts / {row.played} played / SD {row.score_difference}
-                  </small>
+                  </p>
                 </div>
-              ))
-            )}
-          </div>
-          <div className="impact-table-wrap">
-            <table className="impact-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Entry</th>
-                  <th>P</th>
-                  <th>Pts</th>
-                  <th>SD</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {impact.rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.rank}</td>
-                    <td>{getRelationshipLabel(row.entry_id)}</td>
-                    <td>{row.played}</td>
-                    <td>{row.points}</td>
-                    <td>{row.score_difference}</td>
-                    <td>{formatStatus(row.qualified_status)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </div>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Rank</TableHead>
+                <TableHead>Entry</TableHead>
+                <TableHead>P</TableHead>
+                <TableHead>Pts</TableHead>
+                <TableHead>SD</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {impact.rows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="font-extrabold">{row.rank}</TableCell>
+                  <TableCell>{getRelationshipLabel(row.entry_id)}</TableCell>
+                  <TableCell className="tabular-nums">{row.played}</TableCell>
+                  <TableCell className="tabular-nums">{row.points}</TableCell>
+                  <TableCell className="tabular-nums">{row.score_difference}</TableCell>
+                  <TableCell>{formatStatus(row.qualified_status)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </>
       )}
-    </article>
+    </Card>
   )
 }
 
@@ -372,61 +423,76 @@ export const BracketImpactPanel = ({
     : ''
 
   return (
-    <article className="workspace-panel match-detail-grid__wide impact-panel">
-      <h2>Bracket Impact</h2>
-      <dl className="workspace-facts impact-facts">
+    <Card className="flex flex-col gap-3">
+      <p className="text-sm font-extrabold text-ink">Bracket Impact</p>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-4">
         <div>
-          <dt>Round</dt>
-          <dd>{impact.roundName}</dd>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Round</dt>
+          <dd className="font-semibold text-ink">{impact.roundName}</dd>
         </div>
         <div>
-          <dt>Next Match</dt>
-          <dd>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Next Match</dt>
+          <dd className="font-semibold text-ink">
             {impact.nextMatchNumber ? (
-              <a href={matchHref}>{impact.nextMatchNumber}</a>
+              <Link href={matchHref} className="text-blue no-underline hover:underline">
+                {impact.nextMatchNumber}
+              </Link>
             ) : (
               'No next match'
             )}
           </dd>
         </div>
         <div>
-          <dt>Target Slot</dt>
-          <dd>{impact.nextTargetSlot ? impact.nextTargetSlot.toUpperCase() : 'Not set'}</dd>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Target Slot</dt>
+          <dd className="font-semibold text-ink">
+            {impact.nextTargetSlot ? impact.nextTargetSlot.toUpperCase() : 'Not set'}
+          </dd>
         </div>
         <div>
-          <dt>Last Round</dt>
-          <dd>{impact.isLastRound ? 'Yes' : 'No'}</dd>
+          <dt className="font-bold tracking-wide text-ink-soft uppercase">Last Round</dt>
+          <dd className="font-semibold text-ink">{impact.isLastRound ? 'Yes' : 'No'}</dd>
         </div>
       </dl>
-      <p className="empty-state">{impact.nextReason}</p>
+      <p className="text-sm font-semibold text-ink-soft">{impact.nextReason}</p>
       {impact.isLastRound && impact.champion ? (
         <div
-          className={
+          className={cn(
+            'flex items-center gap-3 rounded-card border p-3',
             impact.champion.status === 'decided' ?
-              'champion-banner champion-banner--decided'
-            : 'champion-banner'
-          }
+              'border-gold bg-mist'
+            : 'border-dashed border-line bg-paper',
+          )}
         >
-          <div>
-            <p className="match-meta">Champion</p>
-            <h3>
+          <span
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+              impact.champion.status === 'decided' ? 'bg-gold text-paper' : 'bg-mist text-ink-soft',
+            )}
+          >
+            <Crown className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Champion</p>
+            <p className="truncate text-sm font-extrabold text-ink">
               {impact.champion.status === 'decided' ?
                 impact.champion.label || 'Champion'
               : 'Not decided yet'}
-            </h3>
+            </p>
+            <p className="text-xs font-semibold text-ink-soft">
+              {impact.champion.reason}
+              {championMatchHref ? (
+                <>
+                  {' '}
+                  <Link href={championMatchHref} className="text-blue no-underline hover:underline">
+                    View deciding match
+                  </Link>
+                </>
+              ) : null}
+            </p>
           </div>
-          <p>
-            {impact.champion.reason}
-            {championMatchHref ? (
-              <>
-                {' '}
-                <a href={championMatchHref}>View deciding match</a>
-              </>
-            ) : null}
-          </p>
         </div>
       ) : null}
-    </article>
+    </Card>
   )
 }
 
@@ -450,21 +516,21 @@ export const DocumentationAssetList = ({
   showVisibility?: boolean
 }) => {
   if (assets.length === 0) {
-    return <p className="empty-state">No documentation uploaded yet.</p>
+    return <EmptyState>No documentation uploaded yet.</EmptyState>
   }
 
   return (
-    <ul className="documentation-list">
+    <ul className="flex flex-col gap-2">
       {assets.map((asset) => (
-        <li key={asset.id} className="documentation-item">
-          <div className="documentation-item__meta">
-            <span className="documentation-item__type">{formatStatus(asset.asset_type)}</span>
+        <li key={asset.id} className="rounded-card border border-line bg-paper p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+              {formatStatus(asset.asset_type)}
+            </span>
             {showVisibility ? (
-              <span
-                className={`documentation-item__visibility documentation-item__visibility--${asset.visibility}`}
-              >
+              <StatusBadge tone={asset.visibility === 'public' ? 'blue' : 'neutral'}>
                 {asset.visibility}
-              </span>
+              </StatusBadge>
             ) : null}
           </div>
           {asset.url ? (
@@ -472,15 +538,15 @@ export const DocumentationAssetList = ({
               href={asset.url}
               target="_blank"
               rel="noreferrer"
-              className="documentation-item__link"
+              className="text-sm font-bold text-blue no-underline hover:underline"
             >
               {asset.filename || 'View file'}
             </a>
           ) : (
-            <span>{asset.filename || 'File unavailable'}</span>
+            <span className="text-sm font-semibold text-ink-soft">{asset.filename || 'File unavailable'}</span>
           )}
-          {asset.caption ? <p className="documentation-item__caption">{asset.caption}</p> : null}
-          <p className="documentation-item__footer">
+          {asset.caption ? <p className="mt-1 text-sm text-ink-soft">{asset.caption}</p> : null}
+          <p className="mt-1 text-xs font-semibold text-ink-soft">
             {getRelationshipLabel(asset.uploaded_by, 'Unknown uploader')}
             {asset.createdAt ? ` · ${formatDateTime(asset.createdAt)}` : ''}
           </p>
@@ -514,6 +580,13 @@ export type CommentSummary = {
   createdAt?: string
 }
 
+const commentStatusTone: Record<string, StatusTone> = {
+  visible: 'green',
+  pending: 'gold',
+  hidden: 'neutral',
+  deleted: 'neutral',
+}
+
 export const CommentList = ({
   comments,
   showStatus = false,
@@ -522,32 +595,35 @@ export const CommentList = ({
   showStatus?: boolean
 }) => {
   if (comments.length === 0) {
-    return <p className="empty-state">No comments yet.</p>
+    return <EmptyState>No comments yet.</EmptyState>
   }
 
   return (
-    <ul className="comment-list">
+    <ul className="flex flex-col gap-2">
       {comments.map((comment) => (
         <li
           key={comment.id}
-          className={comment.is_pinned ? 'comment-item comment-item--pinned' : 'comment-item'}
+          className={cn(
+            'rounded-card border p-3',
+            comment.is_pinned ? 'border-gold bg-mist' : 'border-line bg-paper',
+          )}
         >
-          <div className="comment-item__meta">
-            <span className="comment-item__type">{formatStatus(comment.comment_type)}</span>
-            {comment.is_pinned ? <span className="comment-item__pin">Pinned</span> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+              {formatStatus(comment.comment_type)}
+            </span>
+            {comment.is_pinned ? <StatusBadge tone="gold">Pinned</StatusBadge> : null}
             {showStatus ? (
-              <span className={`comment-item__status comment-item__status--${comment.status}`}>
+              <StatusBadge tone={commentStatusTone[comment.status] || 'neutral'}>
                 {formatStatus(comment.status)}
-              </span>
+              </StatusBadge>
             ) : null}
           </div>
-          <p className="comment-item__body">{comment.body}</p>
-          <p className="comment-item__footer">
+          <p className="mt-1 text-sm text-ink">{comment.body}</p>
+          <p className="mt-1 text-xs font-semibold text-ink-soft">
             {comment.author_name || getRelationshipLabel(comment.author_user_id, 'System / Unknown')}
             {comment.createdAt ? <> &middot; {formatDateTime(comment.createdAt)}</> : null}
-            {comment.resolved_at ? (
-              <> &middot; Resolved {formatDateTime(comment.resolved_at)}</>
-            ) : null}
+            {comment.resolved_at ? <> &middot; Resolved {formatDateTime(comment.resolved_at)}</> : null}
           </p>
         </li>
       ))}
@@ -557,24 +633,24 @@ export const CommentList = ({
 
 export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
   if (entries.length === 0) {
-    return <p className="empty-state">No audited changes yet.</p>
+    return <EmptyState>No audited changes yet.</EmptyState>
   }
 
   return (
-    <ul className="audit-log-list">
+    <ul className="flex flex-col gap-2">
       {entries.map((entry) => (
-        <li key={entry.id} className="audit-log-item">
-          <div className="audit-log-item__meta">
-            <span className="audit-log-item__action">{formatAuditAction(entry.action)}</span>
-            <span className="audit-log-item__time">{formatDateTime(entry.createdAt)}</span>
+        <li key={entry.id} className="rounded-card border border-line bg-paper p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-extrabold text-ink">{formatAuditAction(entry.action)}</span>
+            <span className="text-xs font-semibold text-ink-soft">{formatDateTime(entry.createdAt)}</span>
           </div>
-          <p className="audit-log-item__actor">
-            {getRelationshipLabel(entry.actor_user_id, 'System / Unknown')} &middot;{' '}
-            {entry.entity_type} #{entry.entity_id}
+          <p className="mt-1 text-xs font-semibold text-ink-soft">
+            {getRelationshipLabel(entry.actor_user_id, 'System / Unknown')} &middot; {entry.entity_type} #
+            {entry.entity_id}
           </p>
-          <details>
-            <summary>View before / after</summary>
-            <pre>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-bold text-blue">View before / after</summary>
+            <pre className="mt-2 max-w-full overflow-x-auto rounded-card bg-mist p-3 text-xs whitespace-pre-wrap text-ink-soft">
               {JSON.stringify(
                 { before: entry.before_snapshot, after: entry.after_snapshot },
                 null,
@@ -587,15 +663,3 @@ export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
     </ul>
   )
 }
-
-export const WorkspaceNav = () => (
-  <nav className="workspace-nav" aria-label="Operational workspaces">
-    <a href="/workspaces/event-admin">Event Admin</a>
-    <a href="/workspaces/scheduler">Scheduler</a>
-    <a href="/workspaces/match-officer">Match Officer</a>
-    <a href="/workspaces/standings">Standings</a>
-    <a href="/workspaces/brackets">Brackets</a>
-    <a href="/workspaces/content-admin">Content Admin</a>
-    <a href="/admin">Backoffice</a>
-  </nav>
-)

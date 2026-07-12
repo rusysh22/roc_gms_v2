@@ -1,0 +1,27 @@
+import type { Payload } from 'payload'
+
+export const wizardPage = '/workspaces/event-admin/new-event'
+
+export const text = (form: FormData, key: string) =>
+  typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
+
+export const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
+
+export const getWizardEvent = async (payload: Payload, eventId: string) => {
+  if (!eventId) {
+    return null
+  }
+
+  try {
+    return await payload.findByID({ collection: 'events', id: eventId, depth: 0 })
+  } catch {
+    return null
+  }
+}

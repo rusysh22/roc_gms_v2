@@ -39,15 +39,18 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
     <header className={cn('sticky top-4 z-50 flex justify-center px-4 font-sans', className)}>
       <div
         className={cn(
-          'flex w-full max-w-3xl items-center justify-between gap-4 rounded-full border border-line bg-paper px-4 py-2 shadow-sm transition-shadow duration-200',
+          'flex w-full max-w-6xl items-center justify-between gap-3 rounded-full border border-line bg-paper px-4 py-2 shadow-sm transition-shadow duration-200',
           scrolled && 'shadow-md',
         )}
       >
-        <Link href="/" className="flex items-center gap-2 pl-2 text-sm font-extrabold text-ink no-underline">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2 pl-2 text-sm font-extrabold whitespace-nowrap text-ink no-underline"
+        >
           {brand}
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+        <nav className="hidden min-w-0 items-center gap-0.5 md:flex lg:gap-1" aria-label="Primary">
           {items.map((item) => {
             const isActive = item.href === activeHref
             return (
@@ -56,7 +59,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'rounded-full px-4 py-2 text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink',
+                  'shrink-0 rounded-full px-2.5 py-2 text-sm font-semibold whitespace-nowrap text-ink-soft no-underline transition-colors hover:text-ink lg:px-3.5',
                   isActive && 'bg-green text-paper hover:text-paper',
                 )}
               >
@@ -66,7 +69,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
           })}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">{cta}</div>
+        <div className="hidden shrink-0 items-center gap-2 md:flex">{cta}</div>
 
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Trigger asChild>

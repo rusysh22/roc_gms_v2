@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageMatches } from '@/access/roles'
+import { canManageMatches, canReadPublicMatch } from '@/access/roles'
 
 export const Matches: CollectionConfig = {
   slug: 'matches',
@@ -19,7 +19,7 @@ export const Matches: CollectionConfig = {
   access: {
     create: canManageMatches,
     delete: canManageMatches,
-    read: () => true,
+    read: canReadPublicMatch,
     update: canManageMatches,
   },
   fields: [

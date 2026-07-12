@@ -1,5 +1,13 @@
 # ROC GMS V2
 
+## Production notes
+
+Production requires `PAYLOAD_SECRET` and `DATABASE_URL`; the application fails fast when either is
+missing. The supplied Compose file is intentionally a local development stack (including exposed
+Postgres, Redis, and Mailpit ports) and must not be deployed as-is. Documentation upload validation
+enforces a size and type allowlist locally; deploy a malware-scanning storage pipeline for untrusted
+production uploads.
+
 ROC Game Management System V2 is a Next.js and Payload CMS foundation for running an internal office olympiad.
 
 ## Local Setup

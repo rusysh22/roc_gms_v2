@@ -28,6 +28,9 @@ const getParam = (searchParams: SearchParams | undefined, key: string) => {
 export const hasPublicEditRole = (user: PublicEditUser | null | undefined) =>
   Boolean(user?.roles?.some((role) => PUBLIC_EDIT_ROLES.has(role)))
 
+export const canEditEventPublicContent = (user: PublicEditUser | null | undefined) =>
+  Boolean(user?.roles?.some((role) => role === 'super_admin' || role === 'event_admin'))
+
 export const getPublicEditState = async (
   searchParams?: SearchParams,
 ): Promise<PublicEditState> => {

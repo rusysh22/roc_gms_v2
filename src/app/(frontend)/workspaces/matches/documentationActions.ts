@@ -1,11 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { headers as getHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getPayload } from 'payload'
 
-import config from '@payload-config'
+import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
+import { validateDocumentationFile } from '@/lib/documentationValidation'
 
 const ASSET_TYPES = new Set(['photo', 'video', 'file', 'score_sheet', 'other'])
 const VISIBILITIES = new Set(['public', 'internal'])
@@ -28,7 +27,19 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
     redirect(`/workspaces/matches/${matchNumber}?docError=missing_file`)
   }
 
-  const payload = await getPayload({ config })
+  const fileValidation = validateDocumentationFile({
+    filename: file.name,
+    mimeType: file.type,
+    size: file.size,
+  })
+  if (!fileValidation.valid) {
+    redirect(`/workspaces/matches/${matchNumber}?docError=${fileValidation.reason}`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo: `/workspaces/matches/${matchNumber}`,
+  })
   const matches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -41,9 +52,6 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
     redirect(`/workspaces/matches/${matchNumber}?docError=not_found`)
   }
 
-  const headersList = await getHeaders()
-  const { user } = await payload.auth({ headers: headersList })
-
   const arrayBuffer = await file.arrayBuffer()
 
   await payload.create({
@@ -51,15 +59,15 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
     data: {
       event_id: match.event_id,
       match_id: match.id,
-      uploaded_by: user?.id || undefined,
+      uploaded_by: user.id,
       asset_type: assetType,
       caption: caption || undefined,
       visibility,
     },
     file: {
       data: Buffer.from(arrayBuffer),
-      mimetype: file.type || 'application/octet-stream',
-      name: file.name,
+      mimetype: fileValidation.mimeType,
+      name: fileValidation.filename,
       size: file.size,
     },
   })

@@ -84,7 +84,7 @@ export const getMatchPairKey = (
   return [String(participantAId), String(participantBId)].sort().join(':')
 }
 
-const getNextPowerOfTwo = (value: number) => {
+export const getNextPowerOfTwo = (value: number) => {
   if (value <= 1) {
     return 1
   }

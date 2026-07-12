@@ -2,7 +2,7 @@
 
 Owner: Rusydani  
 Project: `roc_gms_v2`  
-Status: Phase 7 public edit mode foundation complete; ready for Phase 8 live score or Phase 7 hardening  
+Status: Access and role hardening complete after Phase 8; ready for Phase 8 hardening or Phase 9 planning  
 Last updated: 2026-07-03  
 Source of truth: `prd/README.md`
 
@@ -321,27 +321,85 @@ Add full-screen live score for Match Officer.
 
 Tasks:
 
-- [ ] Add live score route.
-- [ ] Add full-screen mobile UI.
-- [ ] Add participant selection.
-- [ ] Add tap-to-increment.
-- [ ] Add decrement/undo action zone.
-- [ ] Add set/period support.
-- [ ] Add score action audit.
-- [ ] Add finish set/match confirmation.
+- [x] Add live score route.
+- [x] Add full-screen mobile UI foundation.
+- [x] Add participant selection.
+- [x] Add tap-to-increment foundation.
+- [x] Add decrement/undo action zone foundation.
+- [x] Add set support foundation.
+- [x] Add score action audit through existing match-set score update audit path.
+- [x] Add finish match and publish-result confirmation controls.
 - [ ] Add public live update through polling first.
 - [ ] Add WebSocket or SSE later if needed.
 
 Acceptance criteria:
 
-- [ ] Match Officer can update score from mobile with large tap areas.
-- [ ] Score can be corrected safely.
-- [ ] Final score requires confirmation.
+- [x] Match Officer can update score from mobile with large tap areas.
+- [x] Score can be corrected safely with decrement/undo foundation.
+- [x] Final score publish requires confirmation.
 - [ ] Public page can show live score updates.
+
+Completion notes (2026-07-03):
+
+- Added `/workspaces/matches/[matchNumber]/live-score` as a full-screen Match Officer live-score
+  route.
+- The route uses large mobile-first participant panels, selected-participant state, a primary
+  add-point action, and a left undo/decrement action zone.
+- Added set creation from the live score screen and a set summary rail.
+- Reused existing audited match-set score updates and lifecycle Server Actions, with safe `returnTo`
+  support so live score writes return to the full-screen route.
+- Added quick lifecycle controls for start/resume, pause, finish match, and confirmed result publish.
+- Added entry links from Match Officer Workspace and workspace match detail.
+- Did not add WebSocket/SSE, public polling, offline mode, Microsoft Graph, or broad auth redesign.
 
 Suggested commit:
 
 `phase-8-live-score`
+
+## 12.1 Access and Role Hardening
+
+Goal:
+
+Protect custom operational workspaces and mutation paths before adding more features.
+
+Tasks:
+
+- [x] Add shared workspace auth/role guard helper.
+- [x] Protect Event Admin Workspace.
+- [x] Protect Scheduler Workspace.
+- [x] Protect Match Officer Workspace.
+- [x] Protect Content Admin Workspace.
+- [x] Protect Brackets Workspace.
+- [x] Protect Standings Workspace.
+- [x] Protect workspace match detail.
+- [x] Protect live score route.
+- [x] Add explicit role checks to match Server Actions.
+- [x] Add explicit role checks to documentation Server Actions.
+- [x] Add explicit role checks to comment Server Actions.
+- [x] Add explicit role checks to standings/bracket recalculation Server Actions.
+- [x] Keep public pages open.
+
+Acceptance criteria:
+
+- [x] Anonymous users are redirected to `/admin/login` from protected workspace routes.
+- [x] Wrong-role authenticated users receive an unauthorized workspace state.
+- [x] Server Actions reject anonymous or unauthorized mutation attempts before writes.
+- [x] Public pages remain accessible without login.
+
+Completion notes (2026-07-03):
+
+- Added `src/app/(frontend)/workspaces/workspaceAuth.tsx` with shared route and Server Action guards.
+- Role hydration loads the authenticated user through Payload Local API with `overrideAccess` so
+  non-super-admin role checks do not depend on whether the `roles` field is present in
+  `payload.auth()` output.
+- Workspace page permissions:
+  - Event Admin: `super_admin`, `event_admin`
+  - Scheduler: `super_admin`, `event_admin`, `scheduler`
+  - Match Officer, match detail, live score: `super_admin`, `event_admin`, `match_officer`
+  - Content Admin: `super_admin`, `event_admin`, `content_admin`
+  - Brackets and Standings: `super_admin`, `event_admin`
+- Anonymous workspace requests redirect to `/admin/login?redirect=<workspace path>`.
+- Public pages remain open.
 
 ## 13. Phase 9 - Advanced Features
 
@@ -398,3 +456,7 @@ Use this prompt for the first build session:
 ```text
 Read prd/README.md, prd/implementation-plan.md, prd/decision-log.md, and prd/session-handoff.md first. Start Phase 0 for ROC GMS V2 using Next.js, Payload CMS, PostgreSQL, Redis, Mailpit, and Docker Compose. Keep English naming. Do not implement tournament features yet. Make the app runnable locally, add basic admin auth, add project README run instructions, and update prd/session-handoff.md when finished.
 ```
+# 2026-07-11 implementation update
+
+- Completed: centralized named capabilities, role-aware workspace navigation, public collection hardening for matches/documentation, score-set ownership validation, documentation file validation, production secret checks, and the first guided Clubs and Scheduler workflows.
+- Deferred: modal/route-intercepted presentation, archived clubs, full participant/facility CRUD, schedule generation/draw, content-desk CRUD, and a dedicated reschedule history UI.

@@ -3,9 +3,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
 import { Crown } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketRound } from '@/lib/brackets'
 import { cn } from '@/lib/utils'
+import { updateBracketMatchAction } from './bracketModalActions'
 
 // Rebuilt against the library's own default Match/theme rendering instead of fighting it with a
 // fully custom match component - the previous build reimplemented our whole card design on top of
@@ -47,8 +49,12 @@ type GLootMatch = {
   startTime: string
   state: string
   href?: string
+  participantAName?: string
+  participantBName?: string
   participants: GLootParticipant[]
 }
+
+const BracketDialogContext = React.createContext<(match: GLootMatch) => void>(() => undefined)
 
 // The bracket cache (src/lib/brackets.ts) has no explicit parent/child edges between rounds (see
 // D016/D018) - assuming a perfect binary bracket (round r+1 match i is fed by round r matches
@@ -75,13 +81,40 @@ const parseSetsWon = (setScore?: string): [number, number] | null => {
   return parsed === 0 ? null : [a, b]
 }
 
+const getInferredRoundName = (roundsRemaining: number) => {
+  if (roundsRemaining === 0) return 'Final'
+  if (roundsRemaining === 1) return 'Semifinal'
+  if (roundsRemaining === 2) return 'Quarterfinal'
+  return `Round of ${2 ** (roundsRemaining + 1)}`
+}
+
+// Old wizard runs created the opening fixtures but not the downstream TBD fixtures. Retain every
+// real match and infer empty rounds for display, so an incomplete cache cannot collapse a whole
+// opening round into one box labelled "Final". New wizard runs persist those downstream matches.
+const normalizeBracketRounds = (rounds: BracketRound[]) => {
+  const firstRoundMatchCount = rounds[0]?.matches.length || 0
+  const inferredRoundCount = firstRoundMatchCount > 1 ? Math.ceil(Math.log2(firstRoundMatchCount)) + 1 : 1
+  const roundCount = Math.max(rounds.length, inferredRoundCount)
+
+  return Array.from({ length: roundCount }, (_, index) => {
+    const existing = rounds[index]
+    return existing || {
+      name: getInferredRoundName(roundCount - index - 1),
+      order: index,
+      matches: [],
+    }
+  })
+}
+
 const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
-  const numRounds = rounds.length
+  const displayRounds = normalizeBracketRounds(rounds)
+  const numRounds = displayRounds.length
   const flattened: GLootMatch[] = []
 
   for (let r = 0; r < numRounds; r += 1) {
-    const round = rounds[r]
-    const matchCount = Math.pow(2, numRounds - 1 - r)
+    const round = displayRounds[r]
+    // Never discard real matches when legacy data has fewer persisted rounds than its shape.
+    const matchCount = Math.max(round.matches.length, Math.pow(2, numRounds - 1 - r))
 
     for (let m = 0; m < matchCount; m += 1) {
       const realMatch = round.matches[m]
@@ -90,7 +123,7 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
       let nextMatchId: string | null = null
       if (r < numRounds - 1) {
         const nextIndex = Math.floor(m / 2)
-        const nextRealMatch = rounds[r + 1]?.matches[nextIndex]
+        const nextRealMatch = displayRounds[r + 1]?.matches[nextIndex]
         nextMatchId = nextRealMatch ? String(nextRealMatch.id) : `dummy-r${r + 1}-m${nextIndex}`
       }
 
@@ -125,6 +158,8 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
           startTime: formatMatchDate(realMatch.scheduled_start_at),
           state: 'WALK_OVER',
           href: realMatch.detail_href,
+          participantAName: realMatch.participant_a.label,
+          participantBName: realMatch.participant_b.label,
           participants: [
             {
               id: String(byeParticipant.id),
@@ -171,6 +206,8 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
         startTime: formatMatchDate(realMatch.scheduled_start_at),
         state: realMatch.status,
         href: realMatch.detail_href,
+        participantAName: realMatch.participant_a.label,
+        participantBName: realMatch.participant_b.label,
         participants,
       })
     }
@@ -215,7 +252,7 @@ const CustomMatch = ({
   topText,
   bottomText,
 }: {
-  match: { href?: string }
+  match: GLootMatch
   onMatchClick?: (payload: { match: unknown; topWon: boolean; bottomWon: boolean; event: React.MouseEvent }) => void
   topParty: GLootPartyProp
   bottomParty: GLootPartyProp
@@ -224,6 +261,7 @@ const CustomMatch = ({
   topText?: string
   bottomText?: string
 }) => {
+  const selectMatch = React.useContext(BracketDialogContext)
   const matchDecided = Boolean(topWon || bottomWon)
   const topColor = getPartyColor(topParty, topWon, matchDecided)
   const bottomColor = getPartyColor(bottomParty, bottomWon, matchDecided)
@@ -233,13 +271,18 @@ const CustomMatch = ({
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <p style={{ color: '#707582', margin: '0 0 0.2rem', minHeight: '1.25rem', fontSize: '0.8rem' }}>{topText}</p>
         {match.href ? (
-          <a
-            href={match.href}
-            onClick={(event) => onMatchClick?.({ match, topWon, bottomWon, event })}
-            style={{ color: '#BEC0C6', fontSize: '0.8rem', textDecoration: 'none', cursor: 'pointer' }}
-          >
-            Match Details
-          </a>
+          <Dialog.Trigger asChild>
+            <button
+              type="button"
+              onClick={(event) => {
+                selectMatch(match)
+                onMatchClick?.({ match, topWon, bottomWon, event })
+              }}
+              style={{ color: '#BEC0C6', fontSize: '0.8rem', textDecoration: 'none', cursor: 'pointer' }}
+            >
+              Match Details
+            </button>
+          </Dialog.Trigger>
         ) : null}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', justifyContent: 'space-between' }}>
@@ -364,6 +407,7 @@ export const BracketTree = ({
 }) => {
   const [isMounted, setIsMounted] = useState(false)
   const [containerRef, containerWidth] = useContainerWidth()
+  const [selectedMatch, setSelectedMatch] = useState<GLootMatch | null>(null)
 
   useEffect(() => {
     setIsMounted(true)
@@ -376,8 +420,22 @@ export const BracketTree = ({
   const matches = transformToGLootData(rounds)
 
   return (
+    <Dialog.Root open={Boolean(selectedMatch)} onOpenChange={(open) => !open && setSelectedMatch(null)}>
+    <BracketDialogContext.Provider value={setSelectedMatch}>
     <div>
       <ChampionBanner champion={champion} />
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/50" />
+          <Dialog.Content className="fixed inset-x-4 top-1/2 z-50 mx-auto max-w-xl -translate-y-1/2 rounded-panel bg-paper p-6 shadow-xl" aria-describedby={undefined}>
+            <Dialog.Title className="text-xl font-extrabold text-ink">{selectedMatch?.name || 'Match details'}</Dialog.Title>
+            <p className="mt-1 text-sm text-ink-soft">{selectedMatch?.participantAName || 'TBD'} vs {selectedMatch?.participantBName || 'TBD'}</p>
+            {selectedMatch ? <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <form action={updateBracketMatchAction} className="grid gap-3 rounded-card border border-line p-4"><input type="hidden" name="intent" value="score" /><input type="hidden" name="matchId" value={selectedMatch.id} /><input type="hidden" name="matchNumber" value={selectedMatch.name} /><h3 className="font-bold">Update result</h3><p className="text-xs text-ink-soft">Winner is determined automatically from the higher score.</p><label><span>{selectedMatch.participantAName || 'Participant A'}</span><input name="scoreA" type="number" min="0" required /></label><label><span>{selectedMatch.participantBName || 'Participant B'}</span><input name="scoreB" type="number" min="0" required /></label><label className="flex gap-2"><input name="addSet" type="checkbox" /><span>Add a new set</span></label><button type="submit">Save result</button></form>
+              <form action={updateBracketMatchAction} className="grid gap-3 rounded-card border border-line p-4"><input type="hidden" name="intent" value="schedule" /><input type="hidden" name="matchId" value={selectedMatch.id} /><input type="hidden" name="matchNumber" value={selectedMatch.name} /><h3 className="font-bold">Set schedule</h3><label><span>Start</span><input name="scheduledStart" type="datetime-local" required /></label><label><span>End</span><input name="scheduledEnd" type="datetime-local" required /></label><button type="submit">Save schedule</button></form>
+            </div> : null}
+            <Dialog.Close asChild><button type="button" className="mt-5">Close</button></Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
       <div ref={containerRef} className="overflow-hidden rounded-panel border border-line">
         {isMounted && containerWidth > 0 ? (
           <SingleEliminationBracket
@@ -394,5 +452,7 @@ export const BracketTree = ({
         )}
       </div>
     </div>
+    </BracketDialogContext.Provider>
+    </Dialog.Root>
   )
 }

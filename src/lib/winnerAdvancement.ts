@@ -85,7 +85,12 @@ const idsEqual = (left: Id | undefined, right: Id | undefined) =>
 const getRoundOrder = (roundName: string) => {
   const normalizedName = roundName.toLowerCase()
   if (normalizedName.includes('first')) return 10
-  if (normalizedName.includes('round of 16')) return 20
+  const roundOfMatch = normalizedName.match(/round of (\d+)/)
+  if (roundOfMatch) {
+    // "Round of 16" keeps its historical order (20); larger brackets (Round of 32/64/...) sort
+    // progressively earlier so bigger tournaments still order correctly end-to-end.
+    return Math.max(1, 20 - (Math.log2(Number(roundOfMatch[1])) - 4) * 5)
+  }
   if (normalizedName.includes('quarter')) return 30
   if (normalizedName.includes('semi')) return 40
   if (normalizedName.includes('bronze')) return 45

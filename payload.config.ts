@@ -34,6 +34,14 @@ import { Venues } from './src/collections/Venues'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
+if (process.env.NODE_ENV === 'production' && !process.env.PAYLOAD_SECRET) {
+  throw new Error('PAYLOAD_SECRET must be set in production.')
+}
+
+if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL must be set in production.')
+}
+
 export default buildConfig({
   admin: {
     user: Users.slug,

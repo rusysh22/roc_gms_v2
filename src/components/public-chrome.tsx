@@ -48,9 +48,17 @@ export function PublicChrome({ brand, children }: PublicChromeProps) {
         items={PUBLIC_NAV_ITEMS}
         activeHref={activeHref}
         cta={
-          <Button asChild size="sm">
-            <Link href="/schedule">View Schedule</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/workspaces"
+              className="text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
+            >
+              Workspace Login
+            </Link>
+            <Button asChild size="sm">
+              <Link href="/schedule">View Schedule</Link>
+            </Button>
+          </div>
         }
       />
       <div className="flex-1 pt-6">{children}</div>

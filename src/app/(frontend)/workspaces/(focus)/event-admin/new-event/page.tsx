@@ -1,0 +1,1151 @@
+import Link from 'next/link'
+import type { ReactNode } from 'react'
+import { Check } from 'lucide-react'
+
+import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
+import { AlertBanner } from '@/components/ui/alert-banner'
+import { Button } from '@/components/ui/button'
+import { Card, CardTitle } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Field } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
+import { BracketTree } from '../../../../brackets/bracketTree'
+import {
+  getRelationshipLabel,
+  toOptions,
+  type RelationshipDoc,
+} from '../../../workspaceComponents'
+import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
+import { FocusHeader } from '../../FocusHeader'
+import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
+import { createEventAction } from './eventActions'
+import { addRulesetAction, addSportAction } from './sportActions'
+import { addCategoryAction } from './categoryActions'
+import { addClubAction, addPlayerAction, addTeamAction } from './participantActions'
+import { addEntryAction, saveSeedOrderAction, shuffleSeedsAction } from './entriesSeedActions'
+import { generateMatchesAction } from './generateActions'
+
+export const dynamic = 'force-dynamic'
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+const get = (params: Record<string, string | string[] | undefined>, key: string) =>
+  Array.isArray(params[key]) ? params[key][0] || '' : params[key] || ''
+
+const STEPS = [
+  { key: 'event', label: 'Event' },
+  { key: 'sports', label: 'Sports & Rulesets' },
+  { key: 'categories', label: 'Categories' },
+  { key: 'participants', label: 'Clubs / Teams / Players' },
+  { key: 'entries', label: 'Entries & Seeding' },
+  { key: 'generate', label: 'Generate Matches' },
+  { key: 'bracket', label: 'Bracket' },
+] as const
+
+const errorMessages: Record<string, string> = {
+  invalid_event: 'Fill in the event name, start, and end fields.',
+  invalid_date_range: 'Event end time must be after the start time (they cannot be the same).',
+  duplicate_slug: 'That slug is already used. Try a different name or slug.',
+  missing_event: 'Start by creating the event first.',
+  invalid_sport: 'Fill in a valid sport name and type.',
+  invalid_ruleset: 'Fill in a valid ruleset name and score type.',
+  invalid_relationship: 'The selected item does not belong to this event.',
+  invalid_category: 'Fill in the required category fields.',
+  invalid_club: 'Fill in a valid club name.',
+  invalid_team: 'Fill in a valid team name.',
+  invalid_player: 'Fill in a valid player name.',
+  invalid_entry: 'Choose a category and a participant to add.',
+  duplicate_entry: 'That participant is already entered in this category.',
+  not_enough_entries: 'Add at least two confirmed entries before generating matches.',
+  unsupported_format:
+    'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
+}
+
+const StepProgress = ({ eventId, current }: { eventId: string; current: string }) => {
+  const currentIndex = STEPS.findIndex((step) => step.key === current)
+  return (
+    <ol className="flex flex-wrap items-center gap-2" aria-label="Wizard progress">
+      {STEPS.map((step, index) => {
+        const reachable = index === 0 || Boolean(eventId)
+        const done = index < currentIndex
+        const active = index === currentIndex
+        const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
+        const pill = (
+          <span
+            className={cn(
+              'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold',
+              done && 'bg-green text-paper',
+              active && 'border-2 border-green text-green',
+              !done && !active && 'bg-mist text-ink-soft',
+            )}
+          >
+            {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : index + 1}
+          </span>
+        )
+        return (
+          <li key={step.key} className="flex items-center gap-2">
+            {reachable ? (
+              <Link
+                href={href}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-2 py-1 text-xs font-bold no-underline transition-colors',
+                  active ? 'text-ink' : 'text-ink-soft hover:text-ink',
+                )}
+              >
+                {pill}
+                <span className="hidden sm:inline">{step.label}</span>
+              </Link>
+            ) : (
+              <span className="flex items-center gap-2 px-2 py-1 text-xs font-bold text-ink-soft/50">
+                {pill}
+                <span className="hidden sm:inline">{step.label}</span>
+              </span>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+export default async function NewEventWizardPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams
+}) {
+  const access = await requireWorkspaceAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: '/workspaces/event-admin/new-event',
+    workspaceName: 'New Event Wizard',
+  })
+  if (!access.authorized) {
+    return (
+      <WorkspaceUnauthorized
+        workspaceName={access.workspaceName}
+        allowedRoles={access.allowedRoles}
+      />
+    )
+  }
+
+  const payload = access.payload
+  const params = searchParams ? await searchParams : {}
+  const eventId = get(params, 'eventId')
+  const step = get(params, 'step') || (eventId ? 'sports' : 'event')
+  const wizardError = get(params, 'wizardError')
+  const wizardUpdated = get(params, 'wizardUpdated')
+
+  const event = eventId
+    ? await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+    : null
+  if (eventId && !event) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
+        <AlertBanner tone="error">Event not found. Start over.</AlertBanner>
+        <Button asChild>
+          <Link href="/workspaces/event-admin/new-event">Start a new event</Link>
+        </Button>
+      </main>
+    )
+  }
+
+  const currentStepLabel = STEPS.find((s) => s.key === step)?.label || 'New Event'
+
+  return (
+    <main className="flex min-h-svh flex-col">
+      <FocusHeader
+        backHref="/workspaces/event-admin"
+        backLabel="Event Admin"
+        title={event ? event.name : 'New Event Wizard'}
+        subtitle={currentStepLabel}
+      >
+        <StepProgress eventId={eventId} current={step} />
+      </FocusHeader>
+
+      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {wizardError && errorMessages[wizardError] ? (
+            <AlertBanner tone="error">{errorMessages[wizardError]}</AlertBanner>
+          ) : null}
+          {wizardUpdated ? <AlertBanner tone="success">Saved.</AlertBanner> : null}
+
+          {step === 'event' ? <EventStep /> : null}
+          {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
+          {step === 'categories' && event ? <CategoriesStep payload={payload} eventId={eventId} /> : null}
+          {step === 'participants' && event ? <ParticipantsStep payload={payload} eventId={eventId} /> : null}
+          {step === 'entries' && event ? (
+            <EntriesStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
+          ) : null}
+          {step === 'generate' && event ? <GenerateStep payload={payload} eventId={eventId} /> : null}
+          {step === 'bracket' && event ? (
+            <BracketStep
+              payload={payload}
+              eventId={eventId}
+              categoryId={get(params, 'categoryId')}
+              generated={get(params, 'wizardGenerated')}
+              failed={get(params, 'wizardGenerateFailed')}
+            />
+          ) : null}
+        </div>
+
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <SummaryPanel payload={payload} eventId={eventId} event={event as SummaryEventDoc | null} />
+        </aside>
+      </div>
+    </main>
+  )
+}
+
+type SummaryEventDoc = {
+  name?: string
+  event_start_at?: string
+  event_end_at?: string
+  location?: string
+}
+
+const SUMMARY_PREVIEW_COUNT = 4
+
+const SummarySection = ({
+  label,
+  modalTitle,
+  columnLabel,
+  items,
+}: {
+  label: string
+  modalTitle: string
+  columnLabel: string
+  items: SummaryDetailItem[]
+}) => {
+  const preview = items.slice(0, SUMMARY_PREVIEW_COUNT)
+  return (
+    <div className="border-b border-line py-2.5 last:border-b-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-ink-soft">{label}</span>
+        <strong className="text-sm font-extrabold text-ink tabular-nums">{items.length}</strong>
+      </div>
+      {preview.length > 0 ? (
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {preview.map((item) => (
+            <li key={item.id} className="flex min-w-0 items-baseline justify-between gap-2">
+              <span className="truncate text-xs font-semibold text-ink">{item.primary}</span>
+              {item.secondary ? (
+                <span className="shrink-0 truncate text-xs text-ink-soft">{item.secondary}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-xs text-ink-soft">Nothing yet.</p>
+      )}
+      {items.length > SUMMARY_PREVIEW_COUNT ? (
+        <div className="mt-1.5">
+          <SummaryDetailModal
+            title={modalTitle}
+            columnLabel={columnLabel}
+            items={items}
+            triggerLabel={`View all ${items.length} →`}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+const SummaryPanel = async ({
+  payload,
+  eventId,
+  event,
+}: {
+  payload: Payload
+  eventId: string
+  event: SummaryEventDoc | null
+}) => {
+  if (!eventId || !event) {
+    return (
+      <Card className="flex flex-col gap-2">
+        <CardTitle>Progress</CardTitle>
+        <p className="text-sm text-ink-soft">Create the event first to see live progress here.</p>
+      </Card>
+    )
+  }
+
+  const [sports, categories, clubs, teams, players, confirmedEntries, matches] = await Promise.all([
+    payload.find({
+      collection: 'sports',
+      depth: 0,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({
+      collection: 'competition-categories',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({
+      collection: 'clubs',
+      depth: 0,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({
+      collection: 'teams',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({
+      collection: 'players',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({
+      collection: 'competition-entries',
+      depth: 1,
+      limit: 500,
+      where: { and: [{ event_id: { equals: eventId } }, { status: { equals: 'confirmed' } }] },
+      sort: 'display_name',
+    }),
+    payload.find({
+      collection: 'matches',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+      sort: ['round_name', 'match_number'],
+    }),
+  ])
+
+  const sportItems: SummaryDetailItem[] = sports.docs.map((sport) => ({
+    id: sport.id,
+    primary: String(sport.name),
+    secondary: String(sport.sport_type || '').replaceAll('_', ' '),
+  }))
+
+  const categoryItems: SummaryDetailItem[] = categories.docs.map((category) => ({
+    id: category.id,
+    primary: String(category.name),
+    secondary: `${getRelationshipLabel(category.sport_id as RelationshipDoc)} · ${String(
+      category.format_type || '',
+    ).replaceAll('_', ' ')}`,
+  }))
+
+  const clubItems: SummaryDetailItem[] = clubs.docs.map((club) => ({
+    id: club.id,
+    primary: String(club.name),
+    secondary: (club.contact_person as string) || (club.contact_email as string) || undefined,
+  }))
+
+  const teamItems: SummaryDetailItem[] = teams.docs.map((team) => ({
+    id: team.id,
+    primary: String(team.name),
+    secondary: getRelationshipLabel(team.club_id as RelationshipDoc),
+  }))
+
+  const playerItems: SummaryDetailItem[] = players.docs.map((player) => ({
+    id: player.id,
+    primary: String(player.name),
+    secondary: getRelationshipLabel(player.club_id as RelationshipDoc),
+  }))
+
+  const entryItems: SummaryDetailItem[] = confirmedEntries.docs.map((entry) => ({
+    id: entry.id,
+    primary: String(entry.display_name),
+    secondary: getRelationshipLabel(entry.category_id as RelationshipDoc),
+  }))
+
+  const matchItems: SummaryDetailItem[] = matches.docs.map((match) => ({
+    id: match.id,
+    primary: `${match.match_number}${match.round_name ? ` · ${match.round_name}` : ''}`,
+    secondary: `${getRelationshipLabel(match.category_id as RelationshipDoc)} · ${String(
+      match.status || '',
+    ).replaceAll('_', ' ')}`,
+  }))
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <CardTitle>Progress</CardTitle>
+      <div>
+        <p className="truncate text-sm font-extrabold text-ink">{event.name}</p>
+        <p className="text-xs font-semibold text-ink-soft">
+          {event.event_start_at ? new Date(event.event_start_at).toLocaleDateString() : 'No start date'}
+          {event.location ? ` · ${event.location}` : ''}
+        </p>
+      </div>
+      <div className="flex flex-col">
+        <SummarySection
+          label="Sports"
+          modalTitle="Sports in this event"
+          columnLabel="Sport"
+          items={sportItems}
+        />
+        <SummarySection
+          label="Categories"
+          modalTitle="Competition categories"
+          columnLabel="Category"
+          items={categoryItems}
+        />
+        <SummarySection label="Clubs" modalTitle="Clubs" columnLabel="Club" items={clubItems} />
+        <SummarySection label="Teams" modalTitle="Teams" columnLabel="Team" items={teamItems} />
+        <SummarySection label="Players" modalTitle="Players" columnLabel="Player" items={playerItems} />
+        <SummarySection
+          label="Confirmed entries"
+          modalTitle="Confirmed entries"
+          columnLabel="Entry"
+          items={entryItems}
+        />
+        <SummarySection
+          label="Matches generated"
+          modalTitle="Generated matches"
+          columnLabel="Match"
+          items={matchItems}
+        />
+      </div>
+    </Card>
+  )
+}
+
+const StepActions = ({ children }: { children: ReactNode }) => (
+  <div className="flex flex-wrap justify-end gap-2">{children}</div>
+)
+
+const EventStep = () => (
+  <Card className="flex flex-col gap-4">
+    <CardTitle>1. Event details</CardTitle>
+    <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
+      <Field label="Event name" className="sm:col-span-2">
+        <Input name="name" required />
+      </Field>
+      <Field label="Slug (advanced)" className="sm:col-span-2">
+        <Input name="slug" placeholder="generated-from-name" />
+      </Field>
+      <Field label="Start">
+        <Input name="eventStart" type="datetime-local" required />
+      </Field>
+      <Field label="End">
+        <Input name="eventEnd" type="datetime-local" required />
+      </Field>
+      <Field label="Location">
+        <Input name="location" />
+      </Field>
+      <Field label="Organizer">
+        <Input name="organizerName" />
+      </Field>
+      <div className="sm:col-span-2">
+        <Button type="submit" className="w-full sm:w-auto">
+          Create event &amp; continue
+        </Button>
+      </div>
+    </form>
+  </Card>
+)
+
+type Payload = Awaited<ReturnType<typeof requireWorkspaceAccess>> extends { payload: infer P }
+  ? P
+  : never
+
+const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const [sports, rulesets] = await Promise.all([
+    payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { event_id: { equals: eventId } }, sort: 'name' }),
+  ])
+
+  return (
+    <>
+      <Card className="flex flex-col gap-4">
+        <CardTitle>2. Add a sport</CardTitle>
+        <form action={addSportAction} className="grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="eventId" value={eventId} />
+          <Field label="Sport name">
+            <Input name="name" required placeholder="Badminton" />
+          </Field>
+          <Field label="Slug (advanced)">
+            <Input name="slug" />
+          </Field>
+          <Field label="Sport type" className="sm:col-span-2">
+            <Select name="sportType" defaultValue="court">
+              <option value="court">Court</option>
+              <option value="field">Field</option>
+              <option value="table">Table</option>
+              <option value="board">Board</option>
+              <option value="esport">Esport</option>
+              <option value="track">Track</option>
+              <option value="other">Other</option>
+            </Select>
+          </Field>
+          <div className="sm:col-span-2">
+            <Button type="submit">Add sport</Button>
+          </div>
+        </form>
+      </Card>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-sm font-extrabold text-ink">Sports in this event ({sports.totalDocs})</h2>
+        {sports.docs.length === 0 ? <EmptyState>No sports added yet.</EmptyState> : null}
+        {sports.docs.map((sport) => (
+          <Card key={sport.id} className="flex flex-col gap-4">
+            <div>
+              <p className="text-sm font-extrabold text-ink">{sport.name}</p>
+              <p className="text-xs font-semibold text-ink-soft">
+                Rulesets: {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
+              </p>
+            </div>
+            <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="sportId" value={sport.id} />
+              <Field label="Ruleset name" className="sm:col-span-2">
+                <Input name="name" required placeholder={`${sport.name} Standard`} />
+              </Field>
+              <Field label="Score type">
+                <Select name="scoreType" defaultValue="points">
+                  <option value="points">Points</option>
+                  <option value="goals">Goals</option>
+                  <option value="sets">Sets</option>
+                  <option value="time">Time</option>
+                  <option value="result">Result</option>
+                  <option value="custom">Custom</option>
+                </Select>
+              </Field>
+              <Field label="Best of">
+                <Input name="bestOf" type="number" min="1" />
+              </Field>
+              <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <input name="setBased" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
+                Set based
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <input name="allowDraw" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
+                Allow draw
+              </label>
+              <div className="sm:col-span-2">
+                <Button type="submit" variant="secondary">
+                  Add ruleset
+                </Button>
+              </div>
+            </form>
+          </Card>
+        ))}
+      </div>
+
+      <StepActions>
+        <Button asChild>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=categories`}>
+            Continue to Categories
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const [sports, categories, rulesets] = await Promise.all([
+    payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({
+      collection: 'competition-categories',
+      depth: 1,
+      limit: 200,
+      where: { event_id: { equals: eventId } },
+      sort: 'name',
+    }),
+    payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { event_id: { equals: eventId } }, sort: 'name' }),
+  ])
+
+  return (
+    <>
+      <Card className="flex flex-col gap-4">
+        <CardTitle>3. Add a competition category</CardTitle>
+        {sports.docs.length === 0 ? (
+          <EmptyState>Add at least one sport first.</EmptyState>
+        ) : (
+          <form action={addCategoryAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Sport" className="sm:col-span-2">
+              <Select name="sportId" required>
+                <option value="">Select sport</option>
+                {toOptions(sports.docs).map((sport) => (
+                  <option key={sport.id} value={sport.id}>
+                    {sport.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Category name">
+              <Input name="name" required placeholder="Men's Singles" />
+            </Field>
+            <Field label="Slug (advanced)">
+              <Input name="slug" />
+            </Field>
+            <Field label="Participant mode">
+              <Select name="participantMode" defaultValue="team">
+                <option value="individual">Individual</option>
+                <option value="pair">Pair</option>
+                <option value="team">Team</option>
+                <option value="club">Club</option>
+                <option value="open">Open</option>
+                <option value="tbd">TBD</option>
+              </Select>
+            </Field>
+            <Field label="Format">
+              <Select name="formatType" defaultValue="single_elimination">
+                <option value="single_elimination">Single Elimination</option>
+                <option value="round_robin">Round Robin</option>
+                <option value="double_elimination">Double Elimination</option>
+                <option value="group_stage_to_knockout">Group Stage to Knockout</option>
+                <option value="league">League</option>
+                <option value="friendly">Friendly</option>
+                <option value="time_trial">Time Trial</option>
+                <option value="score_ranking">Score Ranking</option>
+              </Select>
+            </Field>
+            <Field label="Ruleset (optional)" className="sm:col-span-2">
+              <Select name="rulesetId">
+                <option value="">None</option>
+                {sports.docs.map((sport) => {
+                  const sportRulesets = rulesets.docs.filter(
+                    (ruleset) => String(ruleset.sport_id) === String(sport.id),
+                  )
+                  if (sportRulesets.length === 0) return null
+                  return (
+                    <optgroup label={String(sport.name)} key={sport.id}>
+                      {sportRulesets.map((ruleset) => (
+                        <option key={ruleset.id} value={ruleset.id}>
+                          {ruleset.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+              </Select>
+            </Field>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink sm:col-span-2">
+              <input
+                name="rosterRequired"
+                type="checkbox"
+                className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+              />
+              Roster required
+            </label>
+            <Field label="Min roster size">
+              <Input name="minRosterSize" type="number" min="0" />
+            </Field>
+            <Field label="Max roster size">
+              <Input name="maxRosterSize" type="number" min="0" />
+            </Field>
+            <div className="sm:col-span-2">
+              <Button type="submit">Add category</Button>
+            </div>
+          </form>
+        )}
+      </Card>
+
+      <Card className="flex flex-col gap-2">
+        <CardTitle>Categories in this event ({categories.totalDocs})</CardTitle>
+        {categories.docs.length === 0 ? (
+          <EmptyState>No categories added yet.</EmptyState>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {categories.docs.map((category) => (
+              <div key={category.id} className="rounded-card border border-line bg-paper px-4 py-3">
+                <strong className="block text-sm font-bold text-ink">{category.name}</strong>
+                <span className="text-xs font-semibold text-ink-soft">
+                  {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
+                  {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
+                  {String(category.format_type).replaceAll('_', ' ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <StepActions>
+        <Button asChild>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}>
+            Continue to Clubs / Teams / Players
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const ParticipantsStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const [clubs, teams, players] = await Promise.all([
+    payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'teams', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'players', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+  ])
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="flex flex-col gap-4">
+          <CardTitle>4. Add a club</CardTitle>
+          <form action={addClubAction} className="flex flex-col gap-4">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Club name">
+              <Input name="name" required />
+            </Field>
+            <Field label="Contact person">
+              <Input name="contactPerson" />
+            </Field>
+            <Field label="Contact email">
+              <Input name="contactEmail" type="email" />
+            </Field>
+            <Button type="submit">Add club</Button>
+          </form>
+          <div className="flex flex-col gap-2">
+            {clubs.docs.map((club) => (
+              <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                <strong className="text-sm font-bold text-ink">{club.name}</strong>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="flex flex-col gap-4">
+          <CardTitle>Add a team (optional)</CardTitle>
+          <form action={addTeamAction} className="flex flex-col gap-4">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Team name">
+              <Input name="name" required />
+            </Field>
+            <Field label="Club">
+              <Select name="clubId">
+                <option value="">None</option>
+                {toOptions(clubs.docs).map((club) => (
+                  <option key={club.id} value={club.id}>
+                    {club.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Contact email">
+              <Input name="contactEmail" type="email" />
+            </Field>
+            <Button type="submit">Add team</Button>
+          </form>
+          <div className="flex flex-col gap-2">
+            {teams.docs.map((team) => (
+              <div key={team.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                <strong className="text-sm font-bold text-ink">{team.name}</strong>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="flex flex-col gap-4">
+        <CardTitle>Add a player (optional)</CardTitle>
+        <form action={addPlayerAction} className="grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="eventId" value={eventId} />
+          <Field label="Player name">
+            <Input name="name" required />
+          </Field>
+          <Field label="Club">
+            <Select name="clubId">
+              <option value="">None</option>
+              {toOptions(clubs.docs).map((club) => (
+                <option key={club.id} value={club.id}>
+                  {club.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Email">
+            <Input name="email" type="email" />
+          </Field>
+          <Field label="Gender">
+            <Select name="gender" defaultValue="">
+              <option value="">Not set</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </Select>
+          </Field>
+          <div className="sm:col-span-2">
+            <Button type="submit">Add player</Button>
+          </div>
+        </form>
+        <div className="flex flex-col gap-2">
+          {players.docs.map((player) => (
+            <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
+              <strong className="text-sm font-bold text-ink">{player.name}</strong>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <StepActions>
+        <Button asChild>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries`}>
+            Continue to Entries &amp; Seeding
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const ParticipantModeToCollection: Record<string, 'teams' | 'clubs' | 'players'> = {
+  team: 'teams',
+  club: 'clubs',
+  individual: 'players',
+  pair: 'players',
+  open: 'players',
+  tbd: 'players',
+}
+
+const EntriesStep = async ({
+  payload,
+  eventId,
+  categoryId,
+}: {
+  payload: Payload
+  eventId: string
+  categoryId: string
+}) => {
+  const categories = await payload.find({
+    collection: 'competition-categories',
+    depth: 0,
+    limit: 200,
+    where: { event_id: { equals: eventId } },
+    sort: 'name',
+  })
+  const selectedCategoryId = categoryId || String(categories.docs[0]?.id || '')
+  const selectedCategory = categories.docs.find((c) => String(c.id) === selectedCategoryId)
+
+  if (!selectedCategory) {
+    return (
+      <Card>
+        <EmptyState>Add a competition category first.</EmptyState>
+      </Card>
+    )
+  }
+
+  const collection = ParticipantModeToCollection[String(selectedCategory.participant_mode)] || 'players'
+  const [sourceDocs, entries] = await Promise.all([
+    payload.find({ collection, depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({
+      collection: 'competition-entries',
+      depth: 0,
+      limit: 300,
+      where: { category_id: { equals: selectedCategoryId } },
+      sort: 'seed_number',
+    }),
+  ])
+
+  const enteredSourceIds = new Set(
+    entries.docs.map((entry) =>
+      String(
+        collection === 'teams' ? entry.team_id
+        : collection === 'clubs' ? entry.club_id
+        : entry.player_id,
+      ),
+    ),
+  )
+  const availableSources = sourceDocs.docs.filter((doc) => !enteredSourceIds.has(String(doc.id)))
+  const collectionLabel = collection === 'teams' ? 'teams' : collection === 'clubs' ? 'clubs' : 'players'
+
+  return (
+    <>
+      <Card className="flex flex-col gap-4">
+        <CardTitle>5. Entries &amp; seeding</CardTitle>
+        <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
+          <input type="hidden" name="eventId" value={eventId} />
+          <input type="hidden" name="step" value="entries" />
+          <Field label="Category" className="min-w-[200px] flex-1">
+            <Select name="categoryId" defaultValue={selectedCategoryId}>
+              {toOptions(categories.docs).map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button type="submit" variant="secondary">
+            Switch category
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="flex flex-col gap-2">
+        <CardTitle>Add {collectionLabel} as entries</CardTitle>
+        {availableSources.length === 0 ? (
+          <EmptyState>Everyone eligible is already entered, or none exist yet.</EmptyState>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {availableSources.map((source) => (
+              <form
+                action={addEntryAction}
+                key={source.id}
+                className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
+              >
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                <input type="hidden" name="sourceId" value={source.id} />
+                <strong className="min-w-0 truncate text-sm font-bold text-ink">{source.name}</strong>
+                <Button type="submit" size="sm" variant="secondary">
+                  Add as entry
+                </Button>
+              </form>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <CardTitle>Current entries ({entries.totalDocs})</CardTitle>
+        {entries.docs.length === 0 ? (
+          <EmptyState>No entries yet for this category.</EmptyState>
+        ) : (
+          <>
+            <form action={shuffleSeedsAction}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="categoryId" value={selectedCategoryId} />
+              <Button type="submit" variant="secondary" size="sm">
+                Shuffle Seeds
+              </Button>
+            </form>
+            <form action={saveSeedOrderAction} className="flex flex-col gap-3">
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="categoryId" value={selectedCategoryId} />
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Participant</TableHead>
+                    <TableHead>Seed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entries.docs.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-bold">{entry.display_name}</TableCell>
+                      <TableCell>
+                        <Input
+                          name={`seed_${entry.id}`}
+                          type="number"
+                          min="1"
+                          className="w-20"
+                          defaultValue={entry.seed_number ?? ''}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div>
+                <Button type="submit">Save Order</Button>
+              </div>
+            </form>
+          </>
+        )}
+      </Card>
+
+      <StepActions>
+        <Button asChild>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate`}>
+            Continue to Generate Matches
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const categories = await payload.find({
+    collection: 'competition-categories',
+    depth: 0,
+    limit: 200,
+    where: { event_id: { equals: eventId } },
+    sort: 'name',
+  })
+
+  const categoriesWithCounts = await Promise.all(
+    categories.docs.map(async (category) => {
+      const entries = await payload.find({
+        collection: 'competition-entries',
+        depth: 0,
+        limit: 500,
+        where: { and: [{ category_id: { equals: category.id } }, { status: { equals: 'confirmed' } }] },
+      })
+      return { category, confirmedCount: entries.totalDocs }
+    }),
+  )
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <div>
+        <CardTitle>6. Generate matches</CardTitle>
+        <p className="mt-1 text-sm text-ink-soft">
+          Choose a category with at least two confirmed entries. Single Elimination and Round Robin
+          categories generate a seeded first round automatically; other formats must be scheduled
+          manually in the Scheduler workspace.
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        {categoriesWithCounts.map(({ category, confirmedCount }) => (
+          <form
+            action={generateMatchesAction}
+            key={category.id}
+            className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-3"
+          >
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="categoryId" value={category.id} />
+            <div className="min-w-0">
+              <strong className="block truncate text-sm font-bold text-ink">{category.name}</strong>
+              <span className="text-xs font-semibold text-ink-soft">
+                {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
+              </span>
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={
+                confirmedCount < 2 || !['single_elimination', 'round_robin'].includes(String(category.format_type))
+              }
+            >
+              Generate Matches
+            </Button>
+          </form>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+const BracketStep = async ({
+  payload,
+  eventId,
+  categoryId,
+  generated,
+  failed,
+}: {
+  payload: Payload
+  eventId: string
+  categoryId: string
+  generated: string
+  failed: string
+}) => {
+  if (!categoryId) {
+    return (
+      <Card>
+        <EmptyState>Generate matches for a category first.</EmptyState>
+      </Card>
+    )
+  }
+
+  const category = await payload
+    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .catch(() => null)
+  const stageResult = category
+    ? await payload.find({
+        collection: 'stages',
+        depth: 0,
+        limit: 1,
+        where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 1 } }] },
+      })
+    : null
+  const stage = stageResult?.docs[0]
+
+  return (
+    <>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-sm font-extrabold text-ink">7. Bracket / fixtures</h2>
+        {generated ? (
+          <AlertBanner tone="success">
+            Generated {generated} match(es) for {category?.name}.
+          </AlertBanner>
+        ) : null}
+        {failed ? (
+          <AlertBanner tone="error">
+            {failed} pairing(s) could not be generated (likely a duplicate submission). Go back to{' '}
+            <Link
+              href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate`}
+              className="underline"
+            >
+              Generate Matches
+            </Link>{' '}
+            and click once more to fill in the rest.
+          </AlertBanner>
+        ) : null}
+      </div>
+
+      {!stage ? (
+        <Card>
+          <EmptyState>No stage generated yet for this category.</EmptyState>
+        </Card>
+      ) : stage.stage_type === 'single_elimination' ? (
+        <SingleEliminationBracketView payload={payload} stageId={String(stage.id)} />
+      ) : (
+        <RoundRobinFixtureList payload={payload} stageId={String(stage.id)} />
+      )}
+
+      <StepActions>
+        <Button asChild variant="secondary">
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries`}>
+            Generate another category
+          </Link>
+        </Button>
+        <Button asChild variant="secondary">
+          <Link href="/workspaces/scheduler">Go to Scheduler</Link>
+        </Button>
+        <Button asChild variant="secondary">
+          <Link href="/workspaces/brackets">Go to Brackets Workspace</Link>
+        </Button>
+        <Button asChild>
+          <Link href="/workspaces/event-admin">Finish setup</Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const SingleEliminationBracketView = async ({ payload, stageId }: { payload: Payload; stageId: string }) => {
+  const layout = await buildSingleEliminationBracketLayout(payload, stageId)
+  return (
+    <Card>
+      <BracketTree rounds={layout.bracketData.rounds} champion={layout.bracketData.champion} />
+    </Card>
+  )
+}
+
+const RoundRobinFixtureList = async ({ payload, stageId }: { payload: Payload; stageId: string }) => {
+  const matches = await payload.find({
+    collection: 'matches',
+    depth: 1,
+    limit: 200,
+    sort: ['round_name', 'match_number'],
+    where: { stage_id: { equals: stageId } },
+  })
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <CardTitle>Fixtures ({matches.totalDocs})</CardTitle>
+      {matches.docs.length === 0 ? (
+        <EmptyState>No fixtures generated yet.</EmptyState>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {matches.docs.map((match) => (
+            <div key={match.id} className="rounded-card border border-line bg-paper px-4 py-3">
+              <strong className="block text-sm font-bold text-ink">{match.match_number}</strong>
+              <span className="text-xs font-semibold text-ink-soft">
+                {getRelationshipLabel(match.participant_a_entry_id as RelationshipDoc)} vs{' '}
+                {getRelationshipLabel(match.participant_b_entry_id as RelationshipDoc)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}

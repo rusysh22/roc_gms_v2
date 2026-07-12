@@ -7,7 +7,7 @@ import { getPayload, type Payload } from 'payload'
 
 import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
-import { hasPublicEditRole } from './publicEditState'
+import { canEditEventPublicContent, hasPublicEditRole } from './publicEditState'
 
 type PublicEditUser = {
   id: string | number
@@ -59,6 +59,9 @@ export async function updateEventPublicContentAction(formData: FormData): Promis
 
   const payload = await getPayload({ config })
   const actor = await getAuthorizedActor(payload)
+  if (!canEditEventPublicContent(actor)) {
+    redirect(`${returnTo}?editError=unauthorized`)
+  }
   const before = await payload.findByID({ collection: 'events', id, depth: 0 })
   const visibility = textField(formData, 'visibility')
   const data = {
