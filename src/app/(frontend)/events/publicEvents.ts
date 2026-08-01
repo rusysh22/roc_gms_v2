@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { headers as getHeaders } from 'next/headers'
 import type { Payload } from 'payload'
 
 export type EventThemeConfig = {
@@ -20,18 +21,37 @@ export type PublicEventDoc = {
   name: string
   slug: string
   description?: string | null
+  hero_tagline?: string | null
   event_start_at: string
   event_end_at: string
   visibility?: string | null
   status?: string | null
   location?: string | null
+  organizer_name?: string | null
+  contact_email?: string | null
+  logo?: EventBannerImage | string | number | null
   banner_image?: EventBannerImage | string | number | null
   theme_config?: EventThemeConfig | null
 }
 
-// "hidden" events are the only visibility state that should never appear on the public site;
-// everything else (coming_soon/preview_only/published/archived) is meant to be reachable.
-const PUBLIC_VISIBILITY = { not_equals: 'hidden' } as const
+// "hidden" (never published) and "preview_only" (admin/member preview, not yet a public teaser)
+// must never resolve on the public site - see AUDIT_E2E EVT-01, which found both being treated as
+// fully public. Kept in sync with the collection-boundary check in
+// src/access/eventVisibility.ts (PUBLIC_EVENT_VISIBILITY_VALUES).
+const PUBLIC_VISIBILITY = { in: ['coming_soon', 'published', 'archived'] } as const
+// Any authenticated staff account may still resolve a hidden/preview_only event through the
+// public route - that's exactly what the "Preview" mode in PublicEditToolbar
+// (src/app/(frontend)/publicEditComponents.tsx) relies on. Only truly anonymous visitors are held
+// to PUBLIC_VISIBILITY.
+const STAFF_PREVIEW_VISIBILITY = { not_equals: 'hidden' } as const
+
+// Wrapped in React's cache() so this only ever checks the session once per request even though
+// several pages/layouts call getPublicEventBySlug independently.
+const isRequestFromAuthenticatedStaff = cache(async (payload: Payload) => {
+  const headersList = await getHeaders()
+  const { user } = await payload.auth({ headers: headersList })
+  return Boolean(user)
+})
 
 export const listPublicEvents = async (payload: Payload): Promise<PublicEventDoc[]> => {
   const result = await payload.find({
@@ -51,11 +71,14 @@ export const getPublicEventBySlug = cache(
     if (!slug) {
       return null
     }
+    const isStaff = await isRequestFromAuthenticatedStaff(payload)
     const result = await payload.find({
       collection: 'events',
       depth: 1,
       limit: 1,
-      where: { and: [{ slug: { equals: slug } }, { visibility: PUBLIC_VISIBILITY }] },
+      where: {
+        and: [{ slug: { equals: slug } }, { visibility: isStaff ? STAFF_PREVIEW_VISIBILITY : PUBLIC_VISIBILITY }],
+      },
     })
     return (result.docs[0] as PublicEventDoc) || null
   },

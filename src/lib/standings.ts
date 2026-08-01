@@ -12,6 +12,7 @@ type RelationshipDoc = {
   points_draw?: number | null
   points_loss?: number | null
   allow_draw?: boolean | null
+  group_qualify_count?: number | null
 }
 
 type StandingRuleset = {
@@ -20,6 +21,7 @@ type StandingRuleset = {
   pointsLoss: number
   allowDraw: boolean
   tieBreakers: string[]
+  groupQualifyCount?: number
 }
 
 type StandingMatch = {
@@ -63,6 +65,7 @@ export type StandingRow = {
   set_against: number
   set_difference: number
   qualified_status: 'pending' | 'qualified' | 'eliminated' | 'champion' | 'runner_up'
+  tieNote?: string
 }
 
 export type RecalculateStandingsInput = {
@@ -77,7 +80,12 @@ export type RecalculateStandingsResult = {
   finishedMatchCount: number
 }
 
-const RESULT_STATUSES = new Set(['finished', 'result_published'])
+// AUDIT_E2E STD-02: a match reaching `finished` means the officer is done playing, not that an
+// admin has reviewed and published the result (see the match lifecycle: finished -> under_review
+// -> result_published). Only these two states represent an *official* result and may affect
+// public standings. `walkover` is included because it is itself already a final, official
+// decision (see AUDIT_E2E BRK fixes / matchGeneration.ts's bye handling).
+const RESULT_STATUSES = new Set(['result_published', 'walkover'])
 const SCALAR_TIE_BREAKERS = new Set([
   'points',
   'score_difference',
@@ -111,29 +119,23 @@ const getRelationshipLabel = (
   return value.display_name || value.name || fallback
 }
 
-const toId = (value: Id | undefined, label: string): Id => {
-  if (value === undefined) {
-    throw new Error(`Missing ${label}`)
-  }
-
-  return value
-}
-
 const idsEqual = (left: Id | undefined, right: Id | undefined) =>
   left !== undefined && right !== undefined && String(left) === String(right)
 
 const makeStandingKey = (stageId: Id, groupId: Id | undefined, entryId: Id) =>
   `${stageId}:${groupId || 'no-group'}:${entryId}`
 
-const getRulesetFromCategory = async (
+const headToHeadKey = (entryId: Id, opponentId: Id) => `${entryId}:${opponentId}`
+
+const getCategoryAndRuleset = async (
   payload: Payload,
   categoryId: Id,
-): Promise<StandingRuleset> => {
+): Promise<{ ruleset: StandingRuleset; eventId?: Id }> => {
   const category = (await payload.findByID({
     collection: 'competition-categories',
     id: categoryId,
     depth: 1,
-  })) as RelationshipDoc
+  })) as RelationshipDoc & { event_id?: RelationshipDoc | Id | null }
   const ruleset = category.ruleset_id as RelationshipDoc | Id | null | undefined
 
   let rulesetDoc = typeof ruleset === 'object' && ruleset ? ruleset : undefined
@@ -147,84 +149,109 @@ const getRulesetFromCategory = async (
   }
 
   return {
-    pointsWin: rulesetDoc?.points_win ?? 3,
-    pointsDraw: rulesetDoc?.points_draw ?? 1,
-    pointsLoss: rulesetDoc?.points_loss ?? 0,
-    allowDraw: rulesetDoc?.allow_draw ?? true,
-    tieBreakers:
-      rulesetDoc?.tie_breakers && rulesetDoc.tie_breakers.length > 0
-        ? rulesetDoc.tie_breakers
-        : ['points', 'score_difference', 'score_for', 'set_difference', 'set_for'],
+    eventId: getRelationshipId(category.event_id),
+    ruleset: {
+      pointsWin: rulesetDoc?.points_win ?? 3,
+      pointsDraw: rulesetDoc?.points_draw ?? 1,
+      pointsLoss: rulesetDoc?.points_loss ?? 0,
+      allowDraw: rulesetDoc?.allow_draw ?? true,
+      tieBreakers:
+        rulesetDoc?.tie_breakers && rulesetDoc.tie_breakers.length > 0
+          ? rulesetDoc.tie_breakers
+          : ['points', 'score_difference', 'score_for', 'set_difference', 'set_for'],
+      groupQualifyCount: category.group_qualify_count ?? undefined,
+    },
   }
 }
 
-const compareRows = (ruleset: StandingRuleset) => (left: StandingRow, right: StandingRow) => {
-  const configuredTieBreakers = [
-    ...new Set(['points', ...ruleset.tieBreakers.filter((breaker) => SCALAR_TIE_BREAKERS.has(breaker))]),
-  ]
+// AUDIT_E2E STD-03: `head_to_head`, `fewest_penalties`, and `manual_decision` were silently
+// ignored - ties always fell through to an alphabetical sort that looked rules-based but wasn't.
+// `head_to_head` is now genuinely evaluated (points earned in direct meetings between the two tied
+// entries). `fewest_penalties` has no penalty data model anywhere in this codebase yet, so it is
+// explicitly skipped rather than faked. When `manual_decision` is configured and a tie still isn't
+// resolved after every supported breaker, the row is flagged with `tieNote` instead of silently
+// presenting the alphabetical fallback as if it were a rules-based result.
+const compareRows =
+  (ruleset: StandingRuleset, headToHead: Map<string, number>) =>
+  (left: StandingRow, right: StandingRow) => {
+    const configuredTieBreakers = [
+      ...new Set(['points', ...ruleset.tieBreakers.filter((breaker) => SCALAR_TIE_BREAKERS.has(breaker))]),
+    ]
 
-  for (const breaker of configuredTieBreakers) {
-    const leftValue = left[breaker as keyof StandingRow]
-    const rightValue = right[breaker as keyof StandingRow]
+    for (const breaker of configuredTieBreakers) {
+      const leftValue = left[breaker as keyof StandingRow]
+      const rightValue = right[breaker as keyof StandingRow]
 
-    if (typeof leftValue === 'number' && typeof rightValue === 'number' && leftValue !== rightValue) {
-      return rightValue - leftValue
+      if (typeof leftValue === 'number' && typeof rightValue === 'number' && leftValue !== rightValue) {
+        return rightValue - leftValue
+      }
     }
-  }
 
-  const labelCompare = left.entry_label.localeCompare(right.entry_label, 'en')
-  if (labelCompare !== 0) {
-    return labelCompare
-  }
+    if (ruleset.tieBreakers.includes('head_to_head')) {
+      const leftPoints = headToHead.get(headToHeadKey(left.entry_id, right.entry_id))
+      const rightPoints = headToHead.get(headToHeadKey(right.entry_id, left.entry_id))
+      if (leftPoints !== undefined && rightPoints !== undefined && leftPoints !== rightPoints) {
+        return rightPoints - leftPoints
+      }
+    }
 
-  return String(left.entry_id).localeCompare(String(right.entry_id), 'en')
-}
+    // Every supported breaker is exhausted and the tie is still unresolved. Flag it (visible in
+    // Payload Admin / a future manual-decision UI) rather than presenting the fallback order below
+    // as if it were rules-based.
+    if (ruleset.tieBreakers.includes('manual_decision')) {
+      left.tieNote = `Tied with ${right.entry_label} after all configured tiebreakers - needs a manual decision.`
+      right.tieNote = `Tied with ${left.entry_label} after all configured tiebreakers - needs a manual decision.`
+    }
+
+    const labelCompare = left.entry_label.localeCompare(right.entry_label, 'en')
+    if (labelCompare !== 0) {
+      return labelCompare
+    }
+
+    return String(left.entry_id).localeCompare(String(right.entry_id), 'en')
+  }
 
 const createEmptyRow = (
-  match: StandingMatch,
-  entrySide: 'a' | 'b',
+  entryId: Id,
+  entryLabel: string,
   eventId: Id,
   categoryId: Id,
   stageId: Id,
   groupId?: Id,
-): StandingRow => {
-  const entry = entrySide === 'a' ? match.participant_a_entry_id : match.participant_b_entry_id
-  const entryId = toId(getRelationshipId(entry), 'entry id')
-
-  return {
-    standing_key: makeStandingKey(stageId, groupId, entryId),
-    event_id: eventId,
-    category_id: categoryId,
-    stage_id: stageId,
-    group_id: groupId,
-    entry_id: entryId,
-    entry_label: getRelationshipLabel(entry, 'TBD'),
-    rank: 1,
-    played: 0,
-    won: 0,
-    drawn: 0,
-    lost: 0,
-    points: 0,
-    score_for: 0,
-    score_against: 0,
-    score_difference: 0,
-    set_for: 0,
-    set_against: 0,
-    set_difference: 0,
-    qualified_status: 'pending',
-  }
-}
+): StandingRow => ({
+  standing_key: makeStandingKey(stageId, groupId, entryId),
+  event_id: eventId,
+  category_id: categoryId,
+  stage_id: stageId,
+  group_id: groupId,
+  entry_id: entryId,
+  entry_label: entryLabel,
+  rank: 1,
+  played: 0,
+  won: 0,
+  drawn: 0,
+  lost: 0,
+  points: 0,
+  score_for: 0,
+  score_against: 0,
+  score_difference: 0,
+  set_for: 0,
+  set_against: 0,
+  set_difference: 0,
+  qualified_status: 'pending',
+})
 
 const addMatchToRows = (
   rowsByEntryId: Map<string, StandingRow>,
   match: StandingMatch,
   matchSets: StandingMatchSet[],
   ruleset: StandingRuleset,
+  headToHead: Map<string, number>,
 ) => {
   const participantAId = getRelationshipId(match.participant_a_entry_id)
   const participantBId = getRelationshipId(match.participant_b_entry_id)
 
-  if (!participantAId || !participantBId || matchSets.length === 0) {
+  if (!participantAId || !participantBId) {
     return
   }
 
@@ -265,88 +292,125 @@ const addMatchToRows = (
         ? 'b'
         : undefined
 
+  let pointsA = 0
+  let pointsB = 0
+
   if (isDraw) {
     rowA.drawn += 1
     rowB.drawn += 1
-    rowA.points += ruleset.pointsDraw
-    rowB.points += ruleset.pointsDraw
+    pointsA = ruleset.pointsDraw
+    pointsB = ruleset.pointsDraw
   } else if (winnerSide === 'a') {
     rowA.won += 1
     rowB.lost += 1
-    rowA.points += ruleset.pointsWin
-    rowB.points += ruleset.pointsLoss
+    pointsA = ruleset.pointsWin
+    pointsB = ruleset.pointsLoss
   } else if (winnerSide === 'b') {
     rowB.won += 1
     rowA.lost += 1
-    rowB.points += ruleset.pointsWin
-    rowA.points += ruleset.pointsLoss
+    pointsB = ruleset.pointsWin
+    pointsA = ruleset.pointsLoss
   }
 
+  rowA.points += pointsA
+  rowB.points += pointsB
   rowA.score_difference = rowA.score_for - rowA.score_against
   rowB.score_difference = rowB.score_for - rowB.score_against
   rowA.set_difference = rowA.set_for - rowA.set_against
   rowB.set_difference = rowB.set_for - rowB.set_against
+
+  headToHead.set(headToHeadKey(participantAId, participantBId), pointsA)
+  headToHead.set(headToHeadKey(participantBId, participantAId), pointsB)
 }
 
 export const calculateStandingsForScope = async (
   payload: Payload,
   input: RecalculateStandingsInput,
 ): Promise<RecalculateStandingsResult> => {
-  const whereConditions: Where[] = [
+  const { ruleset, eventId: categoryEventId } = await getCategoryAndRuleset(payload, input.categoryId)
+  const eventId = input.eventId ?? categoryEventId
+  if (!eventId) {
+    return { rows: [], finishedMatchCount: 0 }
+  }
+
+  const scopeConditions: Where[] = [
     { category_id: { equals: input.categoryId } },
     { stage_id: { equals: input.stageId } },
-    { status: { in: Array.from(RESULT_STATUSES) } },
   ]
-
-  if (input.eventId) {
-    whereConditions.push({ event_id: { equals: input.eventId } })
+  if (input.groupId) {
+    scopeConditions.push({ group_id: { equals: input.groupId } })
   }
+
+  // AUDIT_E2E STD-05: the roster used to come *only* from matches that had already reached a
+  // result-bearing status, so an entry with zero decided matches (including "the stage/group has
+  // no results at all yet") never got a row - standings looked empty even for a fully-confirmed
+  // group. The roster is now independent of match outcomes: for a group-scoped stage it's every
+  // entry that appears in *any* match in that group (entries don't carry a group_id of their own),
+  // otherwise it's every confirmed entry in the category directly.
+  const rowsByEntryId = new Map<string, StandingRow>()
 
   if (input.groupId) {
-    whereConditions.push({ group_id: { equals: input.groupId } })
+    const rosterMatches = await payload.find({
+      collection: 'matches',
+      depth: 1,
+      limit: 500,
+      where: { and: scopeConditions },
+    })
+
+    for (const doc of rosterMatches.docs as StandingMatch[]) {
+      for (const side of [doc.participant_a_entry_id, doc.participant_b_entry_id]) {
+        const entryId = getRelationshipId(side)
+        if (entryId && !rowsByEntryId.has(String(entryId))) {
+          rowsByEntryId.set(
+            String(entryId),
+            createEmptyRow(
+              entryId,
+              getRelationshipLabel(side, 'TBD'),
+              eventId,
+              input.categoryId,
+              input.stageId,
+              input.groupId,
+            ),
+          )
+        }
+      }
+    }
+  } else {
+    const confirmedEntries = await payload.find({
+      collection: 'competition-entries',
+      depth: 0,
+      limit: 500,
+      where: {
+        and: [{ category_id: { equals: input.categoryId } }, { status: { equals: 'confirmed' } }],
+      },
+    })
+
+    for (const entry of confirmedEntries.docs) {
+      rowsByEntryId.set(
+        String(entry.id),
+        createEmptyRow(
+          entry.id,
+          String(entry.display_name || 'TBD'),
+          eventId,
+          input.categoryId,
+          input.stageId,
+          undefined,
+        ),
+      )
+    }
   }
 
-  const matchesResult = await payload.find({
+  const decidedMatchesResult = await payload.find({
     collection: 'matches',
     depth: 1,
     limit: 500,
     sort: ['scheduled_start_at', 'match_number'],
-    where: { and: whereConditions },
+    where: { and: [...scopeConditions, { status: { in: Array.from(RESULT_STATUSES) } }] },
   })
+  const decidedMatches = decidedMatchesResult.docs as StandingMatch[]
 
-  const matches = matchesResult.docs as StandingMatch[]
-  const firstMatch = matches[0]
-  if (!firstMatch) {
-    return { rows: [], finishedMatchCount: 0 }
-  }
-
-  const eventId = toId(getRelationshipId(firstMatch.event_id), 'event id')
-  const categoryId = toId(getRelationshipId(firstMatch.category_id), 'category id')
-  const stageId = toId(getRelationshipId(firstMatch.stage_id), 'stage id')
-  const groupId = getRelationshipId(firstMatch.group_id)
-  const ruleset = await getRulesetFromCategory(payload, categoryId)
-  const rowsByEntryId = new Map<string, StandingRow>()
-
-  for (const match of matches) {
-    const participantAId = getRelationshipId(match.participant_a_entry_id)
-    const participantBId = getRelationshipId(match.participant_b_entry_id)
-
-    if (participantAId && !rowsByEntryId.has(String(participantAId))) {
-      rowsByEntryId.set(
-        String(participantAId),
-        createEmptyRow(match, 'a', eventId, categoryId, stageId, groupId),
-      )
-    }
-
-    if (participantBId && !rowsByEntryId.has(String(participantBId))) {
-      rowsByEntryId.set(
-        String(participantBId),
-        createEmptyRow(match, 'b', eventId, categoryId, stageId, groupId),
-      )
-    }
-  }
-
-  for (const match of matches) {
+  const headToHead = new Map<string, number>()
+  for (const match of decidedMatches) {
     const matchSets = await payload.find({
       collection: 'match-sets',
       depth: 1,
@@ -355,17 +419,24 @@ export const calculateStandingsForScope = async (
       where: { match_id: { equals: match.id } },
     })
 
-    addMatchToRows(rowsByEntryId, match, matchSets.docs as StandingMatchSet[], ruleset)
+    addMatchToRows(rowsByEntryId, match, matchSets.docs as StandingMatchSet[], ruleset, headToHead)
   }
 
-  const rows = Array.from(rowsByEntryId.values()).sort(compareRows(ruleset))
+  const rows = Array.from(rowsByEntryId.values()).sort(compareRows(ruleset, headToHead))
   rows.forEach((row, index) => {
     row.rank = index + 1
+    // AUDIT_E2E STD-06: qualified_status was always left at its 'pending' default - it's now a
+    // live "currently in qualifying position" indicator once the category configures
+    // group_qualify_count. This is provisional (it can move as more results come in), not a final
+    // mathematically-clinched determination - full elimination/clinch math is a larger follow-up.
+    if (ruleset.groupQualifyCount) {
+      row.qualified_status = index < ruleset.groupQualifyCount ? 'qualified' : 'pending'
+    }
   })
 
   return {
     rows,
-    finishedMatchCount: matches.length,
+    finishedMatchCount: decidedMatches.length,
   }
 }
 
@@ -410,6 +481,7 @@ export const recalculateStandingsForScope = async (
       set_against: row.set_against,
       set_difference: row.set_difference,
       qualified_status: row.qualified_status,
+      tie_note: row.tieNote || null,
     }
 
     if (existingRow) {

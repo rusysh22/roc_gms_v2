@@ -13,6 +13,19 @@ type AdvancementStage = RelationshipDoc & {
   stage_type?: string | null
 }
 
+// Matches that have not been touched at all downstream of their source match - overwriting a
+// participant slot on one of these is safe. Anything past this list (ongoing, finished,
+// result_published, ...) means the next match has its own progress that a silent overwrite could
+// corrupt, so a winner revision must stop and ask for manual resolution instead (AUDIT_E2E BRK-03).
+const UNSTARTED_TARGET_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'published',
+  'check_in_open',
+  'ready_to_start',
+])
+
 type AdvancementMatch = {
   id: Id
   match_number: string
@@ -22,17 +35,18 @@ type AdvancementMatch = {
   participant_a_entry_id?: RelationshipDoc | Id | null
   participant_b_entry_id?: RelationshipDoc | Id | null
   winner_entry_id?: RelationshipDoc | Id | null
+  next_match_id?: RelationshipDoc | Id | null
+  next_match_slot?: 'a' | 'b' | null
 }
 
 export type WinnerAdvancementOutcome =
   | 'advanced'
+  | 'revised'
   | 'already_advanced'
   | 'skipped_not_single_elimination'
   | 'skipped_not_result_published'
   | 'skipped_missing_winner'
   | 'skipped_no_next_round'
-  | 'skipped_no_target_match'
-  | 'skipped_target_ambiguous'
   | 'skipped_target_occupied'
 
 export type WinnerAdvancementResult = {
@@ -71,42 +85,8 @@ const getRelationshipLabel = (
   return value.display_name || value.name || fallback
 }
 
-const getEntryType = (value: RelationshipDoc | Id | null | undefined) => {
-  if (!value || typeof value === 'string' || typeof value === 'number') {
-    return undefined
-  }
-
-  return value.entry_type || undefined
-}
-
 const idsEqual = (left: Id | undefined, right: Id | undefined) =>
   left !== undefined && right !== undefined && String(left) === String(right)
-
-const getRoundOrder = (roundName: string) => {
-  const normalizedName = roundName.toLowerCase()
-  if (normalizedName.includes('first')) return 10
-  const roundOfMatch = normalizedName.match(/round of (\d+)/)
-  if (roundOfMatch) {
-    // "Round of 16" keeps its historical order (20); larger brackets (Round of 32/64/...) sort
-    // progressively earlier so bigger tournaments still order correctly end-to-end.
-    return Math.max(1, 20 - (Math.log2(Number(roundOfMatch[1])) - 4) * 5)
-  }
-  if (normalizedName.includes('quarter')) return 30
-  if (normalizedName.includes('semi')) return 40
-  if (normalizedName.includes('bronze')) return 45
-  if (normalizedName.includes('final')) return 50
-
-  return 100
-}
-
-const isEmptyOrTbdSlot = (value: RelationshipDoc | Id | null | undefined) => {
-  const entryId = getRelationshipId(value)
-  if (!entryId) {
-    return true
-  }
-
-  return getEntryType(value) === 'tbd'
-}
 
 const getMatchById = async (payload: Payload, matchId: Id) => {
   return (await payload.findByID({
@@ -132,12 +112,18 @@ const buildSkipResult = (
   ...extra,
 })
 
+const PUBLISHED_RESULT_STATUSES = new Set(['result_published', 'walkover'])
+
+// Determines whether (and where) a source match's winner should be written into the next round,
+// using the explicit next_match_id/next_match_slot graph recorded at generation time (see
+// buildSingleEliminationBracketPlan in src/lib/matchGeneration.ts) instead of re-deriving position
+// from round_name/index (AUDIT_E2E BRK-02 - a rename, an extra round, or a classification match
+// used to silently break advancement).
 export const getSingleEliminationAdvancementPreview = async (
   payload: Payload,
   matchId: Id,
 ): Promise<WinnerAdvancementResult> => {
   const match = await getMatchById(payload, matchId)
-  const stageId = getRelationshipId(match.stage_id)
   const stageType =
     match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
 
@@ -149,7 +135,7 @@ export const getSingleEliminationAdvancementPreview = async (
     )
   }
 
-  if (match.status !== 'result_published') {
+  if (!PUBLISHED_RESULT_STATUSES.has(match.status)) {
     return buildSkipResult(
       match,
       'skipped_not_result_published',
@@ -162,115 +148,41 @@ export const getSingleEliminationAdvancementPreview = async (
     return buildSkipResult(match, 'skipped_missing_winner', 'No winner is set for this match.')
   }
 
-  const matchesResult = await payload.find({
-    collection: 'matches',
-    depth: 2,
-    limit: 200,
-    sort: ['scheduled_start_at', 'match_number'],
-    where: {
-      stage_id: {
-        equals: stageId,
-      },
-    },
-  })
-  const matches = (matchesResult.docs as AdvancementMatch[]).sort((left, right) => {
-    const roundCompare =
-      getRoundOrder(left.round_name || '') - getRoundOrder(right.round_name || '')
-    if (roundCompare !== 0) {
-      return roundCompare
-    }
+  const targetMatchId = getRelationshipId(match.next_match_id)
+  const targetSlot = match.next_match_slot || undefined
 
-    return left.match_number.localeCompare(right.match_number, 'en')
-  })
-  const rounds = new Map<string, AdvancementMatch[]>()
-
-  for (const stageMatch of matches) {
-    const roundName = stageMatch.round_name || 'Single Elimination'
-    const roundMatches = rounds.get(roundName) || []
-    roundMatches.push(stageMatch)
-    rounds.set(roundName, roundMatches)
-  }
-
-  const orderedRounds = Array.from(rounds.entries()).sort(
-    ([leftName], [rightName]) => getRoundOrder(leftName) - getRoundOrder(rightName),
-  )
-  const currentRoundIndex = orderedRounds.findIndex(([, roundMatches]) =>
-    roundMatches.some((roundMatch) => idsEqual(roundMatch.id, match.id)),
-  )
-
-  if (currentRoundIndex < 0 || currentRoundIndex >= orderedRounds.length - 1) {
+  if (!targetMatchId || !targetSlot) {
     return buildSkipResult(
       match,
       'skipped_no_next_round',
-      'No later round exists for this match.',
+      'This match has no recorded next-match target (final, or generated before the bracket-graph fix).',
     )
   }
 
-  const currentRoundMatches = orderedRounds[currentRoundIndex][1]
-  const currentMatchIndex = currentRoundMatches.findIndex((roundMatch) =>
-    idsEqual(roundMatch.id, match.id),
+  const targetMatch = await getMatchById(payload, targetMatchId)
+  const targetParticipantId = getRelationshipId(
+    targetSlot === 'a' ? targetMatch.participant_a_entry_id : targetMatch.participant_b_entry_id,
   )
-  const nextRoundMatches = orderedRounds[currentRoundIndex + 1][1]
-  const targetMatch = nextRoundMatches[Math.floor(currentMatchIndex / 2)]
 
-  if (!targetMatch) {
-    return buildSkipResult(
-      match,
-      'skipped_no_target_match',
-      'No deterministic next-round match exists for this source match.',
-    )
-  }
-
-  const targetParticipantAId = getRelationshipId(targetMatch.participant_a_entry_id)
-  const targetParticipantBId = getRelationshipId(targetMatch.participant_b_entry_id)
-  if (idsEqual(targetParticipantAId, winnerEntryId)) {
+  if (idsEqual(targetParticipantId, winnerEntryId)) {
     return buildSkipResult(match, 'already_advanced', 'Winner is already in the next match.', {
       targetMatchId: targetMatch.id,
       targetMatchNumber: targetMatch.match_number,
-      targetSlot: 'a',
+      targetSlot,
     })
   }
 
-  if (idsEqual(targetParticipantBId, winnerEntryId)) {
-    return buildSkipResult(match, 'already_advanced', 'Winner is already in the next match.', {
-      targetMatchId: targetMatch.id,
-      targetMatchNumber: targetMatch.match_number,
-      targetSlot: 'b',
-    })
-  }
-
-  const emptySlots: ('a' | 'b')[] = []
-  if (isEmptyOrTbdSlot(targetMatch.participant_a_entry_id)) {
-    emptySlots.push('a')
-  }
-  if (isEmptyOrTbdSlot(targetMatch.participant_b_entry_id)) {
-    emptySlots.push('b')
-  }
-
-  if (emptySlots.length === 0) {
+  if (targetParticipantId) {
+    // Occupied by a *different* participant than the current winner - either the target still
+    // has its generation-time TBD placeholder resolved wrong, or (far more likely) this is a
+    // winner revision: the source match's winner changed after it had already advanced someone
+    // else. Reported as occupied here; attemptSingleEliminationWinnerAdvancement decides below
+    // whether that occupant can be safely replaced.
     return buildSkipResult(
       match,
       'skipped_target_occupied',
-      'Next match already has participants and cannot be overwritten safely.',
-      {
-        targetMatchId: targetMatch.id,
-        targetMatchNumber: targetMatch.match_number,
-      },
-    )
-  }
-
-  const targetSlot =
-    emptySlots.length === 1 ? emptySlots[0] : currentMatchIndex % 2 === 0 ? 'a' : 'b'
-
-  if (!emptySlots.includes(targetSlot)) {
-    return buildSkipResult(
-      match,
-      'skipped_target_ambiguous',
-      'No deterministic empty target slot could be selected.',
-      {
-        targetMatchId: targetMatch.id,
-        targetMatchNumber: targetMatch.match_number,
-      },
+      'The next match already has a different participant in this slot.',
+      { targetMatchId: targetMatch.id, targetMatchNumber: targetMatch.match_number, targetSlot },
     )
   }
 
@@ -294,22 +206,52 @@ export const attemptSingleEliminationWinnerAdvancement = async (
 ): Promise<WinnerAdvancementResult> => {
   const preview = await getSingleEliminationAdvancementPreview(payload, matchId)
 
-  if (preview.outcome !== 'advanced' || !preview.targetMatchId || !preview.targetSlot) {
-    return preview
+  if (preview.outcome === 'advanced' && preview.targetMatchId && preview.targetSlot) {
+    await payload.update({
+      collection: 'matches',
+      id: preview.targetMatchId,
+      data:
+        preview.targetSlot === 'a'
+          ? { participant_a_entry_id: preview.winnerEntryId }
+          : { participant_b_entry_id: preview.winnerEntryId },
+    })
+
+    return {
+      ...preview,
+      advanced: true,
+      reason: `Winner advanced to ${preview.targetMatchNumber} participant ${preview.targetSlot.toUpperCase()}.`,
+    }
   }
 
-  await payload.update({
-    collection: 'matches',
-    id: preview.targetMatchId,
-    data:
-      preview.targetSlot === 'a'
-        ? { participant_a_entry_id: preview.winnerEntryId }
-        : { participant_b_entry_id: preview.winnerEntryId },
-  })
+  if (preview.outcome === 'skipped_target_occupied' && preview.targetMatchId && preview.targetSlot) {
+    // Compensating propagation for a winner revision (AUDIT_E2E BRK-03): only overwrite the
+    // downstream slot if that next match genuinely has not progressed yet. If it has (checked in,
+    // started, scored, or already finished), refuse and surface the conflict instead of silently
+    // erasing real downstream progress - the caller/admin must resolve it by hand.
+    const targetMatch = await getMatchById(payload, preview.targetMatchId)
+    if (!UNSTARTED_TARGET_STATUSES.has(targetMatch.status)) {
+      return {
+        ...preview,
+        reason: `${preview.targetMatchNumber} has already progressed (status: ${targetMatch.status}) and cannot be silently corrected. Resolve the conflict manually.`,
+      }
+    }
 
-  return {
-    ...preview,
-    advanced: true,
-    reason: `Winner advanced to ${preview.targetMatchNumber} participant ${preview.targetSlot.toUpperCase()}.`,
+    await payload.update({
+      collection: 'matches',
+      id: preview.targetMatchId,
+      data:
+        preview.targetSlot === 'a'
+          ? { participant_a_entry_id: preview.winnerEntryId }
+          : { participant_b_entry_id: preview.winnerEntryId },
+    })
+
+    return {
+      ...preview,
+      outcome: 'revised',
+      advanced: true,
+      reason: `Winner revision propagated to ${preview.targetMatchNumber} participant ${preview.targetSlot.toUpperCase()}.`,
+    }
   }
+
+  return preview
 }

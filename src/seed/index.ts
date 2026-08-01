@@ -93,6 +93,84 @@ const getRelationshipId = (value: unknown): SeedId | undefined => {
   return undefined
 }
 
+// Seed-only compatibility shim: demoScenario.ts hand-authors its single-elimination bracket
+// fixtures with fixed round_name/match_number values rather than going through
+// buildSingleEliminationBracketPlan (src/lib/matchGeneration.ts), so those matches never get a
+// next_match_id/next_match_slot written at create time. attemptSingleEliminationWinnerAdvancement
+// now requires that explicit graph (see AUDIT_E2E BRK-02) instead of re-deriving position from
+// round_name/index, so this links every single-elimination stage's matches the same "round order,
+// then match_number order" way the old production advancement code used to - confined to seed data
+// only, so demoScenario's quarter -> semi -> final flow keeps auto-advancing.
+const getSeedRoundOrder = (roundName: string) => {
+  const normalized = roundName.toLowerCase()
+  if (normalized.includes('first')) return 10
+  const roundOfMatch = normalized.match(/round of (\d+)/)
+  if (roundOfMatch) {
+    return Math.max(1, 20 - (Math.log2(Number(roundOfMatch[1])) - 4) * 5)
+  }
+  if (normalized.includes('quarter')) return 30
+  if (normalized.includes('semi')) return 40
+  if (normalized.includes('bronze')) return 45
+  if (normalized.includes('final')) return 50
+  return 100
+}
+
+const linkSingleEliminationNextMatches = async (payload: SeedPayload, eventId: SeedId) => {
+  const stagesResult = await payload.find({
+    collection: 'stages',
+    depth: 0,
+    limit: 100,
+    where: { and: [{ event_id: { equals: eventId } }, { stage_type: { equals: 'single_elimination' } }] },
+  })
+
+  for (const stage of stagesResult.docs) {
+    const stageMatches = await payload.find({
+      collection: 'matches',
+      depth: 0,
+      limit: 200,
+      where: { stage_id: { equals: getId(stage) } },
+    })
+
+    const rounds = new Map<string, typeof stageMatches.docs>()
+    for (const match of stageMatches.docs) {
+      const roundName = (match.round_name as string | undefined) || 'Single Elimination'
+      const roundMatches = rounds.get(roundName) || []
+      roundMatches.push(match)
+      rounds.set(roundName, roundMatches)
+    }
+
+    const orderedRounds = Array.from(rounds.entries())
+      .sort(([left], [right]) => getSeedRoundOrder(left) - getSeedRoundOrder(right))
+      .map(([, roundMatches]) =>
+        [...roundMatches].sort((left, right) =>
+          String(left.match_number).localeCompare(String(right.match_number), 'en'),
+        ),
+      )
+
+    for (let roundIndex = 0; roundIndex < orderedRounds.length - 1; roundIndex += 1) {
+      const currentRound = orderedRounds[roundIndex]
+      const nextRound = orderedRounds[roundIndex + 1]
+
+      for (let matchIndex = 0; matchIndex < currentRound.length; matchIndex += 1) {
+        const sourceMatch = currentRound[matchIndex]
+        const targetMatch = nextRound[Math.floor(matchIndex / 2)]
+        if (!targetMatch || getRelationshipId(sourceMatch.next_match_id)) {
+          continue
+        }
+
+        await payload.update({
+          collection: 'matches',
+          id: getId(sourceMatch),
+          data: {
+            next_match_id: getId(targetMatch),
+            next_match_slot: matchIndex % 2 === 0 ? 'a' : 'b',
+          },
+        })
+      }
+    }
+  }
+}
+
 const findOne = async (
   payload: SeedPayload,
   collection: CollectionName,
@@ -1205,6 +1283,8 @@ const seed = async () => {
   // real attemptSingleEliminationWinnerAdvancement helper - the same function the match officer
   // workspace calls - so TBD placeholder matches get filled in exactly like production. Safe to
   // re-run: advancement is a no-op once a winner is already in the target slot.
+  await linkSingleEliminationNextMatches(payload, eventId)
+
   for (const resultData of demoScenario.singleEliminationResults) {
     const matchId = await resolveMatchId(resultData.matchNumber)
     if (!matchId) {

@@ -5,6 +5,7 @@ import { ArrowLeft, MapPin } from 'lucide-react'
 
 import config from '@payload-config'
 import { getMatchDetail } from '../../../../matchDetailData'
+import { AutoRefresh } from '@/components/auto-refresh'
 import { Card, CardTitle } from '@/components/ui/card'
 import { ShareButtons } from '@/components/share-buttons'
 import { AnnouncementFeed, ArticleCard } from '../../../../contentComponents'
@@ -26,6 +27,10 @@ import { getPublicEventBySlug } from '../../../publicEvents'
 export const dynamic = 'force-dynamic'
 
 type MatchPageParams = Promise<{ eventSlug: string; matchNumber: string }>
+
+// AUDIT_E2E MAT-08: only worth polling while the match can still change - a finished/
+// result_published match's public page is effectively static.
+const LIVE_POLL_STATUSES = new Set(['ongoing', 'paused', 'check_in_open', 'ready_to_start', 'under_review'])
 
 const getCategoryHref = (eventPath: string, sport: unknown, category: unknown) => {
   const sportSlug =
@@ -100,9 +105,18 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
               </Link>
             ) : null}
           </div>
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-            {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+              {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
+            </p>
+            {LIVE_POLL_STATUSES.has(match.status) ? (
+              <AutoRefresh
+                showIndicator
+                intervalMs={10000}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink-soft"
+              />
+            ) : null}
+          </div>
           <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">
             {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
             {getRelationshipLabel(match.participant_b_entry_id)}

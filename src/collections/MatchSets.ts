@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageMatches, canReadBackofficeOnly } from '@/access/roles'
+import { canManageMatches, canReadBackofficeOnly, enforceMatchSetMutationCapabilities } from '@/access/roles'
 
 export const MatchSets: CollectionConfig = {
   slug: 'match-sets',
@@ -13,6 +13,9 @@ export const MatchSets: CollectionConfig = {
     delete: canManageMatches,
     read: canReadBackofficeOnly,
     update: canManageMatches,
+  },
+  hooks: {
+    beforeChange: [enforceMatchSetMutationCapabilities],
   },
   fields: [
     {

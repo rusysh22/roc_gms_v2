@@ -5,8 +5,8 @@ import { redirect } from 'next/navigation'
 
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import {
+  buildSingleEliminationBracketPlan,
   generateRoundRobinPairings,
-  generateSingleEliminationFirstRound,
   getMatchPairKey,
   getNextPowerOfTwo,
   getSchedulableEntries,
@@ -91,11 +91,6 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
       },
     }))
 
-  const pairings =
-    formatType === 'single_elimination'
-      ? generateSingleEliminationFirstRound(schedulableEntries)
-      : generateRoundRobinPairings(schedulableEntries)
-
   const existingStageMatches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -116,13 +111,9 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
     return candidate
   }
 
-  // Round names/prefixes for every round after the first, counting back from the Final. A
-  // single-elimination bracket only ever has byes in round 1 (bracket size is always a power of
-  // two), so every later round is a clean, fully-empty set of TBD placeholder matches that
-  // attemptSingleEliminationWinnerAdvancement (src/lib/winnerAdvancement.ts) fills in as earlier
-  // rounds get results. Without pre-creating these placeholders, the bracket view only ever shows
-  // round 1 (see BracketTree's g-loot transform, which infers round count/shape from
-  // bracketData.rounds itself rather than the round's real match count).
+  // Round names/prefixes counting back from the Final, applied to every round including the
+  // first - so an 8-bracket's opening round is correctly labelled "Quarterfinal" (not a generic
+  // "First Round" regardless of bracket size, which is what this used to say).
   const roundNameForRemaining = (roundsRemaining: number) => {
     if (roundsRemaining <= 0) return 'Final'
     if (roundsRemaining === 1) return 'Semifinal'
@@ -139,119 +130,144 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
 
   let createdCount = 0
   let failedCount = 0
-  for (const pairing of pairings) {
-    const pairKey = getMatchPairKey(pairing.participantA.id, pairing.participantB.id)
-    const generationKey = `${event.slug}:${category!.slug}:${stage.id}:no-group:${formatType}:${pairKey}`
-
-    const existingMatch = await payload.find({
-      collection: 'matches',
-      depth: 0,
-      limit: 1,
-      where: { generation_key: { equals: generationKey } },
-    })
-    if (existingMatch.docs.length > 0) {
-      continue
-    }
-
-    try {
-      await payload.create({
-        collection: 'matches',
-        data: {
-          event_id: Number(eventId),
-          sport_id: category!.sport_id,
-          category_id: Number(categoryId),
-          stage_id: stage.id,
-          round_name: pairing.roundName,
-          match_number: nextMatchNumber('r1'),
-          participant_a_entry_id: pairing.participantA.id,
-          participant_b_entry_id: pairing.participantB.id,
-          status: 'ready_for_scheduling',
-          generation_source: formatType,
-          generation_key: generationKey,
-          // Wizard-generated fixtures are linked from the published public bracket.
-          // Keep them readable through the public match route from the moment the bracket is shown.
-          is_public: true,
-          documentation_status: 'not_started',
-        },
-      })
-      createdCount += 1
-    } catch {
-      // A concurrent duplicate submission or a rare match_number/generation_key race can fail a
-      // single pairing - keep generating the rest instead of aborting the whole batch. Re-running
-      // "Generate Matches" will safely skip already-created pairings via the generation_key check
-      // above and pick up fresh match numbers via existingStageMatches on the next call.
-      failedCount += 1
-    }
-  }
 
   if (formatType === 'single_elimination') {
+    // Builds every round up front with standard seed placement (bye recipients spread across
+    // separate quarters, never paired against each other - see AUDIT_E2E BRK-01) and creates
+    // matches round-by-round so each match can record an explicit next_match_id/next_match_slot
+    // once its target match exists, instead of advancement being re-derived later from
+    // round_name/index (AUDIT_E2E BRK-02).
     const bracketSize = getNextPowerOfTwo(schedulableEntries.length)
-    const totalRounds = Math.log2(bracketSize)
+    const totalRounds = bracketSize > 1 ? Math.log2(bracketSize) : 0
+    const plan = buildSingleEliminationBracketPlan(schedulableEntries)
+    const matchIdByRoundAndIndex = new Map<string, string | number>()
 
-    if (totalRounds > 1) {
-      const byeCount = bracketSize - schedulableEntries.length
-      const byeEntryIds = schedulableEntries.slice(0, byeCount).map((entry) => Number(entry.id))
+    for (let round = 0; round < totalRounds; round += 1) {
+      const roundsRemaining = totalRounds - 1 - round
+      const roundName = roundNameForRemaining(roundsRemaining)
+      const roundPrefix = roundPrefixForRemaining(roundsRemaining)
+      const roundPlans = plan.filter((matchPlan) => matchPlan.round === round)
 
-      // Slot fillers for round 2, in order: one placeholder per round-1 match (so round-1 match
-      // index i lands at flat position i, matching attemptSingleEliminationWinnerAdvancement's
-      // `nextRoundMatches[Math.floor(currentMatchIndex / 2)]` targeting), then any bye entrants
-      // filling the remaining slots. Byes only ever occur at this round-1-to-round-2 boundary.
-      let previousRoundSlots: (number | undefined)[] = [
-        ...pairings.map(() => undefined),
-        ...byeEntryIds,
-      ]
+      for (const matchPlan of roundPlans) {
+        const generationKey = `${event.slug}:${category!.slug}:${stage.id}:no-group:${formatType}:r${round}:m${matchPlan.matchIndex}`
+        const existingMatch = await payload.find({
+          collection: 'matches',
+          depth: 0,
+          limit: 1,
+          where: { generation_key: { equals: generationKey } },
+        })
 
-      for (let roundIndex = 1; roundIndex < totalRounds; roundIndex += 1) {
-        const roundsRemaining = totalRounds - 1 - roundIndex
-        const roundName = roundNameForRemaining(roundsRemaining)
-        const roundPrefix = roundPrefixForRemaining(roundsRemaining)
-        const matchCountThisRound = previousRoundSlots.length / 2
-        const nextRoundSlots: undefined[] = []
+        let matchId = existingMatch.docs[0]?.id
 
-        for (let matchIndex = 0; matchIndex < matchCountThisRound; matchIndex += 1) {
-          const generationKey = `${event.slug}:${category!.slug}:${stage.id}:no-group:${formatType}:round-${roundIndex}:slot-${matchIndex}`
-          const existingMatch = await payload.find({
-            collection: 'matches',
-            depth: 0,
-            limit: 1,
-            where: { generation_key: { equals: generationKey } },
-          })
-
-          if (existingMatch.docs.length === 0) {
-            try {
-              await payload.create({
-                collection: 'matches',
-                data: {
-                  event_id: Number(eventId),
-                  sport_id: category!.sport_id,
-                  category_id: Number(categoryId),
-                  stage_id: stage.id,
-                  round_name: roundName,
-                  match_number: nextMatchNumber(roundPrefix),
-                  participant_a_entry_id: previousRoundSlots[matchIndex * 2],
-                  participant_b_entry_id: previousRoundSlots[matchIndex * 2 + 1],
-                  status: 'ready_for_scheduling',
-                  generation_source: formatType,
-                  generation_key: generationKey,
-                  is_public: true,
-                  documentation_status: 'not_started',
-                },
-              })
-              createdCount += 1
-            } catch {
-              failedCount += 1
-            }
+        if (!matchId) {
+          const byeWinnerId = matchPlan.isBye
+            ? (matchPlan.participantA ?? matchPlan.participantB)!.id
+            : undefined
+          try {
+            const created = await payload.create({
+              collection: 'matches',
+              data: {
+                event_id: Number(eventId),
+                sport_id: category!.sport_id,
+                category_id: Number(categoryId),
+                stage_id: stage.id,
+                round_name: roundName,
+                match_number: nextMatchNumber(roundPrefix),
+                participant_a_entry_id: matchPlan.participantA?.id,
+                participant_b_entry_id: matchPlan.participantB?.id,
+                // A bye auto-resolves: the sole participant is the winner and the match is an
+                // auditable walkover record (GEN-02) instead of silently vanishing - BracketTree
+                // already renders a 'walkover' status with one participant as a bye card.
+                status: matchPlan.isBye ? 'walkover' : 'ready_for_scheduling',
+                winner_entry_id: byeWinnerId,
+                score_summary: matchPlan.isBye ? 'Bye' : undefined,
+                generation_source: formatType,
+                generation_key: generationKey,
+                is_public: true,
+                documentation_status: matchPlan.isBye ? 'not_required' : 'not_started',
+              },
+            })
+            matchId = created.id
+            createdCount += 1
+          } catch {
+            // A concurrent duplicate submission or a rare match_number/generation_key race can
+            // fail a single match - keep generating the rest. Re-running "Generate Matches" will
+            // safely skip already-created matches via the generation_key check above.
+            failedCount += 1
+            continue
           }
-
-          nextRoundSlots.push(undefined)
         }
 
-        previousRoundSlots = nextRoundSlots
+        matchIdByRoundAndIndex.set(`${round}:${matchPlan.matchIndex}`, matchId)
+
+        if (round > 0) {
+          const parentRound = round - 1
+          const parentASlotId = matchIdByRoundAndIndex.get(`${parentRound}:${matchPlan.matchIndex * 2}`)
+          const parentBSlotId = matchIdByRoundAndIndex.get(`${parentRound}:${matchPlan.matchIndex * 2 + 1}`)
+
+          if (parentASlotId) {
+            await payload.update({
+              collection: 'matches',
+              id: parentASlotId,
+              data: { next_match_id: matchId, next_match_slot: 'a' },
+            })
+          }
+          if (parentBSlotId) {
+            await payload.update({
+              collection: 'matches',
+              id: parentBSlotId,
+              data: { next_match_id: matchId, next_match_slot: 'b' },
+            })
+          }
+        }
       }
     }
 
     await recalculateSingleEliminationBracket(payload, { stageId: stage.id })
   } else {
+    const pairings = generateRoundRobinPairings(schedulableEntries)
+
+    for (const pairing of pairings) {
+      const pairKey = getMatchPairKey(pairing.participantA.id, pairing.participantB.id)
+      const generationKey = `${event.slug}:${category!.slug}:${stage.id}:no-group:${formatType}:${pairKey}`
+
+      const existingMatch = await payload.find({
+        collection: 'matches',
+        depth: 0,
+        limit: 1,
+        where: { generation_key: { equals: generationKey } },
+      })
+      if (existingMatch.docs.length > 0) {
+        continue
+      }
+
+      try {
+        await payload.create({
+          collection: 'matches',
+          data: {
+            event_id: Number(eventId),
+            sport_id: category!.sport_id,
+            category_id: Number(categoryId),
+            stage_id: stage.id,
+            round_name: pairing.roundName,
+            match_number: nextMatchNumber('r1'),
+            participant_a_entry_id: pairing.participantA.id,
+            participant_b_entry_id: pairing.participantB.id,
+            status: 'ready_for_scheduling',
+            generation_source: formatType,
+            generation_key: generationKey,
+            // Wizard-generated fixtures are linked from the published public bracket.
+            // Keep them readable through the public match route from the moment the bracket is shown.
+            is_public: true,
+            documentation_status: 'not_started',
+          },
+        })
+        createdCount += 1
+      } catch {
+        failedCount += 1
+      }
+    }
+
     await recalculateStandingsForScope(payload, {
       eventId,
       categoryId,

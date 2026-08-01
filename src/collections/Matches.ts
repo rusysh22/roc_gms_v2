@@ -1,6 +1,12 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageMatches, canReadPublicMatch } from '@/access/roles'
+import {
+  canCreateMatch,
+  canDeleteMatch,
+  canManageMatches,
+  canReadPublicMatch,
+  enforceMatchMutationCapabilities,
+} from '@/access/roles'
 
 export const Matches: CollectionConfig = {
   slug: 'matches',
@@ -17,10 +23,16 @@ export const Matches: CollectionConfig = {
     useAsTitle: 'match_number',
   },
   access: {
-    create: canManageMatches,
-    delete: canManageMatches,
+    create: canCreateMatch,
+    delete: canDeleteMatch,
     read: canReadPublicMatch,
+    // Base role gate stays broad (any of scheduler/match_officer/event_admin/super_admin can
+    // update *something* on a match) - enforceMatchMutationCapabilities below narrows which
+    // *fields* each role may change at the collection boundary, on every entry point.
     update: canManageMatches,
+  },
+  hooks: {
+    beforeChange: [enforceMatchMutationCapabilities],
   },
   fields: [
     {
@@ -206,6 +218,43 @@ export const Matches: CollectionConfig = {
       type: 'relationship',
       relationTo: 'competition-entries',
       index: true,
+    },
+    {
+      name: 'officer_ids',
+      type: 'relationship',
+      relationTo: 'users',
+      hasMany: true,
+      index: true,
+      admin: {
+        description:
+          'Match officials assigned to run this match. Leave empty to keep it open to any match officer on the event (AUDIT_E2E MAT-07).',
+      },
+      filterOptions: {
+        roles: { in: ['match_officer', 'event_admin', 'super_admin'] },
+      },
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'next_match_id',
+          type: 'relationship',
+          relationTo: 'matches',
+          index: true,
+          admin: {
+            description:
+              'Explicit bracket-advancement target. The winner of this match is written into next_match_slot of next_match_id - not inferred from round_name/index.',
+          },
+        },
+        {
+          name: 'next_match_slot',
+          type: 'select',
+          options: [
+            { label: 'Participant A', value: 'a' },
+            { label: 'Participant B', value: 'b' },
+          ],
+        },
+      ],
     },
     {
       name: 'score_summary',

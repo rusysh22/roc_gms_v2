@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { publicReadPublishedBracket } from '@/access/eventVisibility'
 import { canManageSchedule } from '@/access/roles'
 
 export const Brackets: CollectionConfig = {
@@ -12,7 +13,7 @@ export const Brackets: CollectionConfig = {
   access: {
     create: canManageSchedule,
     delete: canManageSchedule,
-    read: () => true,
+    read: publicReadPublishedBracket,
     update: canManageSchedule,
   },
   fields: [

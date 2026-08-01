@@ -6,6 +6,7 @@ import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin } from 'lucide-re
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import { AutoRefresh } from '@/components/auto-refresh'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
@@ -204,10 +205,13 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     <main className="font-sans text-ink">
       <section className="px-4 pt-4 pb-6">
         <div className="mx-auto max-w-4xl">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
-            Schedule, Standings &amp; Champions
-          </p>
-          <h1 className="text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+              Schedule, Standings &amp; Champions
+            </p>
+            <AutoRefresh showIndicator className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink-soft" />
+          </div>
+          <h1 className="mt-2 text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
           <p className="mt-3 max-w-xl text-base text-ink-soft">
             Every published match, live rankings, and decided champions for this event, in one
             place.

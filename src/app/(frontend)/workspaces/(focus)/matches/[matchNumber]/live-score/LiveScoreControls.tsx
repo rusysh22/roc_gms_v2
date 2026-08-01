@@ -1,11 +1,11 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { updateMatchSetScoreAction } from '../../../../matches/matchActions'
+import { addLiveScorePointAction } from '../../../../matches/matchActions'
 
 type ParticipantSide = 'a' | 'b'
 
@@ -17,40 +17,37 @@ type LiveScoreControlsProps = {
   participantBName: string
   participantAScore: number
   participantBScore: number
-  winnerSide: '' | ParticipantSide
   returnTo: string
 }
 
 const participantButtonClass =
   'grid min-h-40 flex-1 content-between rounded-panel border p-5 text-left transition-all active:scale-[0.99]'
 
-function ScoreForm({
+// AUDIT_E2E MAT-03: this form no longer computes or submits an absolute score - it only tells the
+// server *which set*, *which side*, and *which direction* (+1/-1). The server re-reads the current
+// score and applies the delta as a single atomic SQL UPDATE (see addLiveScorePointAction), so two
+// rapid taps or two devices can never silently overwrite each other's point.
+function PointForm({
   children,
   matchNumber,
   matchSetId,
-  participantAScore,
-  participantBScore,
-  winnerSide,
+  side,
+  delta,
   returnTo,
-  notes,
 }: {
   children: ReactNode
   matchNumber: string
   matchSetId: string | number
-  participantAScore: number
-  participantBScore: number
-  winnerSide: '' | ParticipantSide
+  side: ParticipantSide
+  delta: 1 | -1
   returnTo: string
-  notes: string
 }) {
   return (
-    <form action={updateMatchSetScoreAction} className="contents">
+    <form action={addLiveScorePointAction} className="contents">
       <input type="hidden" name="matchNumber" value={matchNumber} />
       <input type="hidden" name="matchSetId" value={String(matchSetId)} />
-      <input type="hidden" name="participantAScore" value={participantAScore} />
-      <input type="hidden" name="participantBScore" value={participantBScore} />
-      <input type="hidden" name="winnerSide" value={winnerSide} />
-      <input type="hidden" name="notes" value={notes} />
+      <input type="hidden" name="side" value={side} />
+      <input type="hidden" name="delta" value={delta} />
       <input type="hidden" name="returnTo" value={returnTo} />
       {children}
     </form>
@@ -65,26 +62,10 @@ export function LiveScoreControls({
   participantBName,
   participantAScore,
   participantBScore,
-  winnerSide,
   returnTo,
 }: LiveScoreControlsProps) {
   const [selectedSide, setSelectedSide] = useState<ParticipantSide>('a')
   const selectedName = selectedSide === 'a' ? participantAName : participantBName
-  const addScores = useMemo(
-    () => ({
-      a: participantAScore + (selectedSide === 'a' ? 1 : 0),
-      b: participantBScore + (selectedSide === 'b' ? 1 : 0),
-    }),
-    [participantAScore, participantBScore, selectedSide],
-  )
-  const subtractScores = useMemo(
-    () => ({
-      a: selectedSide === 'a' ? Math.max(0, participantAScore - 1) : participantAScore,
-      b: selectedSide === 'b' ? Math.max(0, participantBScore - 1) : participantBScore,
-    }),
-    [participantAScore, participantBScore, selectedSide],
-  )
-  const notes = `Live score set ${setNumber}: ${selectedName} adjusted from mobile scoring screen.`
 
   return (
     <section className="grid flex-1 grid-rows-[auto_1fr_auto] gap-4" aria-label="Live score controls">
@@ -137,14 +118,12 @@ export function LiveScoreControls({
       </div>
 
       <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-3 md:grid-cols-[112px_minmax(0,1fr)]">
-        <ScoreForm
+        <PointForm
           matchNumber={matchNumber}
           matchSetId={matchSetId}
-          participantAScore={subtractScores.a}
-          participantBScore={subtractScores.b}
-          winnerSide={winnerSide}
+          side={selectedSide}
+          delta={-1}
           returnTo={returnTo}
-          notes={notes}
         >
           <button
             type="submit"
@@ -156,16 +135,14 @@ export function LiveScoreControls({
               <Minus className="h-3 w-3" aria-hidden="true" /> 1
             </span>
           </button>
-        </ScoreForm>
+        </PointForm>
 
-        <ScoreForm
+        <PointForm
           matchNumber={matchNumber}
           matchSetId={matchSetId}
-          participantAScore={addScores.a}
-          participantBScore={addScores.b}
-          winnerSide={winnerSide}
+          side={selectedSide}
+          delta={1}
           returnTo={returnTo}
-          notes={notes}
         >
           <Button
             type="submit"
@@ -174,7 +151,7 @@ export function LiveScoreControls({
             <Plus className="h-7 w-7" aria-hidden="true" />
             Add point to {selectedName}
           </Button>
-        </ScoreForm>
+        </PointForm>
       </div>
     </section>
   )

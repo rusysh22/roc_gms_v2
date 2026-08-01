@@ -16,6 +16,7 @@ import { CompetitionEntries } from './src/collections/CompetitionEntries'
 import { Courts } from './src/collections/Courts'
 import { DocumentationAssets } from './src/collections/DocumentationAssets'
 import { Events } from './src/collections/Events'
+import { EventMemberships } from './src/collections/EventMemberships'
 import { Groups } from './src/collections/Groups'
 import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
@@ -61,6 +62,7 @@ export default buildConfig({
     Users,
     SiteConfigs,
     Events,
+    EventMemberships,
     Rulesets,
     Sports,
     CompetitionCategories,

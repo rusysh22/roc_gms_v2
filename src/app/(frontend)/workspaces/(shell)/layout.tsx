@@ -11,7 +11,7 @@ export default async function WorkspaceShellLayout({ children }: { children: Rea
   const user = await getAuthenticatedWorkspaceUser(payload)
   const [activeEvent, events] = await Promise.all([
     getActiveEvent(payload),
-    listEventsForSwitcher(payload),
+    user ? listEventsForSwitcher(payload, user) : Promise.resolve([]),
   ])
 
   return (

@@ -14,14 +14,13 @@ import {
   formatDateTime,
   formatStatus,
   getRelationshipLabel,
-  getSetWinnerSide,
 } from '../../../../workspaceComponents'
 import { ConfirmSubmitButton } from '../../../../matches/ConfirmSubmitButton'
 import {
   addMatchSetAction,
   transitionMatchStatusAction,
 } from '../../../../matches/matchActions'
-import { getAllowedTransitions } from '../../../../matches/matchLifecycle'
+import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../../../../matches/matchLifecycle'
 import { FocusHeader } from '../../../FocusHeader'
 import { LiveScoreControls } from './LiveScoreControls'
 
@@ -113,9 +112,7 @@ export default async function LiveScorePage({
           ) : null}
           {matchError ? (
             <p className="mb-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
-              {matchError === 'invalid_score'
-                ? 'Scores must be zero or a positive whole number.'
-                : 'The last live score action could not be completed.'}
+              {MATCH_ACTION_ERROR_MESSAGES[matchError] || 'The last live score action could not be completed.'}
             </p>
           ) : null}
 
@@ -128,7 +125,6 @@ export default async function LiveScorePage({
               participantBName={participantBName}
               participantAScore={currentSet.participant_a_score ?? 0}
               participantBScore={currentSet.participant_b_score ?? 0}
-              winnerSide={getSetWinnerSide(match, currentSet)}
               returnTo={returnTo}
             />
           ) : (

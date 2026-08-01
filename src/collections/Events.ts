@@ -1,6 +1,28 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionAfterChangeHook, CollectionConfig } from 'payload'
 
+import { publicReadEvents } from '@/access/eventVisibility'
 import { canManageEventStructure } from '@/access/roles'
+
+// AUDIT_E2E AUTH-01: enrolls the creating user as this event's first EventMemberships row, so a
+// brand-new event starts life scoped to its own creator instead of open to every global role
+// holder in the system. Best-effort (logged, not fatal) - the event itself must still get created
+// even if this enrollment fails.
+const enrollCreatorAsMember: CollectionAfterChangeHook = async ({ doc, req, operation }) => {
+  if (operation !== 'create' || !req.user) {
+    return doc
+  }
+
+  try {
+    await req.payload.create({
+      collection: 'event-memberships',
+      data: { event_id: doc.id, user_id: req.user.id },
+    })
+  } catch (error) {
+    req.payload.logger.error(`Failed to auto-enroll creator as member of event ${doc.id}: ${error}`)
+  }
+
+  return doc
+}
 
 export const Events: CollectionConfig = {
   slug: 'events',
@@ -12,8 +34,11 @@ export const Events: CollectionConfig = {
   access: {
     create: canManageEventStructure,
     delete: canManageEventStructure,
-    read: () => true,
+    read: publicReadEvents,
     update: canManageEventStructure,
+  },
+  hooks: {
+    afterChange: [enrollCreatorAsMember],
   },
   fields: [
     {
@@ -31,6 +56,14 @@ export const Events: CollectionConfig = {
     {
       name: 'description',
       type: 'textarea',
+    },
+    {
+      name: 'hero_tagline',
+      type: 'text',
+      admin: {
+        description:
+          'Short headline shown on this event\'s public hero (e.g. "Smash Your Way to Glory"). Falls back to the event name if empty.',
+      },
     },
     {
       name: 'logo',
@@ -168,6 +201,13 @@ export const Events: CollectionConfig = {
     {
       name: 'organizer_name',
       type: 'text',
+    },
+    {
+      name: 'contact_email',
+      type: 'email',
+      admin: {
+        description: 'Shown on the public page footer for visitor inquiries.',
+      },
     },
     {
       name: 'rules_summary',

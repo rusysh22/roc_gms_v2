@@ -1,16 +1,15 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { Crown, X } from 'lucide-react'
+import { ArrowRight, Crown, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketRound } from '@/lib/brackets'
-import { Button } from '@/components/ui/button'
-import { Field } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
+import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { updateBracketMatchAction } from './bracketModalActions'
 
 // Rebuilt against the library's own default Match/theme rendering instead of fighting it with a
 // fully custom match component - the previous build reimplemented our whole card design on top of
@@ -491,58 +490,35 @@ export const BracketTree = ({
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <form
-                    action={updateBracketMatchAction}
-                    className="flex flex-col gap-3 rounded-card border border-line p-4"
-                  >
-                    <input type="hidden" name="intent" value="score" />
-                    <input type="hidden" name="matchId" value={selectedMatch.id} />
-                    <input type="hidden" name="matchNumber" value={selectedMatch.name} />
-                    <div>
-                      <h3 className="text-sm font-extrabold text-ink">Update result</h3>
-                      <p className="text-xs text-ink-soft">
-                        Winner is determined automatically from the higher score.
-                      </p>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Status</p>
+                    <StatusBadge tone={getMatchStatusTone(selectedMatch.state)} className="mt-1">
+                      {selectedMatch.state.replaceAll('_', ' ')}
+                    </StatusBadge>
+                  </div>
+                  {selectedMatch.startTime ? (
+                    <div className="text-right">
+                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Scheduled</p>
+                      <p className="mt-1 text-sm font-semibold text-ink">{selectedMatch.startTime}</p>
                     </div>
-                    <Field label={selectedMatch.participantAName || 'Participant A'}>
-                      <Input name="scoreA" type="number" min="0" required />
-                    </Field>
-                    <Field label={selectedMatch.participantBName || 'Participant B'}>
-                      <Input name="scoreB" type="number" min="0" required />
-                    </Field>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                      <input
-                        name="addSet"
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
-                      />
-                      Add a new set
-                    </label>
-                    <Button type="submit" className="mt-1">
-                      Save result
-                    </Button>
-                  </form>
-
-                  <form
-                    action={updateBracketMatchAction}
-                    className="flex flex-col gap-3 rounded-card border border-line p-4"
-                  >
-                    <input type="hidden" name="intent" value="schedule" />
-                    <input type="hidden" name="matchId" value={selectedMatch.id} />
-                    <input type="hidden" name="matchNumber" value={selectedMatch.name} />
-                    <h3 className="text-sm font-extrabold text-ink">Set schedule</h3>
-                    <Field label="Start">
-                      <Input name="scheduledStart" type="datetime-local" required />
-                    </Field>
-                    <Field label="End">
-                      <Input name="scheduledEnd" type="datetime-local" required />
-                    </Field>
-                    <Button type="submit" variant="secondary" className="mt-auto">
-                      Save schedule
-                    </Button>
-                  </form>
+                  ) : null}
                 </div>
+
+                {/* Score and schedule are only ever edited from the Match Officer / Scheduler
+                    workspace (a single authorized mutation path per AUDIT_E2E MAT-01/PUB-03) -
+                    this public bracket view is read-only and links out to the live match page. */}
+                {selectedMatch.href ? (
+                  <Link
+                    href={selectedMatch.href}
+                    className={cn(buttonVariants({ variant: 'primary' }), 'w-full')}
+                  >
+                    View match details
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                ) : (
+                  <p className="text-sm text-ink-soft">This match does not have a public page yet.</p>
+                )}
               </>
             ) : null}
           </Dialog.Content>

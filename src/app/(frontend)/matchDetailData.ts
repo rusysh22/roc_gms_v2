@@ -41,6 +41,7 @@ export type MatchDetail = {
   participant_a_entry_id?: EntryDoc | string | number | null
   participant_b_entry_id?: EntryDoc | string | number | null
   winner_entry_id?: EntryDoc | string | number | null
+  officer_ids?: (RelationshipDoc | string | number)[] | null
 }
 
 export type MatchSetDetail = {

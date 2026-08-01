@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 
 import config from '@payload-config'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import { AutoRefresh } from '@/components/auto-refresh'
 import { Card } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { formatStatus, getRelationshipLabel } from '../../../workspaces/workspaceComponents'
@@ -52,7 +53,10 @@ export default async function PublicBracketsPage({
           <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
             Public Brackets
           </p>
-          <h1 className="text-3xl font-extrabold sm:text-4xl">{event.name} Brackets</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-3xl font-extrabold sm:text-4xl">{event.name} Brackets</h1>
+            <AutoRefresh showIndicator className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink-soft" />
+          </div>
           <p className="mt-3 max-w-xl text-base text-ink-soft">
             Single-elimination brackets rendered from match records. Status, scores, and winners
             stay sourced from the match data - nothing here is edited directly.

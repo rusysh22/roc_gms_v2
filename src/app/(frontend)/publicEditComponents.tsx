@@ -143,11 +143,13 @@ const FormActions = ({ editHref }: { editHref: string }) => (
 
 export function EventPublicEditor({
   id,
+  heroTagline,
   description,
   visibility,
   returnTo,
 }: {
   id: string | number
+  heroTagline?: string | null
   description?: string | null
   visibility?: string | null
   returnTo: string
@@ -156,6 +158,7 @@ export function EventPublicEditor({
     <form action={updateEventPublicContentAction} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={String(id)} />
       <input type="hidden" name="returnTo" value={returnTo} />
+      <Field label="Hero tagline" name="heroTagline" defaultValue={heroTagline} />
       <Field label="Event description" name="description" defaultValue={description} textarea />
       <label className="flex flex-col gap-1 text-sm font-semibold text-ink">
         Visibility

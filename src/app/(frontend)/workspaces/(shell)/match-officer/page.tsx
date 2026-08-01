@@ -52,12 +52,27 @@ export default async function MatchOfficerWorkspacePage() {
     )
   }
 
+  // AUDIT_E2E MAT-07: this used to show every scheduled match on the active event to every match
+  // officer - "Assigned Match List" wasn't actually scoped to an assignment. A match with no
+  // officer_ids stays open to any match officer (see Matches.ts field description); otherwise only
+  // the officers actually listed on the match see it here.
   const matches = await payload.find({
     collection: 'matches',
     depth: 2,
     limit: 50,
     sort: 'scheduled_start_at',
-    where: { and: [{ event_id: { equals: activeEvent.id } }, { scheduled_start_at: { exists: true } }] },
+    where: {
+      and: [
+        { event_id: { equals: activeEvent.id } },
+        { scheduled_start_at: { exists: true } },
+        {
+          or: [
+            { officer_ids: { exists: false } },
+            { officer_ids: { in: access.user ? [access.user.id] : [] } },
+          ],
+        },
+      ],
+    },
   })
 
   const scheduledMatches = (matches.docs as WorkspaceMatch[]).filter((match) =>

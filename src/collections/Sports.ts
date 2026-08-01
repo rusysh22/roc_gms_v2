@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { publicReadScopedToEvent } from '@/access/eventVisibility'
 import { canManageEventStructure } from '@/access/roles'
 
 export const Sports: CollectionConfig = {
@@ -12,7 +13,7 @@ export const Sports: CollectionConfig = {
   access: {
     create: canManageEventStructure,
     delete: canManageEventStructure,
-    read: () => true,
+    read: publicReadScopedToEvent(),
     update: canManageEventStructure,
   },
   fields: [

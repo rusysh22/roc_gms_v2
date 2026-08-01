@@ -1,6 +1,9 @@
 import { cookies } from 'next/headers'
 import type { Payload } from 'payload'
 
+import { getAccessibleEventIds } from '@/access/eventMembership'
+import type { UserRole } from '@/access/roles'
+
 // Event = the "company"/tenant every master-data and transaction collection is scoped to
 // (event_id on Sports, Categories, Clubs, Teams, Players, Entries, Matches, ...). One admin
 // account can own several events, so the workspace needs an explicit "which event am I working
@@ -47,12 +50,20 @@ export const getActiveEvent = async (
   return (fallback.docs[0] as ActiveEventDoc) || null
 }
 
-export const listEventsForSwitcher = async (payload: Payload): Promise<ActiveEventDoc[]> => {
+// Scoped to the events this user is actually a member of (AUDIT_E2E AUTH-01) - previously this had
+// no where clause at all, so every staff account saw and could pick every event in the system
+// regardless of role or assignment.
+export const listEventsForSwitcher = async (
+  payload: Payload,
+  user: { id: string | number; roles?: UserRole[] | null },
+): Promise<ActiveEventDoc[]> => {
+  const accessibleEventIds = await getAccessibleEventIds(payload, user)
   const result = await payload.find({
     collection: 'events',
     depth: 0,
     limit: 100,
     sort: '-event_start_at',
+    where: accessibleEventIds === 'all' ? undefined : { id: { in: accessibleEventIds } },
   })
   return result.docs as ActiveEventDoc[]
 }

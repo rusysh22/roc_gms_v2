@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { publicReadScopedToEvent } from '@/access/eventVisibility'
 import { canManageSchedule } from '@/access/roles'
 
 export const Standings: CollectionConfig = {
@@ -12,7 +13,7 @@ export const Standings: CollectionConfig = {
   access: {
     create: canManageSchedule,
     delete: canManageSchedule,
-    read: () => true,
+    read: publicReadScopedToEvent(),
     update: canManageSchedule,
   },
   fields: [
@@ -99,6 +100,14 @@ export const Standings: CollectionConfig = {
         { label: 'Champion', value: 'champion' },
         { label: 'Runner Up', value: 'runner_up' },
       ],
+    },
+    {
+      name: 'tie_note',
+      type: 'text',
+      admin: {
+        description:
+          'Set when this row is still tied with another after every supported tiebreaker - rank was assigned deterministically (alphabetically) as a placeholder, not by rule. AUDIT_E2E STD-03.',
+      },
     },
   ],
   timestamps: true,

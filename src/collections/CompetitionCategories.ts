@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { publicReadScopedToEvent } from '@/access/eventVisibility'
 import { canManageEventStructure } from '@/access/roles'
 
 export const CompetitionCategories: CollectionConfig = {
@@ -12,7 +13,7 @@ export const CompetitionCategories: CollectionConfig = {
   access: {
     create: canManageEventStructure,
     delete: canManageEventStructure,
-    read: () => true,
+    read: publicReadScopedToEvent(),
     update: canManageEventStructure,
   },
   fields: [
@@ -110,6 +111,15 @@ export const CompetitionCategories: CollectionConfig = {
         { label: 'Published', value: 'published' },
         { label: 'Archived', value: 'archived' },
       ],
+    },
+    {
+      name: 'group_qualify_count',
+      type: 'number',
+      min: 1,
+      admin: {
+        description:
+          'How many top-ranked entries per group currently qualify to advance (standings mark them "qualified"). Leave empty to skip auto-qualification (AUDIT_E2E STD-06).',
+      },
     },
   ],
   timestamps: true,

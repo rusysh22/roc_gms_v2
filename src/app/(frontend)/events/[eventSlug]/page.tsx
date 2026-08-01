@@ -11,6 +11,7 @@ import {
   Crown,
   Gamepad2,
   Goal,
+  MapPin,
   Sparkles,
   Table2,
   Timer,
@@ -105,6 +106,44 @@ const formatMatchTime = (value?: string | null) => {
   }).format(new Date(value))
 }
 
+// A single line summary of when the event runs, e.g. "12-14 Feb 2026" or "28 Feb - 2 Mar 2026" -
+// used in the hero's "at a glance" line instead of the raw start/end timestamps.
+const formatEventDateRange = (startIso: string, endIso: string) => {
+  const start = new Date(startIso)
+  const end = new Date(endIso)
+  const tz = 'Asia/Bangkok'
+  const day = (date: Date) => new Intl.DateTimeFormat('en', { day: 'numeric', timeZone: tz }).format(date)
+  const monthYear = (date: Date) =>
+    new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: tz }).format(date)
+  const sameMonth =
+    new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: tz }).format(start) ===
+    monthYear(end)
+
+  if (start.toDateString() === end.toDateString()) {
+    return new Intl.DateTimeFormat('en', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: tz,
+    }).format(start)
+  }
+
+  if (sameMonth) {
+    return `${day(start)}-${day(end)} ${monthYear(end)}`
+  }
+
+  return `${day(start)} ${monthYear(start)} - ${day(end)} ${monthYear(end)}`
+}
+
+// A short, human sentence of what's on offer, e.g. "Badminton, Futsal & 3 more sports" - the
+// "to the point" replacement for the old raw sports/categories/clubs/teams/players counter row.
+const formatSportsSummary = (sportNames: string[]) => {
+  if (sportNames.length === 0) return null
+  if (sportNames.length <= 2) return sportNames.join(' & ')
+  const [first, second] = sportNames
+  return `${first}, ${second} & ${sportNames.length - 2} more ${sportNames.length - 2 === 1 ? 'sport' : 'sports'}`
+}
+
 type HomeSearchParams = Promise<Record<string, string | string[] | undefined>>
 
 export default async function EventHomePage({
@@ -124,19 +163,11 @@ export default async function EventHomePage({
   const eventPath = `/events/${event.slug}`
   const bannerImage =
     event.banner_image && typeof event.banner_image === 'object' ? event.banner_image : undefined
+  const logoImage = event.logo && typeof event.logo === 'object' ? event.logo : undefined
 
   const eventWhere = { event_id: { equals: event.id } }
-  const [
-    liveNextResult,
-    sportsResult,
-    articles,
-    clubsCount,
-    teamsCount,
-    playersCount,
-    categoriesCount,
-    standingsResult,
-    upcomingMatchesResult,
-  ] = await Promise.all([
+  const [liveNextResult, sportsResult, articles, standingsResult, upcomingMatchesResult] =
+    await Promise.all([
     payload.find({
       collection: 'matches',
       depth: 2,
@@ -168,10 +199,6 @@ export default async function EventHomePage({
       where: { and: [eventWhere, { is_active: { equals: true } }] },
     }),
     getPublicArticles(3, event.id),
-    payload.find({ collection: 'clubs', depth: 0, limit: 1, where: eventWhere }),
-    payload.find({ collection: 'teams', depth: 0, limit: 1, where: eventWhere }),
-    payload.find({ collection: 'players', depth: 0, limit: 1, where: eventWhere }),
-    payload.find({ collection: 'competition-categories', depth: 0, limit: 1, where: eventWhere }),
     payload.find({
       collection: 'standings',
       depth: 1,
@@ -191,6 +218,7 @@ export default async function EventHomePage({
 
   const matches = liveNextResult.docs as HomeMatch[]
   const sports = sportsResult.docs as SportDoc[]
+  const sportsSummary = formatSportsSummary(sports.map((sport) => sport.name))
 
   const categoriesResult = sports.length
     ? await payload.find({
@@ -245,7 +273,7 @@ export default async function EventHomePage({
     <main className="font-sans text-ink">
       <PublicEditToolbar state={editState} path={eventPath} />
       <AutoRefresh />
-      <section className="relative overflow-hidden px-4 pb-16 pt-10 sm:pt-16">
+      <section className="relative flex min-h-[85vh] items-end overflow-hidden px-4 pb-14 pt-28 sm:min-h-[90vh]">
         {bannerImage?.url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
@@ -254,10 +282,14 @@ export default async function EventHomePage({
               alt={bannerImage.alt || event.name}
               className="absolute inset-0 h-full w-full object-cover"
             />
-            <div aria-hidden="true" className="absolute inset-0 bg-paper/85" />
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-gradient-to-t from-paper via-paper/75 to-paper/10"
+            />
           </>
         ) : (
           <>
+            <div aria-hidden="true" className="absolute inset-0 bg-mist" />
             <div
               aria-hidden="true"
               className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-green/30 blur-3xl"
@@ -269,36 +301,59 @@ export default async function EventHomePage({
           </>
         )}
 
-        <div className="relative mx-auto flex max-w-5xl flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative mx-auto flex w-full max-w-5xl flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-              <Sparkles className="h-3.5 w-3.5 text-green" aria-hidden="true" />
+              {logoImage?.url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions
+                <img
+                  src={logoImage.url}
+                  alt=""
+                  className="h-4 w-4 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 text-green" aria-hidden="true" />
+              )}
               {event.name}
             </p>
-            <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Where Colleagues Become
-              <br />
-              <span className="bg-gradient-to-r from-green to-blue bg-clip-text text-transparent">
-                Champions
-              </span>
-            </h1>
+
             <EditableRegion
               state={editState}
-              label="Event intro"
+              label="Hero tagline"
               editor={
                 <EventPublicEditor
                   id={event.id}
+                  heroTagline={event.hero_tagline}
                   description={event.description}
                   visibility={event.visibility}
                   returnTo={eventPath}
                 />
               }
             >
-              <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-soft sm:text-lg">
-                {event.description ||
-                  'Follow every match, standing, and bracket from the office olympiad - live scores, schedules, and results in one place.'}
-              </p>
+              <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl lg:text-6xl">
+                {event.hero_tagline || event.name}
+              </h1>
             </EditableRegion>
+
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-ink-soft">
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="h-4 w-4 text-green" aria-hidden="true" />
+                {formatEventDateRange(event.event_start_at, event.event_end_at)}
+              </span>
+              {event.location ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-green" aria-hidden="true" />
+                  {event.location}
+                </span>
+              ) : null}
+              {sportsSummary ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Trophy className="h-4 w-4 text-green" aria-hidden="true" />
+                  {sportsSummary}
+                </span>
+              ) : null}
+            </div>
+
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild>
                 <Link href={`${eventPath}/schedule`}>
@@ -316,27 +371,21 @@ export default async function EventHomePage({
         </div>
       </section>
 
-      <section className="px-4 pb-10" aria-label="Event at a glance">
-        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            { label: 'Sports', value: sports.length },
-            { label: 'Categories', value: categoriesCount.totalDocs },
-            { label: 'Clubs', value: clubsCount.totalDocs },
-            { label: 'Teams', value: teamsCount.totalDocs },
-            { label: 'Players', value: playersCount.totalDocs },
-          ].map((stat) => (
-            <Card key={stat.label} className="flex flex-col items-center gap-1 text-center">
-              <strong className="text-2xl font-extrabold tabular-nums text-ink">{stat.value}</strong>
-              <span className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-                {stat.label}
-              </span>
-            </Card>
-          ))}
+      <section className="px-4 py-14" aria-labelledby="about-title">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 id="about-title" className="text-xl font-bold text-ink sm:text-2xl">
+            About {event.name}
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-ink-soft sm:text-lg">
+            {event.description ||
+              'Follow every match, standing, and bracket from this event - live scores, schedules, and results in one place.'}
+          </p>
         </div>
       </section>
 
-      <section className="px-4 py-10" aria-labelledby="live-next-title">
-        <div className="mx-auto max-w-5xl">
+      <section className="px-4 pb-16" aria-labelledby="live-next-title">
+        <div className="mx-auto flex max-w-5xl flex-col gap-10">
+        <div>
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 id="live-next-title" className="text-xl font-bold text-ink sm:text-2xl">
               Live Now &amp; Next Up
@@ -399,10 +448,8 @@ export default async function EventHomePage({
             </div>
           )}
         </div>
-      </section>
 
-      <section className="px-4 pb-10" aria-labelledby="calendar-title">
-        <div className="mx-auto max-w-5xl">
+        <div>
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 id="calendar-title" className="text-xl font-bold text-ink sm:text-2xl">
               Upcoming Match Days
@@ -438,13 +485,8 @@ export default async function EventHomePage({
             </div>
           )}
         </div>
+        </div>
       </section>
-
-      <AnnouncementFeed
-        announcements={announcements}
-        title="Latest Announcements"
-        basePath={`${eventPath}/updates?tab=announcements`}
-      />
 
       <section className="px-4 pb-16" aria-labelledby="sports-title">
         <div className="mx-auto max-w-5xl">
@@ -548,30 +590,105 @@ export default async function EventHomePage({
         </div>
       </section>
 
-      <section className="px-4 pb-16" aria-labelledby="articles-title">
+      <section className="px-4 pb-16" aria-labelledby="updates-title">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 id="articles-title" className="text-xl font-bold text-ink sm:text-2xl">
-              Latest Articles
-            </h2>
-            <Link
-              href={`${eventPath}/updates?tab=articles`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
-            >
-              All articles
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </div>
+          <h2 id="updates-title" className="mb-6 text-xl font-bold text-ink sm:text-2xl">
+            Latest Updates
+          </h2>
 
-          {articles.length === 0 ? (
-            <Card className="text-sm text-ink-soft">Articles will appear here after publishing.</Card>
+          {announcements.length === 0 && articles.length === 0 ? (
+            <Card className="text-sm text-ink-soft">
+              Announcements and articles will appear here once published.
+            </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              {articles.map((article) => (
-                <ArticleCard key={article.id} article={article} basePath={`${eventPath}/articles`} />
-              ))}
+            <div className="flex flex-col gap-10">
+              {announcements.length > 0 ? (
+                <div>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-ink-soft">
+                      Announcements
+                    </h3>
+                    <Link
+                      href={`${eventPath}/updates?tab=announcements`}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+                    >
+                      View all
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </div>
+                  <AnnouncementFeed
+                    announcements={announcements}
+                    compact
+                    basePath={`${eventPath}/updates?tab=announcements`}
+                  />
+                </div>
+              ) : null}
+
+              {articles.length > 0 ? (
+                <div>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-ink-soft">
+                      Articles
+                    </h3>
+                    <Link
+                      href={`${eventPath}/updates?tab=articles`}
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+                    >
+                      View all
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {articles.map((article) => (
+                      <ArticleCard key={article.id} article={article} basePath={`${eventPath}/articles`} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="border-t border-line bg-mist px-4 py-10" aria-labelledby="event-info-title">
+        <div className="mx-auto flex max-w-5xl flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 id="event-info-title" className="text-sm font-bold uppercase tracking-wide text-ink-soft">
+              Organized by
+            </h2>
+            <p className="mt-1 text-lg font-extrabold text-ink">
+              {event.organizer_name || event.name}
+            </p>
+            {event.location ? (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-ink-soft">
+                <MapPin className="h-4 w-4" aria-hidden="true" />
+                {event.location}
+              </p>
+            ) : null}
+            {event.contact_email ? (
+              <p className="mt-1 text-sm text-ink-soft">
+                Questions?{' '}
+                <a href={`mailto:${event.contact_email}`} className="font-semibold text-blue hover:underline">
+                  {event.contact_email}
+                </a>
+              </p>
+            ) : null}
+          </div>
+
+          <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold" aria-label="Event quick links">
+            <Link href={`${eventPath}/sports`} className="text-ink-soft no-underline hover:text-ink">
+              Sports
+            </Link>
+            <Link href={`${eventPath}/schedule`} className="text-ink-soft no-underline hover:text-ink">
+              Schedule
+            </Link>
+            <Link href={`${eventPath}/schedule?tab=standings`} className="text-ink-soft no-underline hover:text-ink">
+              Standings
+            </Link>
+            <Link href={`${eventPath}/updates`} className="text-ink-soft no-underline hover:text-ink">
+              Updates
+            </Link>
+          </nav>
         </div>
       </section>
     </main>

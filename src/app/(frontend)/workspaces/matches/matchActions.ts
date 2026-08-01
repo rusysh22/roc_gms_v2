@@ -2,14 +2,21 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { sql } from 'drizzle-orm'
 import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
+import {
+  countSetWinsForSide,
+  isBestOfAlreadyDecided,
+  loadRulesetForMatch,
+  validateSetScore,
+} from '@/lib/ruleValidation'
 import { recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
-import { isValidTransition } from './matchLifecycle'
+import { MATCH_TRANSITIONS, isValidTransition } from './matchLifecycle'
 
 type MinimalMatch = {
   id: string | number
@@ -84,6 +91,7 @@ const revalidateMatch = (matchNumber: string) => {
 
 const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
 const standingResultStatuses = new Set(['finished', 'result_published'])
+const ACTIVE_SCORE_ENTRY_STATUSES = new Set(['ongoing', 'paused', 'under_review'])
 
 const recalculateResultCachesBestEffort = async ({
   payload,
@@ -254,7 +262,7 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     updateData.actual_end_at = new Date().toISOString()
   }
 
-  if ((targetStatus === 'result_published' || targetStatus === 'walkover') && winnerSide) {
+  if (targetStatus === 'result_published' || targetStatus === 'walkover') {
     const winnerEntryId =
       winnerSide === 'a'
         ? match.participant_a_entry_id
@@ -265,6 +273,18 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     if (winnerEntryId) {
       updateData.winner_entry_id = winnerEntryId
     }
+  }
+
+  // AUDIT_E2E MAT-02: `requiresWinnerSelection` on the transition table was previously only UI
+  // metadata (used to decide whether the confirm dialog shows a winner picker) - the action itself
+  // never checked it, so a match could be published/walked-over with no winner_entry_id at all,
+  // which then silently broke standings/bracket advancement downstream. Enforced here, at the one
+  // place every status transition goes through.
+  const transition = MATCH_TRANSITIONS.find(
+    (candidate) => candidate.from.includes(match.status) && candidate.to === targetStatus,
+  )
+  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id) {
+    redirect(`${returnTo}?matchError=winner_required`)
   }
 
   const beforeSnapshot = {
@@ -336,10 +356,11 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     redirect(`${returnTo}?matchError=not_found`)
   }
 
+  const winnerSideValue = winnerSide === 'a' || winnerSide === 'b' ? winnerSide : null
   const winnerEntryId =
-    winnerSide === 'a'
+    winnerSideValue === 'a'
       ? match.participant_a_entry_id
-      : winnerSide === 'b'
+      : winnerSideValue === 'b'
         ? match.participant_b_entry_id
         : null
 
@@ -353,12 +374,33 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     redirect(`${returnTo}?matchError=invalid_request`)
   }
 
+  // AUDIT_E2E RULE-01: the ruleset's target_score/max_score/deuce_enabled/allow_draw were
+  // previously never read at all - any score plus any winner selection was accepted outright.
+  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const scoreValidation = validateSetScore({
+    ruleset,
+    participantAScore,
+    participantBScore,
+    winnerSide: winnerSideValue,
+  })
+  if (!scoreValidation.valid) {
+    redirect(`${returnTo}?matchError=ruleset_violation`)
+  }
+
   const lockedResult = ['finished', 'result_published'].includes(match.status)
   const canReviseFinishedScore = user.roles?.some((role) =>
     ['super_admin', 'event_admin'].includes(role),
   )
   if (lockedResult && (!canReviseFinishedScore || !revisionReason)) {
     redirect(`${returnTo}?matchError=${canReviseFinishedScore ? 'revision_reason_required' : 'revision_requires_approval'}`)
+  }
+
+  // AUDIT_E2E MAT-05: score entry had no lifecycle guard at all - a draft, scheduled, cancelled,
+  // postponed, disputed, or walkover match could still receive set-score edits. Only a match that
+  // is actually being played (ongoing/paused/under_review) accepts a normal edit; finished/
+  // result_published are handled by the revision-reason branch above; everything else is rejected.
+  if (!lockedResult && !ACTIVE_SCORE_ENTRY_STATUSES.has(match.status)) {
+    redirect(`${returnTo}?matchError=invalid_match_state`)
   }
 
   const beforeSnapshot = {
@@ -428,12 +470,22 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
   const existingSets = await payload.find({
     collection: 'match-sets',
     depth: 0,
-    limit: 1,
+    limit: 50,
     sort: '-set_number',
     where: { match_id: { equals: match.id } },
   })
-  const lastSet = existingSets.docs[0] as MinimalMatchSet | undefined
+  const existingSetDocs = existingSets.docs as MinimalMatchSet[]
+  const lastSet = existingSetDocs[0]
   const nextSetNumber = (lastSet?.set_number || 0) + 1
+
+  // AUDIT_E2E RULE-01: best_of previously had no effect at all - a best-of-3 match could keep
+  // accumulating a 4th, 5th, ... set indefinitely even after one side had already clinched it.
+  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const winsA = countSetWinsForSide(existingSetDocs, match.participant_a_entry_id)
+  const winsB = countSetWinsForSide(existingSetDocs, match.participant_b_entry_id)
+  if (isBestOfAlreadyDecided(ruleset?.best_of, winsA, winsB)) {
+    redirect(`${returnTo}?matchError=best_of_decided`)
+  }
 
   const createdSet = await payload.create({
     collection: 'match-sets',
@@ -467,6 +519,140 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     match,
     matchNumber,
     action: 'match_set.create',
+    actorUserId,
+  })
+
+  revalidateMatch(matchNumber)
+  redirect(`${returnTo}?matchUpdated=1`)
+}
+
+// AUDIT_E2E MAT-07: previously there was no assignment concept at all - the match officer
+// workspace's "Assigned Match List" actually showed every scheduled match on the active event, to
+// every match officer, regardless of who was really supposed to run it. Scheduler/event_admin
+// assign officers here; leaving the list empty keeps a match open to any match officer (same
+// open-by-default pattern as EventMemberships, so nothing breaks for events that don't use this).
+export async function assignMatchOfficersAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const returnTo = getSafeReturnTo(formData, `/workspaces/matches/${matchNumber || ''}`)
+
+  if (!matchNumber) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.scheduler,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
+
+  if (!match) {
+    redirect(`${returnTo}?matchError=not_found`)
+  }
+
+  const officerIds = formData.getAll('officerIds').map((value) => String(value)).filter(Boolean)
+
+  await payload.update({
+    collection: 'matches',
+    id: match.id,
+    data: { officer_ids: officerIds },
+  })
+
+  await recordAuditLog({
+    payload,
+    action: 'match.officers_assigned',
+    entityType: 'matches',
+    entityId: match.id,
+    before: null,
+    after: { officer_ids: officerIds },
+    actorUserId: user.id,
+  })
+
+  revalidateMatch(matchNumber)
+  redirect(`${returnTo}?matchUpdated=1`)
+}
+
+// AUDIT_E2E MAT-03: the live-score "+1"/"Undo" buttons used to compute the new score in the
+// browser from whatever the page last rendered, then submitted that absolute number - two rapid
+// taps (or two officers/devices open on the same match) could both read the same stale score and
+// submit the same "+1" result, silently losing a point. This action instead issues a single atomic
+// `UPDATE ... SET score = score + delta` statement executed by Postgres itself - there is no
+// separate read-then-write in application code for a race to land between, and Postgres serializes
+// concurrent UPDATEs to the same row automatically.
+export async function addLiveScorePointAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const matchSetId = toStringField(formData.get('matchSetId'))
+  const side = toStringField(formData.get('side'))
+  const deltaRaw = toStringField(formData.get('delta'))
+  const returnTo = getSafeReturnTo(
+    formData,
+    matchNumber ? `/workspaces/matches/${matchNumber}/live-score` : '/workspaces/match-officer',
+  )
+
+  if (!matchNumber || !matchSetId || (side !== 'a' && side !== 'b') || (deltaRaw !== '1' && deltaRaw !== '-1')) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
+
+  if (!match) {
+    redirect(`${returnTo}?matchError=not_found`)
+  }
+
+  // AUDIT_E2E MAT-05: same lifecycle guard as updateMatchSetScoreAction - point taps only make
+  // sense while a match is actually being played.
+  if (!ACTIVE_SCORE_ENTRY_STATUSES.has(match.status)) {
+    redirect(`${returnTo}?matchError=invalid_match_state`)
+  }
+
+  const existingSet = await payload
+    .findByID({ collection: 'match-sets', id: matchSetId, depth: 0 })
+    .catch(() => null)
+  if (!existingSet || String(existingSet.match_id || '') !== String(match.id)) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const delta = deltaRaw === '1' ? 1 : -1
+  const column = side === 'a' ? 'participant_a_score' : 'participant_b_score'
+  const maxScore = ruleset?.max_score
+
+  const capExpression =
+    maxScore !== null && maxScore !== undefined
+      ? sql`LEAST(${maxScore}, GREATEST(0, ${sql.identifier(column)} + ${delta}))`
+      : sql`GREATEST(0, ${sql.identifier(column)} + ${delta})`
+
+  const result = await payload.db.drizzle.execute(sql`
+    UPDATE match_sets
+    SET ${sql.identifier(column)} = ${capExpression}
+    WHERE id = ${Number(matchSetId)}
+    RETURNING participant_a_score, participant_b_score
+  `)
+
+  const updatedRow = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0]
+  const actorUserId = user.id
+
+  await recordAuditLog({
+    payload,
+    action: 'match_set.point_increment',
+    entityType: 'match-sets',
+    entityId: matchSetId,
+    before: {
+      participant_a_score: existingSet.participant_a_score ?? null,
+      participant_b_score: existingSet.participant_b_score ?? null,
+    },
+    after: updatedRow || null,
+    actorUserId,
+  })
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match,
+    matchNumber,
+    action: 'match_set.point_increment',
     actorUserId,
   })
 

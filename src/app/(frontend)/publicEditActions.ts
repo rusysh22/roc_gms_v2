@@ -66,6 +66,7 @@ export async function updateEventPublicContentAction(formData: FormData): Promis
   const visibility = textField(formData, 'visibility')
   const data = {
     description: nullableTextField(formData, 'description'),
+    hero_tagline: nullableTextField(formData, 'heroTagline'),
     visibility: visibility || before.visibility,
   }
 
@@ -82,6 +83,7 @@ export async function updateEventPublicContentAction(formData: FormData): Promis
     entityId: id,
     before: {
       description: before.description ?? null,
+      hero_tagline: before.hero_tagline ?? null,
       visibility: before.visibility ?? null,
     },
     after: data,

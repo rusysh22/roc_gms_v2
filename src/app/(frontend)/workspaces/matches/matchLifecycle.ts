@@ -50,4 +50,10 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
   invalid_request: 'The action could not be completed because required data was missing.',
   invalid_score: 'Scores must be zero or a positive whole number.',
   not_found: 'Match could not be found.',
+  winner_required: 'This transition requires selecting a winner before it can be confirmed.',
+  ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
+  best_of_decided: 'This match is already decided under its best-of format - no further sets can be added.',
+  invalid_match_state: 'Scores can only be entered while a match is ongoing, paused, or under review.',
+  revision_reason_required: 'A reason is required to revise a finished or published result.',
+  revision_requires_approval: 'Only an event admin or super admin can revise a finished or published result.',
 }

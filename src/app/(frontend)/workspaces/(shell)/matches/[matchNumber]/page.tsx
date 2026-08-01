@@ -21,11 +21,17 @@ import {
   StandingImpactPanel,
   formatDateTime,
   formatStatus,
+  getRelationshipId,
   getRelationshipLabel,
   getSetWinnerSide,
 } from '../../../workspaceComponents'
 import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
-import { addMatchSetAction, transitionMatchStatusAction, updateMatchSetScoreAction } from '../../../matches/matchActions'
+import {
+  addMatchSetAction,
+  assignMatchOfficersAction,
+  transitionMatchStatusAction,
+  updateMatchSetScoreAction,
+} from '../../../matches/matchActions'
 import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../../../matches/matchLifecycle'
 import { addDocumentationAssetAction } from '../../../matches/documentationActions'
 import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../../../matches/documentationErrors'
@@ -88,6 +94,21 @@ export default async function AdminMatchDetailPage({
     bracketImpact,
   } = result
   const allowedTransitions = getAllowedTransitions(match.status)
+  const canAssignOfficers = access.user.roles?.some((role) =>
+    ['super_admin', 'event_admin', 'scheduler'].includes(role),
+  )
+  const eligibleOfficersResult = canAssignOfficers
+    ? await access.payload.find({
+        collection: 'users',
+        depth: 0,
+        limit: 100,
+        sort: 'name',
+        where: { roles: { in: ['match_officer', 'event_admin', 'super_admin'] } },
+      })
+    : null
+  const assignedOfficerIds = new Set(
+    (match.officer_ids || []).map((officer) => String(getRelationshipId(officer))),
+  )
   const auditLogEntries = await getMatchAuditLog(
     match.id,
     matchSets.map((set) => set.id),
@@ -243,6 +264,56 @@ export default async function AdminMatchDetailPage({
               <dd className="font-semibold text-ink">{match.is_public ? 'Public' : 'Internal only'}</dd>
             </div>
           </dl>
+        </Card>
+
+        <Card className="flex flex-col gap-3 md:col-span-2">
+          <CardTitle>Assigned Officers</CardTitle>
+          <p className="text-sm text-ink-soft">
+            {match.officer_ids && match.officer_ids.length > 0
+              ? 'Only these officers see this match in their "Assigned Match List".'
+              : 'Open to any match officer on this event - no one has been specifically assigned yet.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(match.officer_ids || []).length === 0 ? (
+              <span className="rounded-full border border-line bg-mist px-3 py-1 text-xs font-bold text-ink-soft">
+                Unassigned
+              </span>
+            ) : (
+              (match.officer_ids || []).map((officer, index) => (
+                <span
+                  key={String(getRelationshipId(officer) ?? index)}
+                  className="rounded-full border border-line bg-mist px-3 py-1 text-xs font-bold text-ink"
+                >
+                  {getRelationshipLabel(officer)}
+                </span>
+              ))
+            )}
+          </div>
+          {canAssignOfficers && eligibleOfficersResult ? (
+            <form action={assignMatchOfficersAction} className="mt-2 flex flex-col gap-3">
+              <input type="hidden" name="matchNumber" value={match.match_number} />
+              <div className="grid gap-2 sm:grid-cols-2">
+                {eligibleOfficersResult.docs.map((officer) => (
+                  <label
+                    key={String(officer.id)}
+                    className="flex items-center gap-2 rounded-card border border-line px-3 py-2 text-sm font-semibold text-ink"
+                  >
+                    <input
+                      type="checkbox"
+                      name="officerIds"
+                      value={String(officer.id)}
+                      defaultChecked={assignedOfficerIds.has(String(officer.id))}
+                      className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                    />
+                    {String(officer.name || officer.email)}
+                  </label>
+                ))}
+              </div>
+              <Button type="submit" variant="secondary" className="self-start">
+                Save Assignment
+              </Button>
+            </form>
+          ) : null}
         </Card>
 
         <div className="md:col-span-2">
