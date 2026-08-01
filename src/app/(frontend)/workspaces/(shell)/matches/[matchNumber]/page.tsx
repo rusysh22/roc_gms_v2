@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
+import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -518,11 +519,14 @@ export default async function AdminMatchDetailPage({
               <Input type="text" name="caption" maxLength={200} />
             </Field>
             <Field label="File" className="sm:col-span-2">
-              <input
-                type="file"
+              <FileUpload
+                id="documentation-upload"
                 name="file"
+                variant="file"
                 required
-                className="w-full rounded-[10px] border border-line bg-paper px-3 py-2 text-sm font-semibold text-ink file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-paper"
+                accept="image/jpeg,image/png,image/webp,application/pdf,video/mp4"
+                maxSizeBytes={10 * 1024 * 1024}
+                helpText="Photo, PDF, or video. Up to 10MB."
               />
             </Field>
             <div className="sm:col-span-2">

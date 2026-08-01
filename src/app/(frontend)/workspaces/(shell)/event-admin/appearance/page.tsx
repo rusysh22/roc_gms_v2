@@ -1,7 +1,7 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { FileUpload } from '@/components/ui/file-upload'
 import { DEFAULT_EVENT_THEME_PRESET, EVENT_THEME_PRESETS } from '@/lib/eventTheme'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
@@ -91,23 +91,16 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
               and resized automatically.
             </p>
           </div>
-          {bannerImage?.url ? (
-            <div className="overflow-hidden rounded-card border border-line">
-              {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
-              <img src={bannerImage.url} alt={bannerImage.alt || ''} className="h-40 w-full object-cover" />
-            </div>
-          ) : null}
-          <Input type="file" name="heroImage" accept="image/*" className="cursor-pointer" />
-          {bannerImage?.url ? (
-            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <input
-                type="checkbox"
-                name="removeImage"
-                className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
-              />
-              Remove current hero image
-            </label>
-          ) : null}
+          <FileUpload
+            id="event-hero-upload"
+            name="heroImage"
+            accept="image/*"
+            maxSizeBytes={8 * 1024 * 1024}
+            existingPreviewUrl={bannerImage?.url}
+            existingLabel="Current hero image"
+            showRemoveOption
+            removeFieldName="removeImage"
+          />
         </Card>
 
         <Card className="flex flex-col gap-4">

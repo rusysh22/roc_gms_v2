@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
+import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Select } from '@/components/ui/select'
@@ -588,10 +589,13 @@ const EventStep = ({
         <Input name="organizerName" placeholder="e.g. HR Committee" defaultValue={defaultOrganizerName} />
       </Field>
       <Field label="Event logo (optional)" className="sm:col-span-2">
-        <Input type="file" name="logo" accept="image/*" className="cursor-pointer" />
-        <p className="mt-1 text-xs text-ink-soft">
-          Shown next to your event name. You can also add or change this later.
-        </p>
+        <FileUpload
+          id="event-logo-upload"
+          name="logo"
+          accept="image/*"
+          maxSizeBytes={5 * 1024 * 1024}
+          helpText="Shown next to your event name. You can also add or change this later. Up to 5MB."
+        />
       </Field>
       <div className="sm:col-span-2">
         <Button type="submit" className="w-full sm:w-auto">
@@ -949,20 +953,23 @@ const ParticipantsStep = async ({
             here - everything gets tied to this event automatically.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild variant="secondary" size="sm">
+        <div className="flex flex-col gap-3">
+          <Button asChild variant="secondary" size="sm" className="self-start">
             <a href="/workspaces/event-admin/new-event/participants-template" download>
               Download Excel template
             </a>
           </Button>
-          <form action={importParticipantsAction} className="flex flex-wrap items-center gap-2">
+          <form action={importParticipantsAction} className="flex flex-col items-start gap-3 sm:max-w-sm">
             <input type="hidden" name="eventId" value={eventId} />
-            <Input
-              type="file"
+            <FileUpload
+              id="participants-import-upload"
               name="file"
+              variant="file"
               accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               required
-              className="h-auto w-auto cursor-pointer border-none px-0 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-mist file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-ink"
+              triggerLabel="Choose Excel file"
+              helpText=".xlsx or .xls"
+              className="w-full"
             />
             <Button type="submit" size="sm">
               Import

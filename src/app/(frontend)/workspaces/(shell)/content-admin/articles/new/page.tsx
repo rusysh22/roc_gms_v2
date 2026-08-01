@@ -2,6 +2,7 @@ import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
+import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -79,11 +80,11 @@ export default async function NewArticlePage({ searchParams }: { searchParams?: 
               />
             </Field>
             <Field label="Cover image (optional)" className="sm:col-span-2">
-              <input
-                type="file"
+              <FileUpload
+                id="article-cover-upload"
                 name="coverImage"
                 accept="image/*"
-                className="w-full rounded-[10px] border border-line bg-paper px-3 py-2 text-sm font-semibold text-ink file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-paper"
+                maxSizeBytes={5 * 1024 * 1024}
               />
             </Field>
           </div>
