@@ -6,7 +6,7 @@ coverage
 .env
 .env*.local
 payload-types.ts
-media
+/media
 *.log
 *.tsbuildinfo
 Dockerfile.local
