@@ -1,13 +1,27 @@
 /*
  * Tailwind CSS foundation for the (frontend) route group only.
  *
- * Preflight (Tailwind's base reset) is intentionally NOT imported here. `styles.css` already
- * carries its own reset and every existing page relies on its unlayered rules. Importing only the
- * theme + utilities layers keeps this file additive: Tailwind utility classes become available for
- * new primitives without touching how any current page renders, because CSS cascade layers always
- * lose to unlayered rules regardless of source order or specificity.
+ * AUDIT_UI_UX_CSS CSS-01: `a { color: inherit }` used to live unlayered in styles.css, which meant
+ * it always beat every Tailwind utility class regardless of source order or specificity (unlayered
+ * rules outrank all @layer content, no exceptions) - confirmed at runtime: a `text-paper` CTA link
+ * on a green button computed to ink/black text, not white (~3.76:1 contrast, fails WCAG AA
+ * normal-text 4.5:1). It now lives in `@layer base` below, declared *before* the utilities import,
+ * so the CSS layer order becomes theme -> base -> utilities (layers declared later win) and
+ * `text-*`/`hover:text-*` utilities correctly override the link-color baseline again.
+ *
+ * Full Preflight is still intentionally NOT imported - `styles.css`'s remaining rules
+ * (box-sizing, body margin) are a deliberately small hand-rolled baseline; swapping to Preflight
+ * is a larger, separately-scoped migration (AUDIT_UI_UX_CSS CSS-02) that needs its own visual QA
+ * pass across every route, not bundled into this targeted fix.
  */
 @import 'tailwindcss/theme.css' layer(theme);
+
+@layer base {
+  a {
+    color: inherit;
+  }
+}
+
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 @source './**/*.{ts,tsx}';
