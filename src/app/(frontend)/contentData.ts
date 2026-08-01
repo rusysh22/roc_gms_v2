@@ -1,7 +1,24 @@
 import { getPayload, type Payload, type Where } from 'payload'
 
 import config from '@payload-config'
+import {
+  getPlainTextFromLexical,
+  lexicalContentToMarkdownLite,
+  markdownLiteToLexicalContent,
+  renderLexicalParagraphs,
+  type LexicalContent,
+  type LexicalNode,
+  type LexicalTextNode,
+} from '@/lib/richTextMarkdown'
 import { toOptions, type RelationshipDoc, type WorkspaceOption } from './workspaces/workspaceComponents'
+
+export {
+  getPlainTextFromLexical,
+  lexicalContentToMarkdownLite,
+  markdownLiteToLexicalContent,
+  renderLexicalParagraphs,
+}
+export type { LexicalContent, LexicalNode, LexicalTextNode }
 
 export type MediaDoc = RelationshipDoc & {
   alt?: string | null
@@ -9,21 +26,6 @@ export type MediaDoc = RelationshipDoc & {
   url?: string | null
   filename?: string | null
   mimeType?: string | null
-}
-
-export type LexicalTextNode = {
-  type: 'text'
-  text?: string
-}
-
-export type LexicalNode = {
-  type?: string
-  text?: string
-  children?: LexicalNode[]
-}
-
-export type LexicalContent = {
-  root?: LexicalNode
 }
 
 export type PublicArticle = {
@@ -104,73 +106,9 @@ export const formatContentDate = (value?: string | null) => {
   }).format(new Date(value))
 }
 
-export const getPlainTextFromLexical = (content?: LexicalContent | null) => {
-  const parts: string[] = []
-  const visit = (node?: LexicalNode) => {
-    if (!node) {
-      return
-    }
-
-    if (node.type === 'text' && node.text) {
-      parts.push(node.text)
-    }
-
-    for (const child of node.children || []) {
-      visit(child)
-    }
-  }
-
-  visit(content?.root)
-  return parts.join(' ').replace(/\s+/g, ' ').trim()
-}
-
-export const renderLexicalParagraphs = (content?: LexicalContent | null) => {
-  const paragraphs =
-    content?.root?.children
-      ?.map((node) => getPlainTextFromLexical({ root: node }))
-      .filter(Boolean) || []
-
-  return paragraphs
-}
-
-// The in-app content editor only accepts plain-text paragraphs (blank line = new paragraph) -
-// this builds the minimal Lexical JSON shape the richText field expects so the existing
-// public-facing renderer (renderLexicalParagraphs) can display it unchanged.
-export const plainTextToLexicalContent = (text: string) => {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-  const source = paragraphs.length > 0 ? paragraphs : ['']
-
-  return {
-    root: {
-      type: 'root',
-      version: 1,
-      direction: 'ltr',
-      format: '',
-      indent: 0,
-      children: source.map((paragraphText) => ({
-        type: 'paragraph',
-        version: 1,
-        direction: 'ltr',
-        format: '',
-        indent: 0,
-        children: [
-          {
-            type: 'text',
-            version: 1,
-            text: paragraphText,
-            format: 0,
-            detail: 0,
-            mode: 'normal',
-            style: '',
-          },
-        ],
-      })),
-    },
-  }
-}
+// getPlainTextFromLexical / renderLexicalParagraphs / markdownLiteToLexicalContent /
+// lexicalContentToMarkdownLite live in @/lib/richTextMarkdown (re-exported above) so they can be
+// unit tested without this file's `@payload-config` import.
 
 export type ContentTaggingOptions = {
   sports: WorkspaceOption[]

@@ -66,12 +66,11 @@ export const publicReadPublishedBracket: Access = async ({ req }) => {
     return false
   }
 
-  return {
-    and: [
-      { event_id: { in: visibleEventIds } },
-      { status: { in: ['published', 'locked'] } },
-    ],
-  } satisfies Where
+  const conditions: Where[] = [
+    { event_id: { in: visibleEventIds } },
+    { status: { in: ['published', 'locked'] } },
+  ]
+  return { and: conditions }
 }
 
 /** Articles/Announcements were `read: () => true` with status/draft filtering only applied by the

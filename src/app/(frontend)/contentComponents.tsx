@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { AlertTriangle, ArrowRight, Bell, CalendarDays, Megaphone } from 'lucide-react'
+import { defaultJSXConverters, RichText } from '@payloadcms/richtext-lexical/react'
 
 import { ShareButtons } from '@/components/share-buttons'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -8,7 +9,6 @@ import {
   formatContentDate,
   getMedia,
   getMediaUrl,
-  renderLexicalParagraphs,
   type PublicAnnouncement,
   type PublicArticle,
 } from './contentData'
@@ -67,20 +67,33 @@ export const ArticleCard = ({
   )
 }
 
-export const ArticleRichText = ({ article }: { article: PublicArticle }) => {
-  const paragraphs = renderLexicalParagraphs(article.content)
+// AUDIT_E2E CNT-02: this used to flatten every Lexical node to plain paragraph text
+// (renderLexicalParagraphs), dropping headings/lists/bold/links entirely regardless of whether the
+// content was authored via the workspace or Payload Admin's real Lexical editor. RichText is
+// Payload's own SSR-safe converter - it renders the actual node tree. The wrapper classes below
+// (Tailwind arbitrary-variant child selectors) apply this site's own typography since the
+// @tailwindcss/typography plugin isn't installed.
+const richTextWrapperClassName =
+  'flex flex-col gap-5 text-base leading-8 text-ink ' +
+  '[&_h1]:text-3xl [&_h1]:font-extrabold [&_h1]:leading-tight [&_h1]:text-ink ' +
+  '[&_h2]:text-2xl [&_h2]:font-extrabold [&_h2]:leading-tight [&_h2]:text-ink ' +
+  '[&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-ink ' +
+  '[&_p]:text-base [&_p]:leading-8 [&_p]:text-ink ' +
+  '[&_a]:font-semibold [&_a]:text-blue [&_a]:underline [&_a]:underline-offset-2 ' +
+  '[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:leading-7'
 
-  if (paragraphs.length === 0) {
+export const ArticleRichText = ({ article }: { article: PublicArticle }) => {
+  const content = article.content
+  if (!content?.root?.children?.length) {
     return <p className="text-base leading-8 text-ink-soft">{article.excerpt}</p>
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`${index}-${paragraph.slice(0, 24)}`} className="text-base leading-8 text-ink">
-          {paragraph}
-        </p>
-      ))}
+    <div className={richTextWrapperClassName}>
+      {/* LexicalContent (contentData.ts) is a deliberately loose type for arbitrary Payload JSON -
+          RichText expects a precisely-typed SerializedEditorState. The `content?.root?.children`
+          guard above already confirms this is real, well-formed Lexical content at runtime. */}
+      <RichText data={content as Parameters<typeof RichText>[0]['data']} converters={defaultJSXConverters} />
     </div>
   )
 }

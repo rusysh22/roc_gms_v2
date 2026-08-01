@@ -1,7 +1,51 @@
 import path from 'path'
-import type { CollectionConfig } from 'payload'
+import type { CollectionBeforeOperationHook, CollectionConfig } from 'payload'
+import { APIError } from 'payload'
 
 import { canManageMatches, canReadDocumentation } from '@/access/roles'
+import {
+  validateImageBuffer,
+  validateMp4Buffer,
+  validatePdfBuffer,
+  validateUploadSize,
+} from '@/lib/uploadValidation'
+
+const DOCUMENTATION_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4']
+
+// AUDIT_E2E CNT-04: src/lib/documentationValidation.ts already checked size/MIME/extension, but
+// only inside the addDocumentationAssetAction Server Action - a direct Payload Admin/REST/GraphQL/
+// Local API create bypassed it entirely (the collection itself enforced nothing). This runs for
+// every entry point and, for image/PDF/MP4 uploads, checks the actual file bytes instead of
+// trusting the declared Content-Type. Payload's own `File` type (src/uploads/types.ts) is the
+// classic express-fileupload shape - `{ data: Buffer, mimetype, name, size }` - not a Web File.
+const validateDocumentationUpload: CollectionBeforeOperationHook<'documentation-assets'> = async ({
+  req,
+  operation,
+}) => {
+  if ((operation !== 'create' && operation !== 'update') || !req.file) {
+    return
+  }
+
+  const sizeCheck = validateUploadSize(req.file.size)
+  if (!sizeCheck.valid) {
+    throw new APIError(sizeCheck.reason, 400, null, true)
+  }
+
+  const mimeType = req.file.mimetype?.toLowerCase() || ''
+  if (!DOCUMENTATION_MIME_TYPES.includes(mimeType)) {
+    throw new APIError('Unsupported file type for documentation assets.', 400, null, true)
+  }
+
+  const buffer = req.file.data
+  const contentCheck =
+    mimeType === 'application/pdf' ? validatePdfBuffer(buffer)
+    : mimeType === 'video/mp4' ? validateMp4Buffer(buffer)
+    : await validateImageBuffer(buffer)
+
+  if (!contentCheck.valid) {
+    throw new APIError(contentCheck.reason, 400, null, true)
+  }
+}
 
 export const DocumentationAssets: CollectionConfig = {
   slug: 'documentation-assets',
@@ -16,8 +60,12 @@ export const DocumentationAssets: CollectionConfig = {
     read: canReadDocumentation,
     update: canManageMatches,
   },
+  hooks: {
+    beforeOperation: [validateDocumentationUpload],
+  },
   upload: {
     staticDir: path.resolve(process.cwd(), 'media/documentation-assets'),
+    mimeTypes: DOCUMENTATION_MIME_TYPES,
   },
   fields: [
     {

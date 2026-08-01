@@ -72,7 +72,11 @@ export default async function NewArticlePage({ searchParams }: { searchParams?: 
               <Textarea name="excerpt" required rows={2} />
             </Field>
             <Field label="Content" className="sm:col-span-2">
-              <Textarea name="content" rows={10} placeholder="Leave a blank line between paragraphs." />
+              <Textarea
+                name="content"
+                rows={10}
+                placeholder="Leave a blank line between paragraphs. Supports # Heading, - list item, **bold**, and [link text](https://...)."
+              />
             </Field>
             <Field label="Cover image (optional)" className="sm:col-span-2">
               <input

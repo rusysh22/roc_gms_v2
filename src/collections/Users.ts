@@ -9,7 +9,13 @@ export const Users: CollectionConfig = {
     group: 'System',
     useAsTitle: 'email',
   },
-  auth: true,
+  // AUDIT_E2E SEC-02: no login rate limiting/abuse protection existed at all - Payload's own
+  // built-in lockout (not a bolt-on) blocks credential-stuffing/brute-force against /api/users/
+  // login after repeated failures, per-account, without needing a new dependency or middleware.
+  auth: {
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000,
+  },
   access: {
     create: isSuperAdmin,
     delete: isSuperAdmin,

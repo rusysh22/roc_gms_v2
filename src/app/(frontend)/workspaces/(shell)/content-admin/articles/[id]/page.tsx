@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   getContentTaggingOptions,
   getMediaUrl,
-  renderLexicalParagraphs,
+  lexicalContentToMarkdownLite,
   type LexicalContent,
   type MediaDoc,
 } from '../../../../../contentData'
@@ -78,7 +78,7 @@ export default async function EditArticlePage({
   const articleError = get(searchQuery, 'articleError')
   const articleUpdated = get(searchQuery, 'articleUpdated') === '1'
   const tagging = await getContentTaggingOptions(access.payload, getRelationshipId(article.event_id))
-  const contentPlainText = renderLexicalParagraphs(article.content).join('\n\n')
+  const contentPlainText = lexicalContentToMarkdownLite(article.content)
   const coverUrl = getMediaUrl(article.cover_image)
 
   return (
@@ -124,7 +124,7 @@ export default async function EditArticlePage({
                 name="content"
                 rows={10}
                 defaultValue={contentPlainText}
-                placeholder="Leave a blank line between paragraphs."
+                placeholder="Leave a blank line between paragraphs. Supports # Heading, - list item, **bold**, and [link text](https://...)."
               />
             </Field>
             <Field label={coverUrl ? 'Replace cover image (optional)' : 'Cover image (optional)'} className="sm:col-span-2">

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
-import { plainTextToLexicalContent } from '../../../../contentData'
+import { markdownLiteToLexicalContent } from '../../../../contentData'
 import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
@@ -78,7 +78,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     title,
     slug,
     excerpt,
-    content: plainTextToLexicalContent(text(formData, 'content') || excerpt),
+    content: markdownLiteToLexicalContent(text(formData, 'content') || excerpt),
     cover_image: cover.id,
     event_id: event.id,
     sport_id: text(formData, 'sportId') || undefined,
@@ -145,7 +145,7 @@ export async function updateArticleAction(formData: FormData): Promise<void> {
     title,
     slug,
     excerpt,
-    content: plainTextToLexicalContent(text(formData, 'content') || excerpt),
+    content: markdownLiteToLexicalContent(text(formData, 'content') || excerpt),
     ...(cover.id ? { cover_image: cover.id } : {}),
     sport_id: text(formData, 'sportId') || null,
     category_id: text(formData, 'categoryId') || null,
