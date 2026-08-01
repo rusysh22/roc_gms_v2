@@ -14,9 +14,7 @@ import {
 } from '@/lib/matchGeneration'
 import { recalculateStandingsForScope } from '@/lib/standings'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
-import { getWizardEvent, text, wizardPage } from './wizardShared'
-
-const supportedFormats = new Set(['single_elimination', 'round_robin'])
+import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
 export async function generateMatchesAction(formData: FormData): Promise<void> {
   const { payload } = await assertWorkspaceActionAccess({

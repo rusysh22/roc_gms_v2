@@ -12,6 +12,7 @@ import {
   ImageIcon,
   LayoutDashboard,
   Layers,
+  ListChecks,
   Megaphone,
   Menu,
   Palette,
@@ -40,27 +41,46 @@ type SidebarSection = {
 }
 type SidebarGroup = { label: string; sections: SidebarSection[] }
 
-// Grouped like an ERP nav: Master Data (rarely changes) -> Registration (who's competing,
-// transactional right up until the event starts) -> Operations (day-of transactions) -> Reports
-// (read-only, computed from Operations) -> Content -> Admin.
+// Grouped by task, not by which collection a page happens to be a CRUD screen for: Event Setup
+// (the tournament shell itself - configure once, rarely revisit) -> Registration (who's competing
+// - Clubs/Participants/Entries all live here now, previously split across two different groups
+// which made "where do I manage who's playing" needlessly hard to guess) -> Operations (day-of
+// transactions - scheduling and live scoring) -> Reports (read-only, computed from Operations) ->
+// Content. Each group's sections are flat peers (no nested sub-menu) so the sidebar's depth is
+// consistent everywhere instead of Event Setup alone exploding into 7 indented links when active.
 const GROUPS: SidebarGroup[] = [
   {
-    label: 'Master Data',
+    label: 'Event Setup',
     sections: [
       {
-        label: 'Event Setup',
-        icon: Layers,
+        label: 'Dashboard',
+        icon: LayoutDashboard,
         href: '/workspaces/event-admin',
         roles: ['super_admin', 'event_admin'],
-        links: [
-          { label: 'Dashboard', href: '/workspaces/event-admin', icon: LayoutDashboard },
-          { label: 'Event Details', href: '/workspaces/event-admin/details', icon: Settings },
-          { label: 'Create New Event', href: '/workspaces/event-admin/new-event', icon: PlusCircle },
-          { label: 'Clubs', href: '/workspaces/event-admin/clubs', icon: Shield },
-          { label: 'Participants', href: '/workspaces/event-admin/participants', icon: Users },
-          { label: 'Facilities', href: '/workspaces/event-admin/facilities', icon: Layers },
-          { label: 'Appearance', href: '/workspaces/event-admin/appearance', icon: Palette },
-        ],
+      },
+      {
+        label: 'Event Details',
+        icon: Settings,
+        href: '/workspaces/event-admin/details',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Create New Event',
+        icon: PlusCircle,
+        href: '/workspaces/event-admin/new-event',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Facilities & Venues',
+        icon: Layers,
+        href: '/workspaces/event-admin/facilities',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Appearance',
+        icon: Palette,
+        href: '/workspaces/event-admin/appearance',
+        roles: ['super_admin', 'event_admin'],
       },
     ],
   },
@@ -68,8 +88,20 @@ const GROUPS: SidebarGroup[] = [
     label: 'Registration',
     sections: [
       {
-        label: 'Entries',
+        label: 'Clubs',
+        icon: Shield,
+        href: '/workspaces/event-admin/clubs',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Participants',
         icon: Users,
+        href: '/workspaces/event-admin/participants',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Entries',
+        icon: ListChecks,
         href: '/workspaces/event-admin/entries',
         roles: ['super_admin', 'event_admin'],
       },
@@ -132,8 +164,23 @@ const SECTIONS: SidebarSection[] = GROUPS.flatMap((group) => group.sections)
 const has = (roles: UserRole[] | null | undefined, allowed: UserRole[]) =>
   Boolean(roles?.some((role) => allowed.includes(role)))
 
-const isActive = (pathname: string, href: string) =>
-  href === '/workspaces/event-admin' ? pathname === href : pathname.startsWith(href)
+const isActive = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`)
+
+// Some sections' URLs are prefixes of a sibling section's URL (e.g. Event Setup's
+// `/workspaces/event-admin` vs Entries' `/workspaces/event-admin/entries`), so a plain prefix
+// match would keep BOTH highlighted/expanded at once. Pick whichever matching section has the
+// longest (most specific) href - that's the one the current page actually belongs to, and it's
+// what keeps a section's own sub-menu open across its own child pages without also hijacking a
+// sibling section's pages.
+const getActiveSectionHref = (pathname: string) => {
+  let bestHref = ''
+  for (const section of SECTIONS) {
+    if (isActive(pathname, section.href) && section.href.length > bestHref.length) {
+      bestHref = section.href
+    }
+  }
+  return bestHref
+}
 
 function SidebarContent({
   roles,
@@ -148,6 +195,7 @@ function SidebarContent({
     ...group,
     sections: group.sections.filter((section) => has(roles, section.roles)),
   })).filter((group) => group.sections.length > 0)
+  const activeSectionHref = getActiveSectionHref(pathname)
 
   return (
     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3" aria-label="Workspace navigation">
@@ -157,7 +205,7 @@ function SidebarContent({
             {group.label}
           </p>
           {group.sections.map((section) => {
-            const active = isActive(pathname, section.href)
+            const active = section.href === activeSectionHref
             return (
               <div key={section.label} className="flex flex-col gap-0.5">
                 <Link
@@ -255,7 +303,7 @@ export function WorkspaceShellChrome({
             <ShieldCheck className="h-4.5 w-4.5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold text-ink">ROC GMS</p>
+            <p className="truncate text-sm font-extrabold text-ink">InTourney</p>
             <p className="truncate text-xs font-semibold text-ink-soft">Workspaces</p>
           </div>
         </div>
@@ -282,7 +330,7 @@ export function WorkspaceShellChrome({
                 aria-describedby={undefined}
               >
                 <div className="flex items-center justify-between border-b border-line px-4 py-4">
-                  <Dialog.Title className="text-sm font-extrabold text-ink">ROC GMS</Dialog.Title>
+                  <Dialog.Title className="text-sm font-extrabold text-ink">InTourney</Dialog.Title>
                   <Dialog.Close asChild>
                     <button
                       type="button"
@@ -312,6 +360,7 @@ export function WorkspaceShellChrome({
 }
 
 function sectionLabel(pathname: string) {
-  const match = SECTIONS.find((section) => isActive(pathname, section.href))
+  const activeHref = getActiveSectionHref(pathname)
+  const match = SECTIONS.find((section) => section.href === activeHref)
   return match?.label || 'Overview'
 }

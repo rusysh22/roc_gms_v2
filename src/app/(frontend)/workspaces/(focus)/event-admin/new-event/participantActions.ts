@@ -167,12 +167,28 @@ export async function importParticipantsAction(formData: FormData): Promise<void
 
   let created = 0
   let skipped = 0
+  // Per-row detail so a failed import is actionable ("Jane Doe: duplicate name") instead of just
+  // an opaque "N skipped" count the user has no way to act on. `skip` is a row that produced no
+  // document at all; `warn` is a row that was still created but with a caveat worth surfacing
+  // (e.g. its club name didn't match anything, or an invalid gender was dropped).
+  const issues: { sheet: string; name: string; reason: string }[] = []
+  const skip = (sheet: string, name: string, reason: string) => {
+    skipped += 1
+    issues.push({ sheet, name: name || '(blank)', reason })
+  }
+  const warn = (sheet: string, name: string, reason: string) => {
+    issues.push({ sheet, name: name || '(blank)', reason })
+  }
 
   for (const row of parsed.clubs) {
     const slug = slugify(row.name)
     const key = row.name.trim().toLowerCase()
-    if (!slug || clubIdByName.has(key)) {
-      skipped += 1
+    if (!slug) {
+      skip('Clubs', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (clubIdByName.has(key)) {
+      skip('Clubs', row.name, 'Duplicate club name in this event')
       continue
     }
     try {
@@ -183,7 +199,7 @@ export async function importParticipantsAction(formData: FormData): Promise<void
         where: { slug: { equals: slug } },
       })
       if (duplicate.docs.length > 0) {
-        skipped += 1
+        skip('Clubs', row.name, 'A club with this name already exists')
         continue
       }
       const data = {
@@ -197,14 +213,14 @@ export async function importParticipantsAction(formData: FormData): Promise<void
       clubIdByName.set(key, Number(doc.id))
       created += 1
     } catch {
-      skipped += 1
+      skip('Clubs', row.name, 'Could not save (unexpected error)')
     }
   }
 
   for (const row of parsed.teams) {
     const slug = slugify(row.name)
     if (!slug) {
-      skipped += 1
+      skip('Teams', row.name, 'Missing or invalid name')
       continue
     }
     try {
@@ -215,10 +231,13 @@ export async function importParticipantsAction(formData: FormData): Promise<void
         where: { slug: { equals: slug } },
       })
       if (duplicate.docs.length > 0) {
-        skipped += 1
+        skip('Teams', row.name, 'A team with this name already exists')
         continue
       }
       const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
+      if (row.clubName && !clubId) {
+        warn('Teams', row.name, `Club "${row.clubName}" not found - saved without a club`)
+      }
       const data = {
         event_id: Number(eventId),
         club_id: clubId,
@@ -229,14 +248,20 @@ export async function importParticipantsAction(formData: FormData): Promise<void
       await payload.create({ collection: 'teams', data })
       created += 1
     } catch {
-      skipped += 1
+      skip('Teams', row.name, 'Could not save (unexpected error)')
     }
   }
 
   for (const row of parsed.players) {
     try {
       const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
+      if (row.clubName && !clubId) {
+        warn('Players', row.name, `Club "${row.clubName}" not found - saved without a club`)
+      }
       const gender = row.gender && validGenders.has(row.gender) ? row.gender : undefined
+      if (row.gender && !gender) {
+        warn('Players', row.name, `Gender "${row.gender}" is not valid - saved without a gender`)
+      }
       const data = {
         event_id: Number(eventId),
         club_id: clubId,
@@ -247,7 +272,7 @@ export async function importParticipantsAction(formData: FormData): Promise<void
       await payload.create({ collection: 'players', data })
       created += 1
     } catch {
-      skipped += 1
+      skip('Players', row.name, 'Could not save (unexpected error)')
     }
   }
 
@@ -260,6 +285,7 @@ export async function importParticipantsAction(formData: FormData): Promise<void
     after: {
       created,
       skipped,
+      issues,
       clubs: parsed.clubs.length,
       teams: parsed.teams.length,
       players: parsed.players.length,
@@ -268,10 +294,17 @@ export async function importParticipantsAction(formData: FormData): Promise<void
   })
 
   revalidatePath(wizardPage)
+  const MAX_ISSUES_IN_URL = 25
+  const issuesParam =
+    issues.length > 0
+      ? encodeURIComponent(JSON.stringify(issues.slice(0, MAX_ISSUES_IN_URL)))
+      : ''
+  const moreIssues = issues.length > MAX_ISSUES_IN_URL ? issues.length - MAX_ISSUES_IN_URL : 0
   redirect(
-    `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}${
-      skipped ? `&wizardImportSkipped=${skipped}` : ''
-    }`,
+    `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}` +
+      (skipped ? `&wizardImportSkipped=${skipped}` : '') +
+      (issuesParam ? `&wizardImportIssues=${issuesParam}` : '') +
+      (moreIssues ? `&wizardImportMoreIssues=${moreIssues}` : ''),
   )
 }
 

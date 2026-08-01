@@ -41,13 +41,13 @@ export const buildMatchIcs = (match: MatchCalendarInput) => {
   const now = new Date()
   const location = [match.venue, match.court].filter(Boolean).join(' / ')
   const url = match.url || getAbsolutePublicUrl(`/matches/${match.matchNumber}`)
-  const uid = `${match.matchNumber}-${match.id}@roc-gms.local`
+  const uid = `${match.matchNumber}-${match.id}@intourney.local`
   const description = [match.description, url].filter(Boolean).join('\n\n')
 
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//ROC GMS//ROC Olympic Calendar//EN',
+    'PRODID:-//InTourney//InTourney Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

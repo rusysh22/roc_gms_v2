@@ -49,8 +49,9 @@ export const hasWorkspaceRole = (
   return Boolean(user.roles?.some((role) => allowedRoles.includes(role)))
 }
 
-const getLoginUrl = (returnTo: string) =>
-  `/admin/login?redirect=${encodeURIComponent(returnTo)}`
+// Tournament organizers sign in through the InTourney-branded frontend login, not Payload's raw
+// /admin/login screen - that admin console login stays reserved for system/super-admin use.
+const getLoginUrl = (returnTo: string) => `/login?redirect=${encodeURIComponent(returnTo)}`
 
 export const getAuthenticatedWorkspaceUser = async (payload: Payload) => {
   const headersList = await getHeaders()

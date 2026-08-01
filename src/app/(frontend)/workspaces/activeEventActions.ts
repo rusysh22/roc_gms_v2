@@ -18,7 +18,7 @@ export async function setActiveEventAction(formData: FormData): Promise<void> {
       : '/workspaces/event-admin'
 
   if (!user) {
-    redirect('/admin/login')
+    redirect('/login')
   }
   if (eventId) {
     const cookieStore = await cookies()

@@ -51,7 +51,7 @@ export default buildConfig({
     autoLogin:
       process.env.NODE_ENV === 'development' && process.env.PAYLOAD_ADMIN_AUTOLOGIN === 'true'
         ? {
-            email: process.env.SEED_ADMIN_EMAIL || 'admin@roc-gms.local',
+            email: process.env.SEED_ADMIN_EMAIL || 'admin@intourney.local',
             password: process.env.SEED_ADMIN_PASSWORD || 'ChangeMe123!',
             prefillOnly: true,
           }

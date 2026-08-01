@@ -9,6 +9,7 @@ import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -22,8 +23,10 @@ import {
 } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { FocusHeader } from '../../FocusHeader'
+import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction } from './eventActions'
+import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { addRulesetAction, addSportAction } from './sportActions'
 import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
 import {
@@ -77,10 +80,25 @@ const errorMessages: Record<string, string> = {
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 7") that works on its
 // own on narrow screens, a slim animated bar under it for an at-a-glance sense of how much is
 // left, and - lg and up, where there's room - the full connected-circle stepper with every step
-// name spelled out. All three describe the same state; nothing here duplicates data fetching.
-const StepProgress = ({ eventId, current }: { eventId: string; current: string }) => {
+// name spelled out. All three describe the same state.
+//
+// `completedSteps` reflects real data (a sport/category/participant/entry/match actually exists),
+// not just "you've passed this step's URL" - the previous `index < currentIndex` check marked
+// every earlier step "done" even if the user jumped ahead via the URL before filling it in, which
+// misrepresented progress. The current step always keeps its distinct active/outline treatment
+// regardless of whether its data already exists.
+const StepProgress = ({
+  eventId,
+  current,
+  completedSteps,
+}: {
+  eventId: string
+  current: string
+  completedSteps: Set<string>
+}) => {
   const currentIndex = STEPS.findIndex((step) => step.key === current)
-  const percent = Math.round(((currentIndex + 1) / STEPS.length) * 100)
+  const completedCount = STEPS.filter((step) => completedSteps.has(step.key)).length
+  const percent = Math.round((completedCount / STEPS.length) * 100)
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -110,8 +128,8 @@ const StepProgress = ({ eventId, current }: { eventId: string; current: string }
       <ol className="hidden items-start lg:flex" aria-label="Wizard steps">
         {STEPS.map((step, index) => {
           const reachable = index === 0 || Boolean(eventId)
-          const done = index < currentIndex
           const active = index === currentIndex
+          const done = completedSteps.has(step.key) && !active
           const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
           const pill = (
             <span
@@ -202,11 +220,40 @@ export default async function NewEventWizardPage({
   const eventLogo =
     event?.logo && typeof event.logo === 'object' ? (event.logo as { url?: string; alt?: string }) : undefined
 
+  const completedSteps = new Set<string>()
+  if (event) {
+    completedSteps.add('event')
+    const [sportsCount, categoriesCount, clubsCount, teamsCount, playersCount, confirmedCount, matchesCount] =
+      await Promise.all([
+        payload.count({ collection: 'sports', where: { event_id: { equals: eventId } } }),
+        payload.count({ collection: 'competition-categories', where: { event_id: { equals: eventId } } }),
+        payload.count({ collection: 'clubs', where: { event_id: { equals: eventId } } }),
+        payload.count({ collection: 'teams', where: { event_id: { equals: eventId } } }),
+        payload.count({ collection: 'players', where: { event_id: { equals: eventId } } }),
+        payload.count({
+          collection: 'competition-entries',
+          where: { and: [{ event_id: { equals: eventId } }, { status: { equals: 'confirmed' } }] },
+        }),
+        payload.count({ collection: 'matches', where: { event_id: { equals: eventId } } }),
+      ])
+    if (sportsCount.totalDocs > 0) completedSteps.add('sports')
+    if (categoriesCount.totalDocs > 0) completedSteps.add('categories')
+    if (clubsCount.totalDocs + teamsCount.totalDocs + playersCount.totalDocs > 0) {
+      completedSteps.add('participants')
+    }
+    if (confirmedCount.totalDocs > 0) completedSteps.add('entries')
+    if (matchesCount.totalDocs > 0) {
+      completedSteps.add('generate')
+      completedSteps.add('bracket')
+    }
+  }
+
   return (
     <main className="flex min-h-svh flex-col">
       <FocusHeader
         backHref="/workspaces/event-admin"
         backLabel="Event Admin"
+        maxWidthClassName="max-w-7xl"
         title={
           eventLogo?.url ? (
             <span className="flex items-center gap-2.5">
@@ -223,7 +270,7 @@ export default async function NewEventWizardPage({
           )
         }
       >
-        <StepProgress eventId={eventId} current={step} />
+        <StepProgress eventId={eventId} current={step} completedSteps={completedSteps} />
       </FocusHeader>
 
       <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
@@ -233,7 +280,17 @@ export default async function NewEventWizardPage({
           ) : null}
           {wizardUpdated ? <AlertBanner tone="success">Saved.</AlertBanner> : null}
 
-          {step === 'event' ? <EventStep /> : null}
+          {step === 'event' ? (
+            <EventStep
+              defaultName={get(params, 'name')}
+              defaultSlug={get(params, 'slug')}
+              suggestedSlug={get(params, 'suggestedSlug')}
+              defaultStart={get(params, 'eventStart')}
+              defaultEnd={get(params, 'eventEnd')}
+              defaultLocation={get(params, 'location')}
+              defaultOrganizerName={get(params, 'organizerName')}
+            />
+          ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
           {step === 'categories' && event ? <CategoriesStep payload={payload} eventId={eventId} /> : null}
           {step === 'participants' && event ? (
@@ -242,6 +299,8 @@ export default async function NewEventWizardPage({
               eventId={eventId}
               imported={get(params, 'wizardImported')}
               importSkipped={get(params, 'wizardImportSkipped')}
+              importIssues={get(params, 'wizardImportIssues')}
+              importMoreIssues={get(params, 'wizardImportMoreIssues')}
             />
           ) : null}
           {step === 'entries' && event ? (
@@ -486,7 +545,23 @@ const StepActions = ({ children }: { children: ReactNode }) => (
   <div className="flex flex-wrap justify-end gap-2">{children}</div>
 )
 
-const EventStep = () => (
+const EventStep = ({
+  defaultName,
+  defaultSlug,
+  suggestedSlug,
+  defaultStart,
+  defaultEnd,
+  defaultLocation,
+  defaultOrganizerName,
+}: {
+  defaultName: string
+  defaultSlug: string
+  suggestedSlug: string
+  defaultStart: string
+  defaultEnd: string
+  defaultLocation: string
+  defaultOrganizerName: string
+}) => (
   <Card className="flex flex-col gap-4">
     <div>
       <CardTitle>1. Event details</CardTitle>
@@ -495,23 +570,22 @@ const EventStep = () => (
       </p>
     </div>
     <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
-      <Field label="Event name" className="sm:col-span-2">
-        <Input name="name" required placeholder="e.g. ROC Olympic 2026" />
-      </Field>
-      <Field label="Slug (advanced)" className="sm:col-span-2">
-        <Input name="slug" placeholder="generated-from-name" />
-      </Field>
+      <EventNameSlugFields
+        defaultName={defaultName}
+        defaultSlug={defaultSlug}
+        suggestedSlug={suggestedSlug || undefined}
+      />
       <Field label="Start">
-        <Input name="eventStart" type="datetime-local" required />
+        <Input name="eventStart" type="datetime-local" required defaultValue={defaultStart} />
       </Field>
       <Field label="End">
-        <Input name="eventEnd" type="datetime-local" required />
+        <Input name="eventEnd" type="datetime-local" required defaultValue={defaultEnd} />
       </Field>
       <Field label="Location">
-        <Input name="location" placeholder="e.g. Main Sports Hall" />
+        <Input name="location" placeholder="e.g. Main Sports Hall" defaultValue={defaultLocation} />
       </Field>
       <Field label="Organizer">
-        <Input name="organizerName" placeholder="e.g. HR Committee" />
+        <Input name="organizerName" placeholder="e.g. HR Committee" defaultValue={defaultOrganizerName} />
       </Field>
       <Field label="Event logo (optional)" className="sm:col-span-2">
         <Input type="file" name="logo" accept="image/*" className="cursor-pointer" />
@@ -657,14 +731,11 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
           <form action={addCategoryAction} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="eventId" value={eventId} />
             <Field label="Sport" className="sm:col-span-2">
-              <Select name="sportId" required>
-                <option value="">Select sport</option>
-                {toOptions(sports.docs).map((sport) => (
-                  <option key={sport.id} value={sport.id}>
-                    {sport.label}
-                  </option>
-                ))}
-              </Select>
+              <SearchableSelect
+                name="sportId"
+                placeholder="Select sport"
+                options={toOptions(sports.docs).map((sport) => ({ value: sport.id, label: sport.label }))}
+              />
             </Field>
             <Field label="Category name">
               <Input name="name" required placeholder="Men's Singles" />
@@ -684,14 +755,18 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
             </Field>
             <Field label="Format">
               <Select name="formatType" defaultValue="single_elimination">
-                <option value="single_elimination">Single Elimination</option>
-                <option value="round_robin">Round Robin</option>
-                <option value="double_elimination">Double Elimination</option>
-                <option value="group_stage_to_knockout">Group Stage to Knockout</option>
-                <option value="league">League</option>
-                <option value="friendly">Friendly</option>
-                <option value="time_trial">Time Trial</option>
-                <option value="score_ranking">Score Ranking</option>
+                <optgroup label="Auto-generates matches in step 6">
+                  <option value="single_elimination">Single Elimination</option>
+                  <option value="round_robin">Round Robin</option>
+                </optgroup>
+                <optgroup label="Manual scheduling only (Scheduler workspace)">
+                  <option value="double_elimination">Double Elimination</option>
+                  <option value="group_stage_to_knockout">Group Stage to Knockout</option>
+                  <option value="league">League</option>
+                  <option value="friendly">Friendly</option>
+                  <option value="time_trial">Time Trial</option>
+                  <option value="score_ranking">Score Ranking</option>
+                </optgroup>
               </Select>
             </Field>
             <Field label="Ruleset (optional)" className="sm:col-span-2">
@@ -794,17 +869,32 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
   )
 }
 
+type ImportIssue = { sheet: string; name: string; reason: string }
+
 const ParticipantsStep = async ({
   payload,
   eventId,
   imported,
   importSkipped,
+  importIssues,
+  importMoreIssues,
 }: {
   payload: Payload
   eventId: string
   imported?: string
   importSkipped?: string
+  importIssues?: string
+  importMoreIssues?: string
 }) => {
+  let issues: ImportIssue[] = []
+  if (importIssues) {
+    try {
+      const parsed = JSON.parse(importIssues)
+      if (Array.isArray(parsed)) issues = parsed
+    } catch {
+      issues = []
+    }
+  }
   const [clubs, teams, players] = await Promise.all([
     payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -821,8 +911,33 @@ const ParticipantsStep = async ({
 
       {imported ? (
         <AlertBanner tone="success">
-          Imported {imported} row(s) from the Excel file.
-          {importSkipped ? ` ${importSkipped} row(s) were skipped (duplicates or invalid data).` : ''}
+          <p>
+            Imported {imported} row(s) from the Excel file.
+            {importSkipped ? ` ${importSkipped} row(s) were skipped.` : ''}
+          </p>
+          {issues.length > 0 ? (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs font-bold underline underline-offset-2">
+                View row-by-row details ({issues.length}{importMoreIssues ? `, showing first ${issues.length}` : ''})
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1 text-xs">
+                {issues.map((issue, index) => (
+                  <li key={index}>
+                    <span className="font-bold">
+                      {issue.sheet} · {issue.name}
+                    </span>
+                    {' — '}
+                    {issue.reason}
+                  </li>
+                ))}
+              </ul>
+              {importMoreIssues ? (
+                <p className="mt-1 text-xs font-semibold">
+                  + {importMoreIssues} more row(s) with issues not shown here.
+                </p>
+              ) : null}
+            </details>
+          ) : null}
         </AlertBanner>
       ) : null}
 
@@ -889,14 +1004,11 @@ const ParticipantsStep = async ({
               <Input name="name" required />
             </Field>
             <Field label="Club">
-              <Select name="clubId">
-                <option value="">None</option>
-                {toOptions(clubs.docs).map((club) => (
-                  <option key={club.id} value={club.id}>
-                    {club.label}
-                  </option>
-                ))}
-              </Select>
+              <SearchableSelect
+                name="clubId"
+                placeholder="None"
+                options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+              />
             </Field>
             <Field label="Contact email">
               <Input name="contactEmail" type="email" />
@@ -925,14 +1037,11 @@ const ParticipantsStep = async ({
             <Input name="name" required />
           </Field>
           <Field label="Club">
-            <Select name="clubId">
-              <option value="">None</option>
-              {toOptions(clubs.docs).map((club) => (
-                <option key={club.id} value={club.id}>
-                  {club.label}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              name="clubId"
+              placeholder="None"
+              options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+            />
           </Field>
           <Field label="Email">
             <Input name="email" type="email" />
@@ -1074,13 +1183,11 @@ const EntriesStep = async ({
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="step" value="entries" />
           <Field label="Sport & category" className="min-w-[240px] flex-1">
-            <Select name="categoryId" defaultValue={selectedCategoryId}>
-              {categoryOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.label}
-                </option>
-              ))}
-            </Select>
+            <SearchableSelect
+              name="categoryId"
+              defaultValue={selectedCategoryId}
+              options={categoryOptions.map((category) => ({ value: category.id, label: category.label }))}
+            />
           </Field>
           <Button type="submit" variant="secondary">
             Switch category
@@ -1216,17 +1323,28 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
     sort: 'name',
   })
 
-  const categoriesWithCounts = await Promise.all(
-    categories.docs.map(async (category) => {
-      const entries = await payload.find({
-        collection: 'competition-entries',
-        depth: 0,
-        limit: 500,
-        where: { and: [{ category_id: { equals: category.id } }, { status: { equals: 'confirmed' } }] },
-      })
-      return { category, confirmedCount: entries.totalDocs }
-    }),
-  )
+  // One batched query for every category's confirmed-entry count instead of one query per
+  // category - the counts are grouped client-side afterward.
+  const categoryIds = categories.docs.map((category) => category.id)
+  const confirmedEntries =
+    categoryIds.length > 0
+      ? await payload.find({
+          collection: 'competition-entries',
+          depth: 0,
+          limit: 5000,
+          where: { and: [{ category_id: { in: categoryIds } }, { status: { equals: 'confirmed' } }] },
+        })
+      : { docs: [] as { category_id?: unknown }[] }
+
+  const confirmedCountByCategory = new Map<string, number>()
+  for (const entry of confirmedEntries.docs) {
+    const key = String(entry.category_id)
+    confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
+  }
+  const categoriesWithCounts = categories.docs.map((category) => ({
+    category,
+    confirmedCount: confirmedCountByCategory.get(String(category.id)) || 0,
+  }))
 
   return (
     <Card className="flex flex-col gap-4">
@@ -1257,7 +1375,7 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
               type="submit"
               size="sm"
               disabled={
-                confirmedCount < 2 || !['single_elimination', 'round_robin'].includes(String(category.format_type))
+                confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))
               }
             >
               Generate Matches

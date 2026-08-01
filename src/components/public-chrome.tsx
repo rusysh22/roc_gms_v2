@@ -96,18 +96,16 @@ function UserMenu({ user }: { user: PublicNavUser }) {
   )
 }
 
-function UtilityBar({ user }: { user: PublicNavUser | null }) {
+function NavCta({ user }: { user: PublicNavUser | null }) {
   return (
-    <div className="px-4 pt-4">
-      <div className="mx-auto flex max-w-6xl items-center justify-end gap-2">
-        <Link
-          href="/workspaces"
-          className="rounded-full border border-line bg-paper px-3 py-1.5 text-xs font-bold text-ink-soft no-underline transition-colors hover:border-green hover:text-ink"
-        >
-          Event Management
-        </Link>
-        {user ? <UserMenu user={user} /> : null}
-      </div>
+    <div className="flex items-center gap-2">
+      <Link
+        href="/workspaces"
+        className="rounded-full border border-line bg-paper px-3 py-1.5 text-xs font-bold whitespace-nowrap text-ink-soft no-underline transition-colors hover:border-green hover:text-ink"
+      >
+        Event Management
+      </Link>
+      {user ? <UserMenu user={user} /> : null}
     </div>
   )
 }
@@ -133,11 +131,15 @@ export function PublicChrome({ brand, user, children }: PublicChromeProps) {
   }
 
   return (
-    <div className="flex min-h-svh flex-col">
-      <UtilityBar user={user} />
-      <NavBar brand={brand} items={navItems} activeHref={activeHref} />
+    <div className="flex min-h-svh flex-col font-sans">
+      <NavBar
+        brand={brand}
+        items={navItems}
+        activeHref={activeHref}
+        cta={<NavCta user={user} />}
+      />
       <div className="flex-1 pt-6">{children}</div>
-      <Footer brand={brand} tagline="Run by the committee, for the whole office." links={navItems} />
+      <Footer brand={brand} tagline="Hosting your Tournament's" links={navItems} />
     </div>
   )
 }

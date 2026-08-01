@@ -91,11 +91,11 @@ export default function MarketingHomePage() {
       <section className="relative overflow-hidden px-4 pt-10 pb-16 sm:pt-16" id="top">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-green/30 blur-3xl"
+          className="pointer-events-none absolute -top-40 -left-40 h-72 w-72 rounded-full bg-green/20 blur-[90px]"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-24 -right-16 h-80 w-80 rounded-full bg-blue/25 blur-3xl"
+          className="pointer-events-none absolute -top-10 -right-32 h-80 w-80 rounded-full bg-blue/15 blur-[90px]"
         />
         <div className="relative mx-auto max-w-3xl text-center">
           <p className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
@@ -109,7 +109,7 @@ export default function MarketingHomePage() {
             </span>
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-ink-soft sm:text-lg">
-            ROC GMS is a guided setup wizard, auto-generated brackets and standings, live scoring,
+            InTourney is a guided setup wizard, auto-generated brackets and standings, live scoring,
             and a branded public page for every event you run - office olympiads, sports days, or
             multi-club tournaments.
           </p>

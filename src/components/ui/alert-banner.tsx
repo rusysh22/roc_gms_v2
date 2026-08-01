@@ -35,14 +35,16 @@ const AlertBanner = React.forwardRef<HTMLDivElement, AlertBannerProps>(
       <div
         ref={ref}
         className={cn(
-          'flex items-center gap-2 rounded-card border px-4 py-3 font-sans text-sm font-bold',
+          'flex items-start gap-2 rounded-card border px-4 py-3 font-sans text-sm font-bold',
           toneClasses[tone],
           className,
         )}
         {...props}
       >
-        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>{children}</span>
+        <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        {/* A plain div (not <span>) so multi-line content - e.g. a <details> disclosure of
+            per-row import issues - can nest block elements without invalid-HTML inline nesting. */}
+        <div className="min-w-0 flex-1">{children}</div>
       </div>
     )
   },

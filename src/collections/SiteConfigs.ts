@@ -20,7 +20,7 @@ export const SiteConfigs: CollectionConfig = {
       name: 'site_name',
       type: 'text',
       required: true,
-      defaultValue: 'ROC Game Management System',
+      defaultValue: 'InTourney',
     },
     {
       name: 'site_logo',

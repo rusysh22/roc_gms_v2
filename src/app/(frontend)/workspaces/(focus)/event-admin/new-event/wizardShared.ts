@@ -2,6 +2,12 @@ import type { Payload } from 'payload'
 
 export const wizardPage = '/workspaces/event-admin/new-event'
 
+// Single source of truth for which category formats step 6 (Generate Matches) can auto-generate a
+// first round for. Kept here (not just in generateActions.ts) so the step 3 format picker can
+// warn the user up front instead of them discovering the "manual scheduling only" limit three
+// steps later.
+export const AUTO_GENERATE_FORMATS = new Set(['single_elimination', 'round_robin'])
+
 export const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
 

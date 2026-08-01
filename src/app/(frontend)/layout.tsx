@@ -17,8 +17,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  title: 'ROC GMS V2',
-  description: 'ROC Game Management System V2 foundation',
+  title: 'InTourney',
+  description: "InTourney - Hosting your Tournament's",
 }
 
 type Props = {
@@ -31,7 +31,7 @@ export default async function FrontendLayout({ children }: Props) {
   return (
     <html lang="en" className={plusJakartaSans.variable}>
       <body>
-        <PublicChrome brand="ROC GMS" user={user}>
+        <PublicChrome brand="InTourney" user={user}>
           {children}
         </PublicChrome>
       </body>

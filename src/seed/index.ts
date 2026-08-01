@@ -344,11 +344,11 @@ const createLexicalContent = (paragraphs: string[]): LexicalContent => ({
 })
 
 const seed = async () => {
-  console.log('Starting ROC GMS seed...')
+  console.log('Starting InTourney seed...')
   const payload = await getPayload({ config })
   console.log('Payload ready for seed.')
 
-  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@roc-gms.local'
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@intourney.local'
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'ChangeMe123!'
 
   const existingUsers = await payload.find({
@@ -1465,7 +1465,7 @@ const seed = async () => {
   }
 
   payload.logger.info('ROC Olympic 2026 demo event structure is ready')
-  console.log('ROC GMS seed complete.')
+  console.log('InTourney seed complete.')
 }
 
 await seed()

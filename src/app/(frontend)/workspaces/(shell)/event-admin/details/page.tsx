@@ -23,6 +23,28 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>
 const get = (params: Record<string, string | string[] | undefined>, key: string) =>
   Array.isArray(params[key]) ? params[key][0] || '' : params[key] || ''
 
+// Every field this form reads is a plain scalar (never a relationship/upload), so the document
+// `getActiveEvent` already fetched (it always pulls the full row - `depth` only changes whether
+// relationship fields are populated, not which scalar columns come back) already has everything
+// this page needs. Just widens the type instead of re-fetching the same row a second time.
+type EventDetailsDoc = {
+  name?: string | null
+  slug?: string | null
+  description?: string | null
+  location?: string | null
+  organizer_name?: string | null
+  event_start_at?: string | null
+  event_end_at?: string | null
+  public_open_at?: string | null
+  registration_open_at?: string | null
+  registration_close_at?: string | null
+  schedule_publish_at?: string | null
+  archive_at?: string | null
+  status?: string | null
+  visibility?: string | null
+  rules_summary?: string | null
+}
+
 // Payload stores dates as UTC ISO strings; datetime-local inputs need "YYYY-MM-DDTHH:mm" in
 // whatever timezone renders/submits the form. Matches the same round-trip the New Event Wizard's
 // create form already relies on (new Date(inputValue).toISOString()), so edit and create stay
@@ -61,7 +83,7 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
   const params = searchParams ? await searchParams : {}
   const detailsError = get(params, 'detailsError')
   const detailsUpdated = get(params, 'detailsUpdated')
-  const event = await access.payload.findByID({ collection: 'events', id: activeEvent.id, depth: 0 })
+  const event = activeEvent as unknown as EventDetailsDoc
 
   return (
     <>

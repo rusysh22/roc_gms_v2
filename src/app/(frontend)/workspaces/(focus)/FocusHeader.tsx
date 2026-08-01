@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
+
 // Shared header for every distraction-free (focus) flow (New Event Wizard, Live Score) - no
 // sidebar/topbar chrome here on purpose, just a way back and the current context.
 export function FocusHeader({
@@ -11,6 +13,7 @@ export function FocusHeader({
   subtitle,
   right,
   children,
+  maxWidthClassName = 'max-w-5xl',
 }: {
   backHref: string
   backLabel?: string
@@ -18,10 +21,14 @@ export function FocusHeader({
   subtitle?: ReactNode
   right?: ReactNode
   children?: ReactNode
+  /** Matches the width of whatever body layout sits below the header - defaults to the width
+   * used by the only other current (focus) flow (Live Score) but the New Event Wizard's wider
+   * two-column body passes its own so the title/stepper line up with the content underneath. */
+  maxWidthClassName?: string
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-paper/95 px-4 py-3 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
+      <div className={cn('mx-auto flex flex-wrap items-center justify-between gap-3', maxWidthClassName)}>
         <div className="min-w-0">
           <Link
             href={backHref}
@@ -37,7 +44,7 @@ export function FocusHeader({
         </div>
         {right ? <div className="flex flex-wrap items-center gap-2">{right}</div> : null}
       </div>
-      {children ? <div className="mx-auto mt-3 max-w-5xl">{children}</div> : null}
+      {children ? <div className={cn('mx-auto mt-3', maxWidthClassName)}>{children}</div> : null}
     </header>
   )
 }

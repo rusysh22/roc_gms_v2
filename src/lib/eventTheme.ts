@@ -11,7 +11,7 @@ export const EVENT_THEME_PRESETS: Record<
 > = {
   classic: {
     label: 'Classic',
-    description: 'The default ROC GMS green, blue, and gold.',
+    description: 'The default InTourney green, blue, and gold.',
     colors: { green: '#128a56', blue: '#1b57c4', gold: '#de9f1e' },
   },
   sunset: {

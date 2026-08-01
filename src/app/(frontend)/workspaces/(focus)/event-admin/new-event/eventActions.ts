@@ -1,11 +1,24 @@
 'use server'
 
+import type { Payload } from 'payload'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { slugify, text, wizardPage } from './wizardShared'
+
+// Tries base-2, base-3, ... until one isn't taken, so a duplicate-slug error can offer a ready-to-use
+// alternative instead of making the user guess-and-check. Capped at 50 attempts - if a base slug
+// somehow already has 50 numbered variants taken, falling through to "no suggestion" is fine.
+const findAvailableSlug = async (payload: Payload, base: string): Promise<string | null> => {
+  for (let suffix = 2; suffix <= 50; suffix += 1) {
+    const candidate = `${base}-${suffix}`.slice(0, 80)
+    const existing = await payload.count({ collection: 'events', where: { slug: { equals: candidate } } })
+    if (existing.totalDocs === 0) return candidate
+  }
+  return null
+}
 
 export async function createEventAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
@@ -14,17 +27,36 @@ export async function createEventAction(formData: FormData): Promise<void> {
   })
 
   const name = text(formData, 'name')
-  const slug = slugify(text(formData, 'slug') || name)
+  const rawSlug = text(formData, 'slug')
+  const slug = slugify(rawSlug || name)
   const start = text(formData, 'eventStart')
   const end = text(formData, 'eventEnd')
   const location = text(formData, 'location')
   const organizerName = text(formData, 'organizerName')
 
+  // Failed submissions redirect back with every entered value in the query string so the form can
+  // re-populate itself - previously a validation error (or a taken slug) silently wiped the whole
+  // form and the user had to retype everything from scratch.
+  const redirectWithInput = (errorCode: string, extra?: Record<string, string>): never => {
+    const query = new URLSearchParams({
+      step: 'event',
+      wizardError: errorCode,
+      name,
+      slug: rawSlug,
+      eventStart: start,
+      eventEnd: end,
+      location,
+      organizerName,
+      ...extra,
+    })
+    redirect(`${wizardPage}?${query.toString()}`)
+  }
+
   if (!name || !slug || !start || !end) {
-    redirect(`${wizardPage}?step=event&wizardError=invalid_event`)
+    redirectWithInput('invalid_event')
   }
   if (new Date(end).getTime() <= new Date(start).getTime()) {
-    redirect(`${wizardPage}?step=event&wizardError=invalid_date_range`)
+    redirectWithInput('invalid_date_range')
   }
 
   const duplicate = await payload.find({
@@ -34,14 +66,15 @@ export async function createEventAction(formData: FormData): Promise<void> {
     where: { slug: { equals: slug } },
   })
   if (duplicate.docs.length > 0) {
-    redirect(`${wizardPage}?step=event&wizardError=duplicate_slug`)
+    const suggestedSlug = await findAvailableSlug(payload, slug)
+    redirectWithInput('duplicate_slug', suggestedSlug ? { suggestedSlug } : undefined)
   }
 
   let logoId: number | undefined
   const logoFile = formData.get('logo')
   if (logoFile instanceof File && logoFile.size > 0) {
     if (!logoFile.type.startsWith('image/')) {
-      redirect(`${wizardPage}?step=event&wizardError=invalid_logo`)
+      redirectWithInput('invalid_logo')
     }
     const buffer = Buffer.from(await logoFile.arrayBuffer())
     const media = await payload.create({

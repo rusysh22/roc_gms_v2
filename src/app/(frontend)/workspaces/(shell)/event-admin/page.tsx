@@ -1,10 +1,17 @@
 import Link from 'next/link'
-import { CheckCircle2, Circle } from 'lucide-react'
+import { ArrowRight, CalendarClock, CheckCircle2, Circle, MapPinned, Trophy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { getActiveEvent } from '../../activeEvent'
-import { PageHero, StatBlock, StatGrid, formatDateTime } from '../../workspaceComponents'
+import {
+  PageHero,
+  StatBlock,
+  StatGrid,
+  formatDateTime,
+  getRelationshipLabel,
+  type RelationshipDoc,
+} from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
 
 export const dynamic = 'force-dynamic'
@@ -20,19 +27,18 @@ type EventDoc = {
   location?: string
 }
 
-const readinessLabels = [
-  'Event information',
-  'Sports',
-  'Competition categories',
-  'Rulesets',
-  'Clubs',
-  'Players',
-  'Teams',
-  'Entries',
-  'Venues',
-  'Courts',
-  'Matches',
-]
+type NextMatchDoc = {
+  id: string | number
+  match_number: string
+  scheduled_start_at?: string | null
+  participant_a_entry_id?: RelationshipDoc | string | number | null
+  participant_b_entry_id?: RelationshipDoc | string | number | null
+}
+
+// Mirrors the Match Officer workspace's own "match-day" definition
+// (src/app/(frontend)/workspaces/(shell)/match-officer/page.tsx) so the two pages agree on what
+// counts as "next up" for the score-update shortcut below.
+const MATCH_DAY_STATUSES = ['published', 'scheduled', 'check_in_open', 'ready_to_start', 'ongoing']
 
 export default async function EventAdminWorkspacePage() {
   const access = await requireWorkspaceAccess({
@@ -51,8 +57,11 @@ export default async function EventAdminWorkspacePage() {
 
   const payload = access.payload
   const event = (await getActiveEvent(payload)) as EventDoc | null
-  const eventWhere = event ? { event_id: { equals: event.id } } : undefined
-  const [sports, categories, rulesets, clubs, players, teams, entries, venues, courts, matches] =
+  // A where clause guaranteed to match nothing when there's no active event yet - otherwise an
+  // unscoped `where: undefined` below would silently count every event's data, not zero.
+  const eventWhere = event ? { event_id: { equals: event.id } } : { event_id: { equals: -1 } }
+
+  const [sports, categories, rulesets, clubs, players, teams, entries, venues, courts, matches, unscheduled, nextMatch] =
     await Promise.all([
       payload.find({ collection: 'sports', limit: 1, where: eventWhere }),
       payload.find({ collection: 'competition-categories', limit: 1, where: eventWhere }),
@@ -64,97 +73,171 @@ export default async function EventAdminWorkspacePage() {
       payload.find({ collection: 'venues', limit: 1, where: eventWhere }),
       payload.find({ collection: 'courts', limit: 1, where: eventWhere }),
       payload.find({ collection: 'matches', limit: 1, where: eventWhere }),
+      payload.find({
+        collection: 'matches',
+        limit: 1,
+        where: { and: [eventWhere, { scheduled_start_at: { exists: false } }] },
+      }),
+      payload.find({
+        collection: 'matches',
+        depth: 1,
+        limit: 1,
+        sort: 'scheduled_start_at',
+        where: {
+          and: [eventWhere, { scheduled_start_at: { exists: true } }, { status: { in: MATCH_DAY_STATUSES } }],
+        },
+      }),
     ])
 
-  const readiness = [
-    Boolean(event),
-    sports.totalDocs > 0,
-    categories.totalDocs > 0,
-    rulesets.totalDocs > 0,
-    clubs.totalDocs > 0,
-    players.totalDocs > 0,
-    teams.totalDocs > 0,
-    entries.totalDocs > 0,
-    venues.totalDocs > 0,
-    courts.totalDocs > 0,
-    matches.totalDocs > 0,
+  const nextMatchDoc = nextMatch.docs[0] as NextMatchDoc | undefined
+
+  // Replaces the old separate "Guided setup" button row + "Readiness Checklist" list (two
+  // redundant blocks showing the same information twice) with one list that is both the status
+  // indicator and the action - fewer disconnected buttons on screen, same information.
+  const setupTasks = [
+    { label: 'Event details', done: Boolean(event), href: '/workspaces/event-admin/details' },
+    {
+      label: 'Sports & rulesets',
+      done: sports.totalDocs > 0 || rulesets.totalDocs > 0,
+      href: event
+        ? `/workspaces/event-admin/new-event?eventId=${event.id}&step=sports`
+        : '/workspaces/event-admin/new-event',
+    },
+    {
+      label: 'Competition categories',
+      done: categories.totalDocs > 0,
+      href: event
+        ? `/workspaces/event-admin/new-event?eventId=${event.id}&step=categories`
+        : '/workspaces/event-admin/new-event',
+    },
+    { label: 'Clubs', done: clubs.totalDocs > 0, href: '/workspaces/event-admin/clubs' },
+    {
+      label: 'Players & teams',
+      done: players.totalDocs > 0 || teams.totalDocs > 0,
+      href: '/workspaces/event-admin/participants',
+    },
+    { label: 'Competition entries', done: entries.totalDocs > 0, href: '/workspaces/event-admin/entries' },
+    {
+      label: 'Venues & courts',
+      done: venues.totalDocs > 0 && courts.totalDocs > 0,
+      href: '/workspaces/event-admin/facilities',
+    },
+    {
+      label: 'Matches generated',
+      done: matches.totalDocs > 0,
+      href: event
+        ? `/workspaces/event-admin/new-event?eventId=${event.id}&step=generate`
+        : '/workspaces/event-admin/new-event',
+    },
   ]
-  const completedCount = readiness.filter(Boolean).length
+  const completedCount = setupTasks.filter((task) => task.done).length
 
   return (
     <>
       <PageHero
         eyebrow="Event Admin Workspace"
-        title={event?.name || 'Event Setup'}
-        summary="Setup progress for the active event structure. Use Payload Admin as the backoffice editor while this workspace grows into the committee setup cockpit."
+        title={event?.name || 'Set up your first event'}
+        summary={
+          event
+            ? 'Everything below reflects the active event (switch events any time from the sidebar).'
+            : 'Create an event to unlock sports, registration, scheduling, and scoring.'
+        }
         actions={
           <>
             <Button asChild>
-              <Link href="/workspaces/event-admin/new-event">Create New Event</Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link href="/workspaces/event-admin/details">Manage Event</Link>
+              <Link href="/workspaces/event-admin/new-event">
+                {event ? 'Create Another Event' : 'Create New Event'}
+              </Link>
             </Button>
             {event ? (
-              <>
-                <Button asChild variant="secondary">
-                  <Link href={`/workspaces/event-admin/new-event?eventId=${event.id}&step=sports`}>
-                    Sports
-                  </Link>
-                </Button>
-                <Button asChild variant="secondary">
-                  <Link href={`/workspaces/event-admin/new-event?eventId=${event.id}&step=categories`}>
-                    Categories
-                  </Link>
-                </Button>
-              </>
+              <Button asChild variant="secondary">
+                <Link href="/workspaces/event-admin/details">Edit Event Details</Link>
+              </Button>
             ) : null}
           </>
         }
       />
 
-      <Card className="mb-6 flex flex-col gap-3">
-        <CardTitle>Guided setup</CardTitle>
-        <p className="text-sm text-ink-soft">
-          Routine clubs, facilities, and competition entries can be managed here without Advanced
-          Data Administration.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/workspaces/event-admin/clubs">Manage Clubs</Link>
-          </Button>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/workspaces/event-admin/facilities">Manage Facilities</Link>
-          </Button>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/workspaces/event-admin/participants">Manage Participants</Link>
-          </Button>
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/workspaces/event-admin/entries">Manage Entries</Link>
-          </Button>
-        </div>
-      </Card>
-
       <StatGrid>
-        <StatBlock label="Readiness" value={`${completedCount}/${readiness.length}`} tone="good" />
+        <StatBlock label="Setup readiness" value={`${completedCount}/${setupTasks.length}`} tone="good" />
         <StatBlock label="Sports" value={sports.totalDocs} />
         <StatBlock label="Categories" value={categories.totalDocs} />
         <StatBlock label="Matches" value={matches.totalDocs} />
       </StatGrid>
 
+      <Card className="mb-6 flex flex-col gap-3">
+        <div>
+          <CardTitle>Today&apos;s operations</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            The three things that change on every match day - jump straight in.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Link
+            href="/workspaces/match-officer"
+            className="flex flex-col gap-1 rounded-card border border-line bg-paper px-4 py-3 no-underline transition-colors hover:border-green"
+          >
+            <span className="flex items-center gap-2 text-sm font-extrabold text-ink">
+              <Trophy className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+              Update score
+            </span>
+            <span className="text-xs font-semibold text-ink-soft">
+              {nextMatchDoc
+                ? `Next: ${getRelationshipLabel(nextMatchDoc.participant_a_entry_id)} vs ${getRelationshipLabel(
+                    nextMatchDoc.participant_b_entry_id,
+                  )} · ${formatDateTime(nextMatchDoc.scheduled_start_at)}`
+                : 'No match-day matches queued yet.'}
+            </span>
+          </Link>
+          <Link
+            href="/workspaces/scheduler"
+            className="flex flex-col gap-1 rounded-card border border-line bg-paper px-4 py-3 no-underline transition-colors hover:border-green"
+          >
+            <span className="flex items-center gap-2 text-sm font-extrabold text-ink">
+              <CalendarClock className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+              Update schedule
+            </span>
+            <span className="text-xs font-semibold text-ink-soft">
+              {unscheduled.totalDocs > 0
+                ? `${unscheduled.totalDocs} match(es) still need a time & court.`
+                : 'All generated matches are scheduled.'}
+            </span>
+          </Link>
+          <Link
+            href="/workspaces/event-admin/facilities"
+            className="flex flex-col gap-1 rounded-card border border-line bg-paper px-4 py-3 no-underline transition-colors hover:border-green"
+          >
+            <span className="flex items-center gap-2 text-sm font-extrabold text-ink">
+              <MapPinned className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+              Update venue
+            </span>
+            <span className="text-xs font-semibold text-ink-soft">
+              {venues.totalDocs} venue(s), {courts.totalDocs} court(s) configured.
+            </span>
+          </Link>
+        </div>
+      </Card>
+
       <section className="grid gap-4 lg:grid-cols-2">
         <Card className="flex flex-col gap-3">
-          <CardTitle>Readiness Checklist</CardTitle>
-          <div className="grid gap-1.5">
-            {readinessLabels.map((label, index) => (
-              <div key={label} className="flex items-center gap-2 text-sm font-semibold text-ink">
-                {readiness[index] ? (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
-                ) : (
-                  <Circle className="h-4 w-4 shrink-0 text-ink-soft/50" aria-hidden="true" />
-                )}
-                {label}
-              </div>
+          <CardTitle>Setup checklist</CardTitle>
+          <div className="grid gap-1">
+            {setupTasks.map((task) => (
+              <Link
+                key={task.label}
+                href={task.href}
+                className="flex items-center justify-between gap-2 rounded-card px-2 py-1.5 no-underline transition-colors hover:bg-mist"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  {task.done ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+                  ) : (
+                    <Circle className="h-4 w-4 shrink-0 text-ink-soft/50" aria-hidden="true" />
+                  )}
+                  {task.label}
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-soft/60" aria-hidden="true" />
+              </Link>
             ))}
           </div>
         </Card>

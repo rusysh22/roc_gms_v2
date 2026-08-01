@@ -19,6 +19,14 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>
 const get = (params: Record<string, string | string[] | undefined>, key: string) =>
   Array.isArray(params[key]) ? params[key][0] || '' : params[key] || ''
 
+// `ActiveEventDoc` only declares the base scalar fields every caller of getActiveEvent needs -
+// this page asks for `depth: 1` so the row it gets back also has these two populated, but still
+// needs its own wider type to read them off (the runtime object already has them either way).
+type AppearanceEventDoc = {
+  banner_image?: { url?: string; alt?: string } | string | number | null
+  theme_config?: { preset?: string } | null
+}
+
 export default async function AppearancePage({ searchParams }: { searchParams?: SearchParams }) {
   const access = await requireWorkspaceAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
@@ -29,7 +37,7 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
     return <WorkspaceUnauthorized workspaceName={access.workspaceName} allowedRoles={access.allowedRoles} />
   }
 
-  const event = await getActiveEvent(access.payload)
+  const event = await getActiveEvent(access.payload, 1)
   if (!event) {
     return (
       <>
@@ -47,12 +55,12 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
   const appearanceError = get(params, 'appearanceError')
   const appearanceUpdated = get(params, 'appearanceUpdated')
 
-  const fullEvent = await access.payload.findByID({ collection: 'events', id: event.id, depth: 1 })
+  const fullEvent = event as unknown as AppearanceEventDoc
   const bannerImage =
     fullEvent.banner_image && typeof fullEvent.banner_image === 'object'
       ? (fullEvent.banner_image as { url?: string; alt?: string })
       : undefined
-  const themeConfig = fullEvent.theme_config as { preset?: string } | null | undefined
+  const themeConfig = fullEvent.theme_config
   const currentPreset = themeConfig?.preset || DEFAULT_EVENT_THEME_PRESET
 
   return (
