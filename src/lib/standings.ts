@@ -440,6 +440,17 @@ export const calculateStandingsForScope = async (
   }
 }
 
+// Relationship fields on Standings are Postgres integer FKs. Every id flowing through this module
+// ultimately comes from one of two sources: a populated relationship doc's `.id` (already a
+// number) or a raw form-data string passed straight through by a caller (e.g.
+// generateMatchesAction's round-robin branch passes `eventId`/`categoryId` as strings). Payload's
+// relationship validation rejects a numeric-looking *string* here even though REST/GraphQL callers
+// send strings routinely - normalize to a real number right before writing.
+const toRelationId = (value: Id): Id => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : value
+}
+
 export const recalculateStandingsForScope = async (
   payload: Payload,
   input: RecalculateStandingsInput,
@@ -463,11 +474,11 @@ export const recalculateStandingsForScope = async (
     const existingRow = existing.docs.find((doc) => doc.standing_key === row.standing_key)
     const data = {
       standing_key: row.standing_key,
-      event_id: row.event_id,
-      category_id: row.category_id,
-      stage_id: row.stage_id,
-      group_id: row.group_id,
-      entry_id: row.entry_id,
+      event_id: toRelationId(row.event_id),
+      category_id: toRelationId(row.category_id),
+      stage_id: toRelationId(row.stage_id),
+      group_id: row.group_id !== undefined ? toRelationId(row.group_id) : undefined,
+      entry_id: toRelationId(row.entry_id),
       rank: row.rank,
       played: row.played,
       won: row.won,
