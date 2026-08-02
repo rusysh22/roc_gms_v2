@@ -931,7 +931,9 @@ const ParticipantsStep = async ({
       <AlertBanner tone="info">
         Clubs, teams, and players added here are shared across the whole event. You&apos;ll pick
         exactly which of them compete in each sport &amp; category in the next step (Entries &amp;
-        Seeding).
+        Seeding). Only add a club if a category needs an organization as the entry itself (e.g. an
+        inter-school or inter-company competition) - individual, pair, and team categories don&apos;t
+        need one.
       </AlertBanner>
 
       {imported ? (
@@ -1001,7 +1003,11 @@ const ParticipantsStep = async ({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="flex flex-col gap-4">
-          <CardTitle>4. Add a club</CardTitle>
+          {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 3: this used to be the only one of the three
+              headings ("Add a club" / "Add a team (optional)" / "Add a player (optional)") without
+              an explicit "(optional)" - the missing label read as "Club is mandatory," which isn't
+              true for any category except a Club-type one. */}
+          <CardTitle>4. Add a club (optional unless a category&apos;s participants are clubs)</CardTitle>
           <form action={addClubAction} className="flex flex-col gap-4">
             <input type="hidden" name="eventId" value={eventId} />
             <Field label="Club name">
