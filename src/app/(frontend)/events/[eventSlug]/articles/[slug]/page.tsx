@@ -89,7 +89,7 @@ export default async function ArticleDetailPage({
         <div className="mx-auto max-w-3xl">
           <Link
             href={`${eventPath}/updates?tab=articles`}
-            className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+            className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to articles

@@ -124,7 +124,10 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <form className="flex min-w-0 flex-1 gap-2 sm:max-w-sm" action={basePage}>
-          <Input name="q" defaultValue={query} placeholder="Search by name..." />
+          {/* AUDIT_UI_UX_CSS FORM-03/A11Y-01: the one raw Input left without an accessible name
+              after the Field-based fixes elsewhere - a compact inline search bar with no visible
+              label by design, so an aria-label (not a visible Field label) is the right fit here. */}
+          <Input name="q" defaultValue={query} placeholder="Search by name..." aria-label="Search clubs by name" />
           <Button type="submit" variant="secondary">
             Search
           </Button>

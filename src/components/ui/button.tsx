@@ -19,6 +19,10 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: 'border-0 bg-green text-paper hover:bg-green/90',
+        // AUDIT_UI_UX_CSS CSS-06/CSS-07: for the one CTA inside a public event page that's meant
+        // to reflect that event's own theme preset (not the fixed "primary action" green) -
+        // `bg-brand-primary` follows the event's chosen palette, `bg-green` never does anymore.
+        brand: 'border-0 bg-brand-primary text-paper hover:bg-brand-primary/90',
         secondary: 'border border-line bg-paper text-ink hover:border-green hover:text-green',
         ghost: 'border-0 text-ink hover:bg-mist',
       },

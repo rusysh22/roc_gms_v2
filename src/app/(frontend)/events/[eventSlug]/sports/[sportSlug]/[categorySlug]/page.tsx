@@ -227,7 +227,7 @@ const CategorySchedule = ({
                         {match.match_number} /{' '}
                         <Link
                           href={`${eventPath}/sports/${sportSlug}/${categorySlug}`}
-                          className="text-blue hover:underline"
+                          className="text-brand-secondary hover:underline"
                         >
                           category page
                         </Link>
@@ -314,7 +314,7 @@ export default async function PublicSportCategoryPage({
         <div className="mx-auto max-w-7xl">
           <Link
             href={`${eventPath}/sports`}
-            className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-blue no-underline hover:underline"
+            className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary no-underline hover:underline"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Back to sports
@@ -366,7 +366,7 @@ export default async function PublicSportCategoryPage({
                 aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold no-underline transition-colors ${
                   isActive ?
-                    'border-green bg-green text-paper'
+                    'border-brand-primary bg-brand-primary text-paper'
                   : 'border-line bg-paper text-ink-soft hover:text-ink'
                 }`}
               >
@@ -457,7 +457,7 @@ export default async function PublicSportCategoryPage({
                     <Link
                       key={match.id}
                       href={`${eventPath}/matches/${match.match_number}`}
-                      className="rounded-card border border-line px-3 py-2 transition-colors hover:border-blue"
+                      className="rounded-card border border-line px-3 py-2 transition-colors hover:border-brand-secondary"
                     >
                       <p className="truncate text-sm font-bold text-ink">
                         {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
@@ -500,7 +500,7 @@ export default async function PublicSportCategoryPage({
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 lg:grid-cols-2">
             <Card>
               <div className="mb-3 flex items-center gap-2">
-                <Info className="h-4 w-4 text-green" aria-hidden="true" />
+                <Info className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                 <CardTitle>Details</CardTitle>
               </div>
               <p className="text-sm leading-relaxed text-ink-soft">
@@ -533,7 +533,7 @@ export default async function PublicSportCategoryPage({
 
             <Card>
               <div className="mb-3 flex items-center gap-2">
-                <ScrollText className="h-4 w-4 text-green" aria-hidden="true" />
+                <ScrollText className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                 <CardTitle>Rules &amp; T&amp;C</CardTitle>
               </div>
               {ruleset?.description ? (

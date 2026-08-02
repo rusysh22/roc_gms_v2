@@ -69,7 +69,7 @@ export default async function UpdatesPage({
       <section className="px-4 pt-4 pb-6">
         <div className="mx-auto max-w-5xl">
           <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-            <Newspaper className="h-3.5 w-3.5 text-green" aria-hidden="true" />
+            <Newspaper className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
             Updates
           </p>
           <h1 className="max-w-3xl text-4xl font-extrabold leading-tight sm:text-5xl">
@@ -96,7 +96,7 @@ export default async function UpdatesPage({
                 aria-current={isActive ? 'page' : undefined}
                 className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold no-underline transition-colors ${
                   isActive ?
-                    'border-green bg-green text-paper'
+                    'border-brand-primary bg-brand-primary text-paper'
                   : 'border-line bg-paper text-ink-soft hover:text-ink'
                 }`}
               >

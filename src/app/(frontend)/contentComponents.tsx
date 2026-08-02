@@ -79,7 +79,7 @@ const richTextWrapperClassName =
   '[&_h2]:text-2xl [&_h2]:font-extrabold [&_h2]:leading-tight [&_h2]:text-ink ' +
   '[&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-ink ' +
   '[&_p]:text-base [&_p]:leading-8 [&_p]:text-ink ' +
-  '[&_a]:font-semibold [&_a]:text-blue [&_a]:underline [&_a]:underline-offset-2 ' +
+  '[&_a]:font-semibold [&_a]:text-brand-secondary [&_a]:underline [&_a]:underline-offset-2 ' +
   '[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:leading-7'
 
 export const ArticleRichText = ({ article }: { article: PublicArticle }) => {
@@ -116,7 +116,7 @@ export const AnnouncementCard = ({
       } ${compact ? 'p-3' : ''}`}
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mist text-green">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mist text-brand-primary">
           <Icon className="h-4 w-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
@@ -136,7 +136,7 @@ export const AnnouncementCard = ({
             {announcement.cta_label && announcement.cta_url ? (
               <Link
                 href={announcement.cta_url}
-                className="inline-flex items-center gap-1 text-blue hover:underline"
+                className="inline-flex items-center gap-1 text-brand-secondary hover:underline"
               >
                 {announcement.cta_label}
                 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -172,11 +172,11 @@ export const AnnouncementFeed = ({
       <div className={compact ? '' : 'mx-auto max-w-5xl'}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 id={`${title}-title`} className="flex items-center gap-2 text-xl font-bold text-ink">
-            <Bell className="h-5 w-5 text-green" aria-hidden="true" />
+            <Bell className="h-5 w-5 text-brand-primary" aria-hidden="true" />
             {title}
           </h2>
           {!compact ? (
-            <Link href={basePath} className="text-sm font-semibold text-blue hover:underline">
+            <Link href={basePath} className="text-sm font-semibold text-brand-secondary hover:underline">
               View all
             </Link>
           ) : null}
@@ -205,7 +205,7 @@ export const ArticleSharePanel = ({
 }) => (
   <Card>
     <div className="mb-3 flex items-center gap-2">
-      <CalendarDays className="h-4 w-4 text-green" aria-hidden="true" />
+      <CalendarDays className="h-4 w-4 text-brand-primary" aria-hidden="true" />
       <CardTitle>Share this story</CardTitle>
     </div>
     <ShareButtons

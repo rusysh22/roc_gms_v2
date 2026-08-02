@@ -301,11 +301,11 @@ export default async function EventHomePage({
             <div aria-hidden="true" className="absolute inset-0 bg-mist" />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-green/30 blur-3xl"
+              className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-brand-primary/30 blur-3xl"
             />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute top-24 -right-16 h-80 w-80 rounded-full bg-blue/25 blur-3xl"
+              className="pointer-events-none absolute top-24 -right-16 h-80 w-80 rounded-full bg-brand-secondary/25 blur-3xl"
             />
           </>
         )}
@@ -321,7 +321,7 @@ export default async function EventHomePage({
                   className="h-4 w-4 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <Sparkles className="h-3.5 w-3.5 text-green" aria-hidden="true" />
+                <Sparkles className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
               )}
               {event.name}
             </p>
@@ -346,25 +346,27 @@ export default async function EventHomePage({
 
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-ink-soft">
               <span className="inline-flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-green" aria-hidden="true" />
+                <Calendar className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                 {formatEventDateRange(event.event_start_at, event.event_end_at)}
               </span>
               {event.location ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-green" aria-hidden="true" />
+                  <MapPin className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                   {event.location}
                 </span>
               ) : null}
               {sportsSummary ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Trophy className="h-4 w-4 text-green" aria-hidden="true" />
+                  <Trophy className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                   {sportsSummary}
                 </span>
               ) : null}
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button asChild>
+              {/* AUDIT_UI_UX_CSS CSS-06/CSS-07: the one CTA on this page meant to reflect the
+                  event's own chosen theme, not the fixed "primary action" green. */}
+              <Button asChild variant="brand">
                 <Link href={`${eventPath}/schedule`}>
                   View Schedule
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -401,7 +403,7 @@ export default async function EventHomePage({
             </h2>
             <Link
               href={`${eventPath}/schedule`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
             >
               Full schedule
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -465,7 +467,7 @@ export default async function EventHomePage({
             </h2>
             <Link
               href={`${eventPath}/schedule`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
             >
               Full schedule
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -518,7 +520,7 @@ export default async function EventHomePage({
                 return (
                   <Card key={sport.id} className="h-full">
                     <CardHeader>
-                      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-mist text-green">
+                      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-mist text-brand-primary">
                         <Icon className="h-5 w-5" aria-hidden="true" />
                       </span>
                       <CardTitle>{sport.name}</CardTitle>
@@ -532,18 +534,18 @@ export default async function EventHomePage({
                         <Link
                           key={category.id}
                           href={`${eventPath}/sports/${sport.slug}/${category.slug}`}
-                          className="group flex items-center justify-between gap-2 rounded-card border border-line px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-blue"
+                          className="group flex items-center justify-between gap-2 rounded-card border border-line px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-secondary"
                         >
                           <span className="truncate">{category.name}</span>
                           <ChevronRight
-                            className="h-4 w-4 shrink-0 text-ink-soft group-hover:text-blue"
+                            className="h-4 w-4 shrink-0 text-ink-soft group-hover:text-brand-secondary"
                             aria-hidden="true"
                           />
                         </Link>
                       ))}
                     </div>
                     <CardFooter className="gap-4 text-sm font-semibold">
-                      <Link href={primaryCategoryHref} className="text-blue hover:underline">
+                      <Link href={primaryCategoryHref} className="text-brand-secondary hover:underline">
                         View categories
                       </Link>
                     </CardFooter>
@@ -563,7 +565,7 @@ export default async function EventHomePage({
             </h2>
             <Link
               href={`${eventPath}/schedule?tab=standings`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
             >
               Full standings
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -619,7 +621,7 @@ export default async function EventHomePage({
                     </h3>
                     <Link
                       href={`${eventPath}/updates?tab=announcements`}
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
                     >
                       View all
                       <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -641,7 +643,7 @@ export default async function EventHomePage({
                     </h3>
                     <Link
                       href={`${eventPath}/updates?tab=articles`}
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
                     >
                       View all
                       <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -677,7 +679,7 @@ export default async function EventHomePage({
             {event.contact_email ? (
               <p className="mt-1 text-sm text-ink-soft">
                 Questions?{' '}
-                <a href={`mailto:${event.contact_email}`} className="font-semibold text-blue hover:underline">
+                <a href={`mailto:${event.contact_email}`} className="font-semibold text-brand-secondary hover:underline">
                   {event.contact_email}
                 </a>
               </p>

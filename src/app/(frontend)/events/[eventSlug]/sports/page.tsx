@@ -86,7 +86,7 @@ export default async function PublicSportsPage({
                   <Card key={sport.id} className="flex flex-col gap-4">
                     <CardHeader>
                       <div className="mb-2 flex items-center gap-3">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-mist text-green">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-mist text-brand-primary">
                           <Icon className="h-5 w-5" aria-hidden="true" />
                         </span>
                         <div className="min-w-0">
@@ -110,7 +110,7 @@ export default async function PublicSportsPage({
                           <Link
                             key={category.id}
                             href={`${eventPath}/sports/${sport.slug}/${category.slug}`}
-                            className="group flex items-center justify-between gap-3 rounded-card border border-line px-3 py-3 no-underline transition-colors hover:border-blue"
+                            className="group flex items-center justify-between gap-3 rounded-card border border-line px-3 py-3 no-underline transition-colors hover:border-brand-secondary"
                           >
                             <div className="min-w-0">
                               <p className="truncate text-sm font-bold text-ink">
@@ -126,7 +126,7 @@ export default async function PublicSportsPage({
                                 {formatStatus(category.status)}
                               </StatusBadge>
                               <ChevronRight
-                                className="h-4 w-4 text-ink-soft transition-transform group-hover:translate-x-0.5 group-hover:text-blue"
+                                className="h-4 w-4 text-ink-soft transition-transform group-hover:translate-x-0.5 group-hover:text-brand-secondary"
                                 aria-hidden="true"
                               />
                             </div>

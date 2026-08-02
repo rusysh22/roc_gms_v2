@@ -236,7 +236,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                 className={cn(
                   'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold no-underline transition-colors',
                   isActive ?
-                    'border-green bg-green text-paper'
+                    'border-brand-primary bg-brand-primary text-paper'
                   : 'border-line bg-paper text-ink-soft hover:text-ink',
                 )}
               >
@@ -257,7 +257,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                 className={cn(
                   'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
                   !activeSport ?
-                    'border-green bg-green text-paper'
+                    'border-brand-primary bg-brand-primary text-paper'
                   : 'border-line bg-paper text-ink-soft hover:text-ink',
                 )}
               >
@@ -270,7 +270,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                   className={cn(
                     'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
                     activeSport?.slug === sport.slug ?
-                      'border-green bg-green text-paper'
+                      'border-brand-primary bg-brand-primary text-paper'
                     : 'border-line bg-paper text-ink-soft hover:text-ink',
                   )}
                 >
@@ -516,7 +516,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                       {champion.match_number ? (
                         <Link
                           href={`${eventPath}/matches/${champion.match_number}`}
-                          className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+                          className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
                         >
                           View deciding match
                           <ArrowRight className="h-4 w-4" aria-hidden="true" />

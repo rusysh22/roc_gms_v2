@@ -46,6 +46,18 @@
   --color-gold: #976c14;
   --color-line: #dbe6e1;
 
+  /* AUDIT_UI_UX_CSS CSS-06/CSS-07: event theme presets (src/lib/eventTheme.ts) used to remap
+   * --color-green/--color-blue/--color-gold directly - the exact same variables StatusBadge and
+   * every other semantic-status usage rely on for a fixed meaning (green=won, gold=live,
+   * blue=scheduled). Under a theme where gold became a coral/red, a "Live" badge read as an error
+   * color instead of "attention". These three tokens are event branding's own surface - default
+   * values match the "classic" preset exactly, so nothing visually changes until an event actually
+   * picks a different preset, and semantic tokens above are never touched by theming again.
+   */
+  --color-brand-primary: #118653;
+  --color-brand-secondary: #1b57c4;
+  --color-brand-accent: #976c14;
+
   /* prd/redesign/README.md section 4.1 - shape language (D020) */
   --radius-card: 12px;
   --radius-panel: 16px;

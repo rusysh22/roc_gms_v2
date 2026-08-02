@@ -29,7 +29,12 @@ export default async function FrontendLayout({ children }: Props) {
 
   return (
     <html lang="en" className={plusJakartaSans.variable}>
-      <body>
+      {/* AUDIT_UI_UX_CSS CSS-04: Preflight's inherit-based baseline (CSS-02) mitigated the worst
+          case (no more literal Times New Roman/black-on-transparent), but body itself still had no
+          explicit token-based color/background/font - it was relying entirely on inheritance
+          rather than being pinned to the actual design tokens, so any route/wrapper that broke the
+          inheritance chain would fall back to plain browser defaults. */}
+      <body className="bg-paper font-sans text-ink">
         <PublicChrome brand="InTourney" user={user}>
           {children}
         </PublicChrome>

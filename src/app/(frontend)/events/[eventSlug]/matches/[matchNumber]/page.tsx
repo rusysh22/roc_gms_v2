@@ -94,13 +94,13 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
           <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
             <Link
               href={`${eventPath}/schedule`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               Back to schedule
             </Link>
             {categoryHref ? (
-              <Link href={categoryHref} className="text-sm font-semibold text-blue hover:underline">
+              <Link href={categoryHref} className="text-sm font-semibold text-brand-secondary hover:underline">
                 View category page
               </Link>
             ) : null}
