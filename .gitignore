@@ -11,3 +11,7 @@ payload-types.ts
 *.tsbuildinfo
 Dockerfile.local
 feedback
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
