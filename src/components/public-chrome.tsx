@@ -14,6 +14,10 @@ import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
 // exclusion from the redesign R1 brief; `/scheduler` (the standalone queue foundation route) is the
 // same kind of internal tool and is excluded for the same reason.
 const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler']
+// AUDIT_UI_UX_CSS PUB-17/P2 item 4: the venue display/slideshow route is meant for a TV or
+// projector at arm's length, not a normal visitor - the floating nav and footer would eat screen
+// space and add clutter nobody in that context can interact with anyway.
+const CHROME_EXCLUDED_SUFFIXES = ['/display']
 const EVENT_SLUG_PATTERN = /^\/events\/([^/]+)/
 
 // Nav items are event-scoped (see src/app/(frontend)/events/[eventSlug]/) - public visitors have
@@ -128,7 +132,9 @@ export interface PublicChromeProps {
 export function PublicChrome({ brand, user, children }: PublicChromeProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const showChrome = !CHROME_EXCLUDED_PREFIXES.some((prefix) => pathname?.startsWith(prefix))
+  const showChrome =
+    !CHROME_EXCLUDED_PREFIXES.some((prefix) => pathname?.startsWith(prefix)) &&
+    !CHROME_EXCLUDED_SUFFIXES.some((suffix) => pathname?.endsWith(suffix))
   const eventSlug = pathname?.match(EVENT_SLUG_PATTERN)?.[1] || null
   const navItems = buildNavItems(eventSlug)
   const homeHref = navItems[0].href

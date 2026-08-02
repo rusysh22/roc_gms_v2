@@ -53,3 +53,8 @@ test('schedule page (My Schedule favorites) has no serious a11y violations', asy
   await page.goto(`/events/${PUBLIC_EVENT_SLUG}/schedule`)
   await assertNoSeriousViolations(page, 'schedule')
 })
+
+test('venue display page has no serious a11y violations', async ({ page }) => {
+  await page.goto(`/events/${PUBLIC_EVENT_SLUG}/display`)
+  await assertNoSeriousViolations(page, 'venue-display')
+})
