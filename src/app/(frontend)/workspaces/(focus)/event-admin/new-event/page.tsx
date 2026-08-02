@@ -5,7 +5,11 @@ import {
   Building2,
   CalendarRange,
   Check,
+  ClipboardList,
+  Copy,
+  FileSpreadsheet,
   GitBranch,
+  PenLine,
   Repeat,
   Trophy,
   User,
@@ -52,11 +56,15 @@ import {
   addPairAction,
   addPlayerAction,
   addTeamAction,
-  importParticipantsAction,
+  cancelParticipantsImportAction,
+  confirmParticipantsImportAction,
+  previewParticipantsImportAction,
 } from './participantActions'
 import { addEntriesAction, shuffleSeedsAction, withdrawEntryAction } from './entriesSeedActions'
 import { generateMatchesAction } from './generateActions'
+import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
+import { UnsavedChangesGuard } from './UnsavedChangesGuard'
 import { SeedOrderTable } from './SeedOrderTable'
 
 export const dynamic = 'force-dynamic'
@@ -412,6 +420,7 @@ export default async function NewEventWizardPage({
               defaultOrganizerName={get(params, 'organizerName')}
               defaultSetupTournamentType={get(params, 'setupTournamentType')}
               defaultSetupParticipantMode={get(params, 'setupParticipantMode')}
+              defaultSetupParticipantSource={get(params, 'setupParticipantSource')}
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
@@ -428,10 +437,18 @@ export default async function NewEventWizardPage({
               payload={payload}
               eventId={eventId}
               tab={get(params, 'tab')}
+              setupParticipantSource={String(event.setup_participant_source || '')}
               imported={get(params, 'wizardImported')}
               importSkipped={get(params, 'wizardImportSkipped')}
               importIssues={get(params, 'wizardImportIssues')}
               importMoreIssues={get(params, 'wizardImportMoreIssues')}
+              importPreviewMediaId={get(params, 'importPreviewMediaId')}
+              importPreviewClubs={get(params, 'importPreviewClubs')}
+              importPreviewTeams={get(params, 'importPreviewTeams')}
+              importPreviewPlayers={get(params, 'importPreviewPlayers')}
+              importPreviewSkipped={get(params, 'importPreviewSkipped')}
+              importPreviewIssues={get(params, 'importPreviewIssues')}
+              importPreviewMoreIssues={get(params, 'importPreviewMoreIssues')}
             />
           ) : null}
           {step === 'registration' && event ? (
@@ -792,6 +809,39 @@ const TOURNAMENT_TYPE_CHOICES = [
   },
 ] as const
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1 gap-fill: the doc's Step 0 spec has a second question
+// ("Data peserta Anda sekarang ada di mana?") this session's first pass skipped. Only the "excel"
+// answer has anywhere real to go right now - ParticipantsStep highlights Bulk Import when it sees
+// this answer (see there). The other three are stored for real but don't change any UI yet
+// (self-registration and copy-from-previous-event aren't built) - still worth capturing honestly
+// rather than pretending the question has no purpose until those exist.
+const PARTICIPANT_SOURCE_CHOICES = [
+  {
+    value: 'manual',
+    label: 'Not entered yet',
+    helper: 'I\'ll add clubs, teams, and players by hand.',
+    Icon: PenLine,
+  },
+  {
+    value: 'excel',
+    label: 'Excel/CSV file',
+    helper: 'I have a spreadsheet ready to import.',
+    Icon: FileSpreadsheet,
+  },
+  {
+    value: 'registration_form',
+    label: 'Self-registration',
+    helper: 'Participants will register themselves.',
+    Icon: ClipboardList,
+  },
+  {
+    value: 'copy_previous',
+    label: 'A previous event',
+    helper: 'I want to reuse participants from another event.',
+    Icon: Copy,
+  },
+] as const
+
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1, option A: unlike the ruleset preset (P1 item 3, purely
 // a client-side JSX default keyed off a sibling field chosen the same step), this answer has to
 // survive past a page the admin hasn't reached yet - there's no `events` row to persist it on
@@ -847,6 +897,24 @@ const SetupStep = () => (
           ))}
         </div>
       </fieldset>
+      <fieldset>
+        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+          Where does your participant data live right now?
+        </legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {PARTICIPANT_SOURCE_CHOICES.map(({ value, label, helper, Icon }) => (
+            <label
+              key={value}
+              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+            >
+              <input type="radio" name="setupParticipantSource" value={value} className="sr-only" />
+              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+              <span className="text-sm font-bold text-ink">{label}</span>
+              <span className="text-xs text-ink-soft">{helper}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div className="flex flex-wrap items-center gap-3">
         <SubmitButton>Continue</SubmitButton>
         <Link
@@ -870,6 +938,7 @@ const EventStep = ({
   defaultOrganizerName,
   defaultSetupTournamentType,
   defaultSetupParticipantMode,
+  defaultSetupParticipantSource,
 }: {
   defaultName: string
   defaultSlug: string
@@ -880,6 +949,7 @@ const EventStep = ({
   defaultOrganizerName: string
   defaultSetupTournamentType: string
   defaultSetupParticipantMode: string
+  defaultSetupParticipantSource: string
 }) => (
   <Card className="flex flex-col gap-4">
     <div>
@@ -888,43 +958,49 @@ const EventStep = ({
         The basics for your event. You can add sports, categories, and participants next.
       </p>
     </div>
-    <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
-      {/* Carried through from the Setup Assistant (Step 0), if answered - createEventAction
-          persists these onto the new event so every later step can read a real default off it. */}
-      <input type="hidden" name="setupTournamentType" value={defaultSetupTournamentType} />
-      <input type="hidden" name="setupParticipantMode" value={defaultSetupParticipantMode} />
-      <EventNameSlugFields
-        defaultName={defaultName}
-        defaultSlug={defaultSlug}
-        suggestedSlug={suggestedSlug || undefined}
-      />
-      <Field label="Start">
-        <Input name="eventStart" type="datetime-local" required defaultValue={defaultStart} />
-      </Field>
-      <Field label="End">
-        <Input name="eventEnd" type="datetime-local" required defaultValue={defaultEnd} />
-      </Field>
-      <Field label="Location">
-        <Input name="location" placeholder="e.g. Main Sports Hall" defaultValue={defaultLocation} />
-      </Field>
-      <Field label="Organizer">
-        <Input name="organizerName" placeholder="e.g. HR Committee" defaultValue={defaultOrganizerName} />
-      </Field>
-      <Field label="Event logo (optional)" className="sm:col-span-2">
-        <FileUpload
-          id="event-logo-upload"
-          name="logo"
-          accept="image/*"
-          maxSizeBytes={5 * 1024 * 1024}
-          helpText="Shown next to your event name. You can also add or change this later. Up to 5MB."
+    {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 8 gap-fill: warns on tab close/refresh once anything
+        below has been touched, so a typed-out name/dates/logo isn't silently lost - see
+        UnsavedChangesGuard for exactly what this does and doesn't cover. */}
+    <UnsavedChangesGuard>
+      <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
+        {/* Carried through from the Setup Assistant (Step 0), if answered - createEventAction
+            persists these onto the new event so every later step can read a real default off it. */}
+        <input type="hidden" name="setupTournamentType" value={defaultSetupTournamentType} />
+        <input type="hidden" name="setupParticipantMode" value={defaultSetupParticipantMode} />
+        <input type="hidden" name="setupParticipantSource" value={defaultSetupParticipantSource} />
+        <EventNameSlugFields
+          defaultName={defaultName}
+          defaultSlug={defaultSlug}
+          suggestedSlug={suggestedSlug || undefined}
         />
-      </Field>
-      <div className="sm:col-span-2">
-        <SubmitButton className="w-full sm:w-auto">
-          Create event &amp; continue
-        </SubmitButton>
-      </div>
-    </form>
+        <Field label="Start">
+          <Input name="eventStart" type="datetime-local" required defaultValue={defaultStart} />
+        </Field>
+        <Field label="End">
+          <Input name="eventEnd" type="datetime-local" required defaultValue={defaultEnd} />
+        </Field>
+        <Field label="Location">
+          <Input name="location" placeholder="e.g. Main Sports Hall" defaultValue={defaultLocation} />
+        </Field>
+        <Field label="Organizer">
+          <Input name="organizerName" placeholder="e.g. HR Committee" defaultValue={defaultOrganizerName} />
+        </Field>
+        <Field label="Event logo (optional)" className="sm:col-span-2">
+          <FileUpload
+            id="event-logo-upload"
+            name="logo"
+            accept="image/*"
+            maxSizeBytes={5 * 1024 * 1024}
+            helpText="Shown next to your event name. You can also add or change this later. Up to 5MB."
+          />
+        </Field>
+        <div className="sm:col-span-2">
+          <SubmitButton className="w-full sm:w-auto">
+            Create event &amp; continue
+          </SubmitButton>
+        </div>
+      </form>
+    </UnsavedChangesGuard>
   </Card>
 )
 
@@ -1363,18 +1439,34 @@ const ParticipantsStep = async ({
   payload,
   eventId,
   tab,
+  setupParticipantSource,
   imported,
   importSkipped,
   importIssues,
   importMoreIssues,
+  importPreviewMediaId,
+  importPreviewClubs,
+  importPreviewTeams,
+  importPreviewPlayers,
+  importPreviewSkipped,
+  importPreviewIssues,
+  importPreviewMoreIssues,
 }: {
   payload: Payload
   eventId: string
   tab?: string
+  setupParticipantSource?: string
   imported?: string
   importSkipped?: string
   importIssues?: string
   importMoreIssues?: string
+  importPreviewMediaId?: string
+  importPreviewClubs?: string
+  importPreviewTeams?: string
+  importPreviewPlayers?: string
+  importPreviewSkipped?: string
+  importPreviewIssues?: string
+  importPreviewMoreIssues?: string
 }) => {
   let issues: ImportIssue[] = []
   if (importIssues) {
@@ -1383,6 +1475,15 @@ const ParticipantsStep = async ({
       if (Array.isArray(parsed)) issues = parsed
     } catch {
       issues = []
+    }
+  }
+  let previewIssues: ImportIssue[] = []
+  if (importPreviewIssues) {
+    try {
+      const parsed = JSON.parse(importPreviewIssues)
+      if (Array.isArray(parsed)) previewIssues = parsed
+    } catch {
+      previewIssues = []
     }
   }
   const [clubs, teams, players, categories] = await Promise.all([
@@ -1462,6 +1563,16 @@ const ParticipantsStep = async ({
         </AlertBanner>
       ) : null}
 
+      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1 gap-fill: the Setup Assistant's "where's your
+          participant data" answer only has one place to actually go right now - pointing straight
+          at the card that already exists below, instead of leaving the admin to rediscover it. */}
+      {setupParticipantSource === 'excel' && !imported ? (
+        <AlertBanner tone="info">
+          You mentioned your participant data is in Excel/CSV - use Bulk Import below to add
+          everyone at once instead of one at a time.
+        </AlertBanner>
+      ) : null}
+
       <Card className="flex flex-col gap-3">
         <div>
           <CardTitle>Bulk import from Excel</CardTitle>
@@ -1476,7 +1587,7 @@ const ParticipantsStep = async ({
               Download Excel template
             </a>
           </Button>
-          <form action={importParticipantsAction} className="flex flex-col items-start gap-3 sm:max-w-sm">
+          <form action={previewParticipantsImportAction} className="flex flex-col items-start gap-3 sm:max-w-sm">
             <input type="hidden" name="eventId" value={eventId} />
             <FileUpload
               id="participants-import-upload"
@@ -1489,11 +1600,76 @@ const ParticipantsStep = async ({
               className="w-full"
             />
             <SubmitButton size="sm">
-              Import
+              Preview import
             </SubmitButton>
           </form>
         </div>
       </Card>
+
+      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2 gap-fill: "belum ada preview mapping yang
+          menjawab apakah satu row menjadi club, team, player, roster, atau entry" - shows exactly
+          that before anything is written, instead of committing the instant a file is chosen. */}
+      {importPreviewMediaId ? (
+        <Card className="flex flex-col gap-4 border-gold">
+          <div>
+            <CardTitle>Review import before confirming</CardTitle>
+            <p className="mt-1 text-sm text-ink-soft">
+              Nothing has been saved yet. Check the mapping below, then confirm or cancel.
+            </p>
+          </div>
+          <dl className="grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Clubs</dt>
+              <dd className="text-lg font-extrabold text-ink">{importPreviewClubs || 0}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Teams</dt>
+              <dd className="text-lg font-extrabold text-ink">{importPreviewTeams || 0}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Players</dt>
+              <dd className="text-lg font-extrabold text-ink">{importPreviewPlayers || 0}</dd>
+            </div>
+          </dl>
+          {previewIssues.length > 0 ? (
+            <details>
+              <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+                {importPreviewSkipped ? `${importPreviewSkipped} row(s) will be skipped. ` : ''}
+                View row-by-row details ({previewIssues.length}
+                {importPreviewMoreIssues ? `, showing first ${previewIssues.length}` : ''})
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1 text-xs">
+                {previewIssues.map((issue, index) => (
+                  <li key={index}>
+                    <span className="font-bold">
+                      {issue.sheet} &middot; {issue.name}
+                    </span>
+                    {' — '}
+                    {issue.reason}
+                  </li>
+                ))}
+              </ul>
+              {importPreviewMoreIssues ? (
+                <p className="mt-1 text-xs font-semibold">
+                  + {importPreviewMoreIssues} more row(s) with issues not shown here.
+                </p>
+              ) : null}
+            </details>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            <form action={confirmParticipantsImportAction}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="mediaId" value={importPreviewMediaId} />
+              <SubmitButton>Confirm &amp; import</SubmitButton>
+            </form>
+            <form action={cancelParticipantsImportAction}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="mediaId" value={importPreviewMediaId} />
+              <SubmitButton variant="secondary">Cancel</SubmitButton>
+            </form>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-extrabold text-ink">4. Participants</h2>
@@ -2169,9 +2345,18 @@ const DrawStep = async ({
             <form action={shuffleSeedsAction}>
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
-              <SubmitButton variant="secondary" size="sm">
+              {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: this used to fire an immediate random
+                  mutation with zero warning - a misclick threw away a seed order someone may have
+                  spent real time arranging, with no preview or way back. A native confirm() is a
+                  smaller ask than the doc's full preview dialog, but it closes the actual
+                  data-loss risk and matches the same pattern already used for withdrawing an
+                  entry (ConfirmSubmitButton, see RegistrationStep). */}
+              <ConfirmSubmitButton
+                confirmMessage={`Shuffle seed order for all ${entries.totalDocs} entries in ${getRelationshipLabel(selectedCategory as RelationshipDoc)}? This replaces the current order and can't be undone automatically.`}
+                className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+              >
                 Shuffle Seeds
-              </SubmitButton>
+              </ConfirmSubmitButton>
             </form>
             <SeedOrderTable
               eventId={eventId}
@@ -2249,11 +2434,45 @@ const GenerateStep = async ({
       : { docs: [] as { sport_id?: unknown }[] }
   const anyCourtIsSportAgnostic = courts.docs.some((court) => !court.sport_id)
   const sportIdsWithCourts = new Set(courts.docs.map((court) => String(court.sport_id)).filter(Boolean))
+  const courtCountBySport = new Map<string, number>()
+  for (const court of courts.docs) {
+    if (court.sport_id) {
+      const key = String(court.sport_id)
+      courtCountBySport.set(key, (courtCountBySport.get(key) || 0) + 1)
+    }
+  }
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 7: "Schedule preview dengan capacity estimate" -
+  // before this, generating matches gave no sense of how much work is about to be created. This
+  // stops short of the doc's full court-hours estimate (Venues/Courts don't model operating
+  // hours or match duration yet - that's separate scheduling-infrastructure work), but match
+  // count/round count/byes are all real numbers computable today from confirmed entries alone,
+  // and are worth surfacing before a click that can create 100+ match rows.
+  const getGenerationEstimate = (formatType: string, confirmedCount: number): string | null => {
+    if (confirmedCount < 2) {
+      return null
+    }
+    if (formatType === 'single_elimination') {
+      const bracketSize = getNextPowerOfTwo(confirmedCount)
+      const totalRounds = Math.log2(bracketSize)
+      const byeCount = bracketSize - confirmedCount
+      const realMatches = bracketSize - 1 - byeCount
+      return `${realMatches} match${realMatches === 1 ? '' : 'es'} · ${totalRounds} round${totalRounds === 1 ? '' : 's'}${byeCount > 0 ? ` · ${byeCount} bye${byeCount === 1 ? '' : 's'}` : ''}`
+    }
+    if (formatType === 'round_robin') {
+      const matchCount = (confirmedCount * (confirmedCount - 1)) / 2
+      return `${matchCount} match${matchCount === 1 ? '' : 'es'} (round robin, everyone plays once)`
+    }
+    return null
+  }
 
   const categoriesWithCounts = categories.docs.map((category) => ({
     category,
     confirmedCount: confirmedCountByCategory.get(String(category.id)) || 0,
     hasCourt: anyCourtIsSportAgnostic || sportIdsWithCourts.has(String(category.sport_id)),
+    courtCount:
+      (anyCourtIsSportAgnostic ? courts.docs.filter((court) => !court.sport_id).length : 0) +
+      (courtCountBySport.get(String(category.sport_id)) || 0),
   }))
 
   const selectedCategory = categoryId
@@ -2284,8 +2503,9 @@ const GenerateStep = async ({
           </AlertBanner>
         ) : null}
         <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt }) => {
+          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt, courtCount }) => {
             const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
+            const estimate = getGenerationEstimate(String(category.format_type), confirmedCount)
             return (
               <div
                 key={category.id}
@@ -2296,6 +2516,12 @@ const GenerateStep = async ({
                   <span className="text-xs font-semibold text-ink-soft">
                     {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
                   </span>
+                  {estimate ? (
+                    <span className="block text-xs text-ink-soft">
+                      Will generate: {estimate} &middot; {courtCount} court{courtCount === 1 ? '' : 's'} available
+                      for this sport
+                    </span>
+                  ) : null}
                   {!hasCourt && courts.docs.length > 0 ? (
                     <span className="block text-xs font-semibold text-gold">
                       No court covers this sport yet

@@ -1,10 +1,13 @@
 'use server'
 
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
-import { parseParticipantsWorkbook } from '@/lib/participantsImport'
+import { parseParticipantsWorkbook, type ParsedParticipantsWorkbook } from '@/lib/participantsImport'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
@@ -226,8 +229,112 @@ export async function addPairAction(formData: FormData): Promise<void> {
 
 const validGenders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
-export async function importParticipantsAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
+// Local-disk media storage (see payload.config.ts's Media collection: staticDir under
+// media/content) - reading a previously-uploaded file's bytes back is just a filesystem read.
+// The preview step uploads here as scratch storage rather than committing anything yet;
+// confirm re-reads and deletes it, cancel just deletes it.
+const MEDIA_DIR = path.resolve(process.cwd(), 'media/content')
+
+const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedParticipantsWorkbook | null> => {
+  if (!(file instanceof File) || file.size === 0) {
+    return null
+  }
+  try {
+    return parseParticipantsWorkbook(await file.arrayBuffer())
+  } catch {
+    return null
+  }
+}
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2 gap-fill: "belum ada preview mapping yang menjawab
+// apakah satu row menjadi club, team, player, roster, atau entry" - imports used to commit the
+// instant a file was chosen, with zero chance to catch a wrong sheet/column before 80+ rows
+// landed in the database. This is a read-only dry run over the same dedup rules
+// confirmParticipantsImportAction uses for real, so what's previewed is what will happen -
+// re-run fresh at confirm time (not trusted as a stale snapshot) in case anything changed
+// in between.
+const planParticipantsImport = async (payload: Payload, eventId: string, parsed: ParsedParticipantsWorkbook) => {
+  const existingClubs = await payload.find({
+    collection: 'clubs',
+    depth: 0,
+    limit: 1000,
+    where: { event_id: { equals: eventId } },
+  })
+  const knownClubNames = new Set(existingClubs.docs.map((club) => String(club.name).trim().toLowerCase()))
+  const existingTeams = await payload.find({
+    collection: 'teams',
+    depth: 0,
+    limit: 1000,
+    where: { event_id: { equals: eventId } },
+  })
+  const knownTeamSlugs = new Set(existingTeams.docs.map((team) => String(team.slug)))
+
+  let clubsToCreate = 0
+  let teamsToCreate = 0
+  let playersToCreate = 0
+  let skippedCount = 0
+  const issues: { sheet: string; name: string; reason: string }[] = []
+  const skip = (sheet: string, name: string, reason: string) => {
+    skippedCount += 1
+    issues.push({ sheet, name: name || '(blank)', reason })
+  }
+  const warn = (sheet: string, name: string, reason: string) => {
+    issues.push({ sheet, name: name || '(blank)', reason })
+  }
+
+  for (const row of parsed.clubs) {
+    const slug = slugify(row.name)
+    const key = row.name.trim().toLowerCase()
+    if (!slug) {
+      skip('Clubs', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (knownClubNames.has(key)) {
+      skip('Clubs', row.name, 'A club with this name already exists')
+      continue
+    }
+    knownClubNames.add(key)
+    clubsToCreate += 1
+  }
+
+  for (const row of parsed.teams) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Teams', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (knownTeamSlugs.has(slug)) {
+      skip('Teams', row.name, 'A team with this name already exists')
+      continue
+    }
+    if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
+      warn('Teams', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
+    }
+    knownTeamSlugs.add(slug)
+    teamsToCreate += 1
+  }
+
+  for (const row of parsed.players) {
+    if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
+      warn('Players', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
+    }
+    if (row.gender && !validGenders.has(row.gender)) {
+      warn('Players', row.name, `Gender "${row.gender}" is not valid - will be saved without a gender`)
+    }
+    playersToCreate += 1
+  }
+
+  return { clubsToCreate, teamsToCreate, playersToCreate, skippedCount, issues }
+}
+
+const MAX_ISSUES_IN_URL = 25
+const encodeIssues = (issues: { sheet: string; name: string; reason: string }[]) => ({
+  issuesParam: issues.length > 0 ? encodeURIComponent(JSON.stringify(issues.slice(0, MAX_ISSUES_IN_URL))) : '',
+  moreIssues: issues.length > MAX_ISSUES_IN_URL ? issues.length - MAX_ISSUES_IN_URL : 0,
+})
+
+export async function previewParticipantsImportAction(formData: FormData): Promise<void> {
+  const { payload } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
@@ -243,15 +350,77 @@ export async function importParticipantsAction(formData: FormData): Promise<void
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
-  let parsed
-  try {
-    parsed = parseParticipantsWorkbook(await file.arrayBuffer())
-  } catch {
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const parsed = await parseImportFile(file).catch(() => null)
+  if (!parsed) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
+  }
+  if (parsed.clubs.length === 0 && parsed.teams.length === 0 && parsed.players.length === 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=empty_import`)
+  }
+
+  const plan = await planParticipantsImport(payload, eventId, parsed)
+  // Scratch storage only - not a real event asset, deleted by confirm/cancel. Re-uploading (not
+  // trying to preserve the original File object) is the only option since a File can't survive a
+  // redirect/second form submission; local-disk media storage makes re-reading it back cheap.
+  const media = await payload.create({
+    collection: 'media',
+    data: { alt: 'participants-import-preview (temporary)' },
+    file: { data: buffer, mimetype: file.type || 'application/octet-stream', name: file.name, size: file.size },
+  })
+
+  const { issuesParam, moreIssues } = encodeIssues(plan.issues)
+  redirect(
+    `${wizardPage}?eventId=${eventId}&step=participants&importPreviewMediaId=${media.id}` +
+      `&importPreviewClubs=${plan.clubsToCreate}&importPreviewTeams=${plan.teamsToCreate}&importPreviewPlayers=${plan.playersToCreate}` +
+      (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : '') +
+      (issuesParam ? `&importPreviewIssues=${issuesParam}` : '') +
+      (moreIssues ? `&importPreviewMoreIssues=${moreIssues}` : ''),
+  )
+}
+
+export async function cancelParticipantsImportAction(formData: FormData): Promise<void> {
+  const { payload } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const mediaId = text(formData, 'mediaId')
+  if (mediaId) {
+    await payload.delete({ collection: 'media', id: mediaId }).catch(() => {})
+  }
+
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants`)
+}
+
+export async function confirmParticipantsImportAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const mediaId = text(formData, 'mediaId')
+  const event = await getWizardEvent(payload, eventId)
+  if (!event) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+  if (!mediaId) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
-  if (parsed.clubs.length === 0 && parsed.teams.length === 0 && parsed.players.length === 0) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=empty_import`)
+  const media = await payload.findByID({ collection: 'media', id: mediaId, depth: 0 }).catch(() => null)
+  if (!media?.filename) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
+  }
+
+  let parsed
+  try {
+    const buffer = await fs.readFile(path.join(MEDIA_DIR, media!.filename!))
+    parsed = parseParticipantsWorkbook(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
+  } catch {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
   const existingClubs = await payload.find({
@@ -395,13 +564,12 @@ export async function importParticipantsAction(formData: FormData): Promise<void
     actorUserId: user.id,
   })
 
+  // Scratch upload only - the real data now lives in clubs/teams/players, this file has served
+  // its purpose.
+  await payload.delete({ collection: 'media', id: mediaId }).catch(() => {})
+
   revalidatePath(wizardPage)
-  const MAX_ISSUES_IN_URL = 25
-  const issuesParam =
-    issues.length > 0
-      ? encodeURIComponent(JSON.stringify(issues.slice(0, MAX_ISSUES_IN_URL)))
-      : ''
-  const moreIssues = issues.length > MAX_ISSUES_IN_URL ? issues.length - MAX_ISSUES_IN_URL : 0
+  const { issuesParam, moreIssues } = encodeIssues(issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}` +
       (skipped ? `&wizardImportSkipped=${skipped}` : '') +

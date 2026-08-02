@@ -228,6 +228,20 @@ export const Events: CollectionConfig = {
       ],
     },
     {
+      name: 'setup_participant_source',
+      type: 'select',
+      admin: {
+        description:
+          'Set by the wizard\'s Setup Assistant (Step 0) - where the admin said their participant data currently lives. Used to highlight the relevant path in the Participants step (e.g. Bulk Import for "Excel/CSV"). Optional; leave empty if skipped.',
+      },
+      options: [
+        { label: 'Not entered yet - manual entry', value: 'manual' },
+        { label: 'Excel/CSV file', value: 'excel' },
+        { label: 'Participants will self-register', value: 'registration_form' },
+        { label: 'Copied from a previous event', value: 'copy_previous' },
+      ],
+    },
+    {
       name: 'location',
       type: 'text',
     },

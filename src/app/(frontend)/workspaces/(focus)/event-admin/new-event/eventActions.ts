@@ -20,6 +20,7 @@ import { slugify, text, wizardPage } from './wizardShared'
 // see the Categories step's own dropdown for the rest).
 const setupTournamentTypes = new Set(['single_elimination', 'round_robin', 'group_stage_to_knockout', 'league'])
 const setupParticipantModes = new Set(['individual', 'pair', 'team', 'club'])
+const setupParticipantSources = new Set(['manual', 'excel', 'registration_form', 'copy_previous'])
 
 const findAvailableSlug = async (payload: Payload, base: string): Promise<string | null> => {
   for (let suffix = 2; suffix <= 50; suffix += 1) {
@@ -45,8 +46,12 @@ export async function createEventAction(formData: FormData): Promise<void> {
   const organizerName = text(formData, 'organizerName')
   const setupTournamentTypeInput = text(formData, 'setupTournamentType')
   const setupParticipantModeInput = text(formData, 'setupParticipantMode')
+  const setupParticipantSourceInput = text(formData, 'setupParticipantSource')
   const setupTournamentType = setupTournamentTypes.has(setupTournamentTypeInput) ? setupTournamentTypeInput : undefined
   const setupParticipantMode = setupParticipantModes.has(setupParticipantModeInput) ? setupParticipantModeInput : undefined
+  const setupParticipantSource = setupParticipantSources.has(setupParticipantSourceInput)
+    ? setupParticipantSourceInput
+    : undefined
 
   // Failed submissions redirect back with every entered value in the query string so the form can
   // re-populate itself - previously a validation error (or a taken slug) silently wiped the whole
@@ -64,6 +69,7 @@ export async function createEventAction(formData: FormData): Promise<void> {
       organizerName,
       setupTournamentType: setupTournamentTypeInput,
       setupParticipantMode: setupParticipantModeInput,
+      setupParticipantSource: setupParticipantSourceInput,
       ...extra,
     })
     redirect(`${wizardPage}?${query.toString()}`)
@@ -119,6 +125,12 @@ export async function createEventAction(formData: FormData): Promise<void> {
       | 'league'
       | undefined,
     setup_participant_mode: setupParticipantMode as 'individual' | 'pair' | 'team' | 'club' | undefined,
+    setup_participant_source: setupParticipantSource as
+      | 'manual'
+      | 'excel'
+      | 'registration_form'
+      | 'copy_previous'
+      | undefined,
   }
   const created = await payload.create({ collection: 'events', data })
   await recordAuditLog({
