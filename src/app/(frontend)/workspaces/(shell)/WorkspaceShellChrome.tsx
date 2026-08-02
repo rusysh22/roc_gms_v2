@@ -9,6 +9,7 @@ import {
   Calendar,
   CheckCircle2,
   FileText,
+  Gauge,
   Handshake,
   ImageIcon,
   LayoutDashboard,
@@ -117,6 +118,12 @@ const GROUPS: SidebarGroup[] = [
   {
     label: 'Operations',
     sections: [
+      {
+        label: 'Command Center',
+        icon: Gauge,
+        href: '/workspaces/command-center',
+        roles: ['super_admin', 'event_admin', 'scheduler'],
+      },
       {
         label: 'Scheduler',
         icon: Calendar,

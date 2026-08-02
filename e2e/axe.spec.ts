@@ -91,3 +91,14 @@ test('clubs admin page (copy participants dialog) has no serious a11y violations
   await page.goto('/workspaces/event-admin/clubs')
   await assertNoSeriousViolations(page, 'clubs-admin')
 })
+
+test('command center has no serious a11y violations', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(ADMIN_EMAIL)
+  await page.getByLabel('Password').fill(ADMIN_PASSWORD)
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 })
+
+  await page.goto('/workspaces/command-center')
+  await assertNoSeriousViolations(page, 'command-center')
+})
