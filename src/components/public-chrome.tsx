@@ -86,7 +86,7 @@ function UserMenu({ user }: { user: PublicNavUser }) {
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink-soft transition-colors hover:border-red-200 hover:text-red-700 disabled:opacity-50"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink-soft transition-colors hover:border-danger/30 hover:text-danger disabled:opacity-50"
         >
           <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
           {loggingOut ? 'Logging out...' : 'Log out'}
