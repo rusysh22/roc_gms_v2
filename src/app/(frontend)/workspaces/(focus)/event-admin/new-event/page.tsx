@@ -231,26 +231,60 @@ export default async function NewEventWizardPage({
   const completedSteps = new Set<string>()
   if (event) {
     completedSteps.add('event')
-    const [sportsCount, categoriesCount, clubsCount, teamsCount, playersCount, confirmedCount, matchesCount] =
+    const [sportsCount, categoriesResult, clubsCount, teamsCount, playersCount, confirmedEntries, eventMatches] =
       await Promise.all([
         payload.count({ collection: 'sports', where: { event_id: { equals: eventId } } }),
-        payload.count({ collection: 'competition-categories', where: { event_id: { equals: eventId } } }),
+        payload.find({
+          collection: 'competition-categories',
+          depth: 0,
+          limit: 500,
+          where: { event_id: { equals: eventId } },
+        }),
         payload.count({ collection: 'clubs', where: { event_id: { equals: eventId } } }),
         payload.count({ collection: 'teams', where: { event_id: { equals: eventId } } }),
         payload.count({ collection: 'players', where: { event_id: { equals: eventId } } }),
-        payload.count({
+        payload.find({
           collection: 'competition-entries',
+          depth: 0,
+          limit: 5000,
           where: { and: [{ event_id: { equals: eventId } }, { status: { equals: 'confirmed' } }] },
         }),
-        payload.count({ collection: 'matches', where: { event_id: { equals: eventId } } }),
+        payload.find({ collection: 'matches', depth: 0, limit: 5000, where: { event_id: { equals: eventId } } }),
       ])
     if (sportsCount.totalDocs > 0) completedSteps.add('sports')
-    if (categoriesCount.totalDocs > 0) completedSteps.add('categories')
+    if (categoriesResult.totalDocs > 0) completedSteps.add('categories')
     if (clubsCount.totalDocs + teamsCount.totalDocs + playersCount.totalDocs > 0) {
       completedSteps.add('participants')
     }
-    if (confirmedCount.totalDocs > 0) completedSteps.add('entries')
-    if (matchesCount.totalDocs > 0) {
+
+    // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 11: "entries"/"generate"/"bracket" used to flip to done
+    // the moment ANY category anywhere had an entry or match, so the top bar could read "100%
+    // complete" while most categories hadn't been touched. Each step is now only marked done once
+    // every non-draft category actually clears its own bar (draft categories aren't publishable
+    // yet, so they don't block progress; categories on a manual-scheduling-only format don't block
+    // the auto-generate step since the wizard can never generate their matches anyway).
+    const nonDraftCategories = categoriesResult.docs.filter((category) => category.status !== 'draft')
+    const confirmedCountByCategory = new Map<string, number>()
+    for (const entry of confirmedEntries.docs) {
+      const key = String(entry.category_id)
+      confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
+    }
+    const categoriesWithMatches = new Set(eventMatches.docs.map((match) => String(match.category_id)))
+
+    if (
+      nonDraftCategories.length > 0 &&
+      nonDraftCategories.every((category) => (confirmedCountByCategory.get(String(category.id)) || 0) >= 2)
+    ) {
+      completedSteps.add('entries')
+    }
+
+    const autoGenerateCategories = nonDraftCategories.filter((category) =>
+      AUTO_GENERATE_FORMATS.has(String(category.format_type)),
+    )
+    if (
+      autoGenerateCategories.length > 0 &&
+      autoGenerateCategories.every((category) => categoriesWithMatches.has(String(category.id)))
+    ) {
       completedSteps.add('generate')
       completedSteps.add('bracket')
     }
@@ -506,6 +540,46 @@ const SummaryPanel = async ({
     ).replaceAll('_', ' ')}`,
   }))
 
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 11: readiness needs to be visible per category, not just
+  // as event-wide entity counts - "8 sports, 10 categories, 100 entries" doesn't tell an admin
+  // which of the 10 categories still need work. Each category gets its own status here instead.
+  // confirmedEntries/matches above are fetched at depth: 1 (their `category_id` is a populated
+  // object, not a raw id) for entryItems/matchItems' relationship labels - getRelationshipId
+  // unwraps that back to a plain id string for map/set keys below.
+  const confirmedCountByCategoryId = new Map<string, number>()
+  for (const entry of confirmedEntries.docs) {
+    const key = String(getRelationshipId(entry.category_id as RelationshipDoc))
+    confirmedCountByCategoryId.set(key, (confirmedCountByCategoryId.get(key) || 0) + 1)
+  }
+  const categoryIdsWithMatches = new Set(
+    matches.docs.map((match) => String(getRelationshipId(match.category_id as RelationshipDoc))),
+  )
+  const categoryReadiness = categories.docs.map((category) => {
+    const confirmedCount = confirmedCountByCategoryId.get(String(category.id)) || 0
+    const hasMatches = categoryIdsWithMatches.has(String(category.id))
+    const autoGenerates = AUTO_GENERATE_FORMATS.has(String(category.format_type))
+    let tone: 'green' | 'blue' | 'gold' | 'neutral'
+    let label: string
+    if (category.status === 'draft') {
+      tone = 'neutral'
+      label = 'Draft'
+    } else if (confirmedCount < 2) {
+      tone = 'gold'
+      label = 'Needs entries'
+    } else if (autoGenerates && !hasMatches) {
+      tone = 'gold'
+      label = 'Needs matches'
+    } else if (!autoGenerates) {
+      tone = 'blue'
+      label = 'Manual scheduling'
+    } else {
+      tone = 'green'
+      label = 'Ready'
+    }
+    return { id: category.id, name: String(category.name), tone, label }
+  })
+  const readyCount = categoryReadiness.filter((row) => row.tone === 'green').length
+
   return (
     <Card className="flex flex-col gap-3">
       <CardTitle>Progress</CardTitle>
@@ -516,6 +590,21 @@ const SummaryPanel = async ({
           {event.location ? ` · ${event.location}` : ''}
         </p>
       </div>
+      {categoryReadiness.length > 0 ? (
+        <div className="flex flex-col gap-2 border-b border-line pb-3">
+          <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+            Category readiness · {readyCount}/{categoryReadiness.length} ready
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {categoryReadiness.map((row) => (
+              <div key={row.id} className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold text-ink">{row.name}</span>
+                <StatusBadge tone={row.tone}>{row.label}</StatusBadge>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-col">
         <SummarySection
           label="Sports"
