@@ -46,6 +46,16 @@
   --color-gold: #976c14;
   --color-line: #dbe6e1;
 
+  /* AUDIT_UI_UX_CSS CSS-11: destructive/error affordances (delete buttons, validation banners)
+   * previously hard-coded Tailwind's stock red-50/200/700 scale inline at each call site instead
+   * of a named token - same problem CSS-06 fixed for brand vs semantic color, just for danger.
+   * red-700 on white is ~5.9:1 (passes AA normal text and works as a solid button background with
+   * white text); red-50 is the soft banner surface, matching the mist/paper pairing every other
+   * AlertBanner tone already uses.
+   */
+  --color-danger: #b91c1c;
+  --color-danger-surface: #fef2f2;
+
   /* AUDIT_UI_UX_CSS CSS-06/CSS-07: event theme presets (src/lib/eventTheme.ts) used to remap
    * --color-green/--color-blue/--color-gold directly - the exact same variables StatusBadge and
    * every other semantic-status usage rely on for a fixed meaning (green=won, gold=live,

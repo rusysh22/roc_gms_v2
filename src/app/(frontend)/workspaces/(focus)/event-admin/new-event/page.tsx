@@ -2174,9 +2174,11 @@ const RegistrationStep = async ({
           <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
             {entries.docs.map((entry) => {
               const clubLabel = getEntryClubLabel(entry)
+              const formId = `withdraw-entry-${entry.id}`
               return (
                 <form
                   key={entry.id}
+                  id={formId}
                   action={withdrawEntryAction.bind(null, String(entry.id))}
                   className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
                 >
@@ -2189,8 +2191,10 @@ const RegistrationStep = async ({
                     ) : null}
                   </div>
                   <ConfirmSubmitButton
+                    formId={formId}
                     confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
-                    className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                    variant="secondary"
+                    size="sm"
                   >
                     Remove
                   </ConfirmSubmitButton>
@@ -2342,18 +2346,19 @@ const DrawStep = async ({
           </EmptyState>
         ) : (
           <>
-            <form action={shuffleSeedsAction}>
+            <form id="shuffle-seeds-form" action={shuffleSeedsAction}>
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
               {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: this used to fire an immediate random
                   mutation with zero warning - a misclick threw away a seed order someone may have
-                  spent real time arranging, with no preview or way back. A native confirm() is a
-                  smaller ask than the doc's full preview dialog, but it closes the actual
-                  data-loss risk and matches the same pattern already used for withdrawing an
-                  entry (ConfirmSubmitButton, see RegistrationStep). */}
+                  spent real time arranging, with no preview or way back. A real ConfirmDialog
+                  closes the actual data-loss risk and matches the same pattern already used for
+                  withdrawing an entry (ConfirmSubmitButton, see RegistrationStep). */}
               <ConfirmSubmitButton
+                formId="shuffle-seeds-form"
                 confirmMessage={`Shuffle seed order for all ${entries.totalDocs} entries in ${getRelationshipLabel(selectedCategory as RelationshipDoc)}? This replaces the current order and can't be undone automatically.`}
-                className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                variant="secondary"
+                size="sm"
               >
                 Shuffle Seeds
               </ConfirmSubmitButton>

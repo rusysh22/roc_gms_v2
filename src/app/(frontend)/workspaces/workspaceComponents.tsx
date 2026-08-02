@@ -239,7 +239,7 @@ const statTextTone: Record<'default' | 'good' | 'warn' | 'alert', string> = {
   default: 'text-ink',
   good: 'text-green',
   warn: 'text-gold',
-  alert: 'text-red-600',
+  alert: 'text-danger',
 }
 
 export const StatBlock = ({

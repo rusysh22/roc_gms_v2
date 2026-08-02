@@ -3,10 +3,10 @@ import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-// There's no custom "danger" token in the design system (prd/redesign/README.md deliberately
-// never maps "loss"/error to red for match results) - but plain validation/error banners still
-// need one, so this follows the exact stock red-50/200/700 already used by the Live Score page's
-// own error banner (the one place in the app that needed it before this component existed).
+// AUDIT_UI_UX_CSS CSS-11: error now uses the shared --color-danger/--color-danger-surface tokens
+// (see tailwind.css) instead of hard-coded red-50/200/700 - prd/redesign/README.md deliberately
+// never maps "loss"/error to red for match *results*, but plain validation/error banners are a
+// different, genuinely error-semantic surface and still need a real token, not a magic value.
 // "info" reuses the blue token, which the design system already reserves for
 // secondary/informational meaning (see prd/redesign/README.md section 4). "warning" reuses gold,
 // matching StatusBadge's existing gold-for-attention-needed convention (e.g. category readiness's
@@ -16,7 +16,7 @@ export type AlertTone = 'success' | 'error' | 'info' | 'warning'
 
 const toneClasses: Record<AlertTone, string> = {
   success: 'border-green/30 bg-mist text-green',
-  error: 'border-red-200 bg-red-50 text-red-700',
+  error: 'border-danger/30 bg-danger-surface text-danger',
   info: 'border-blue/30 bg-mist text-blue',
   warning: 'border-gold/30 bg-mist text-gold',
 }

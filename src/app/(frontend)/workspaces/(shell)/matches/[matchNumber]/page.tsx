@@ -42,9 +42,6 @@ import { COMMENT_ACTION_ERROR_MESSAGES } from '../../../matches/commentErrors'
 
 export const dynamic = 'force-dynamic'
 
-const buttonClassName =
-  'inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-green px-6 font-sans text-[0.95rem] font-semibold text-paper transition-all hover:bg-green/90 active:scale-95'
-
 type MatchPageParams = Promise<{ matchNumber: string }>
 type MatchPageSearchParams = Promise<Record<string, string | string[] | undefined>>
 
@@ -407,31 +404,35 @@ export default async function AdminMatchDetailPage({
             <EmptyState>No lifecycle actions available for the current status.</EmptyState>
           ) : (
             <div className="flex flex-wrap gap-3">
-              {allowedTransitions.map((transition) => (
-                <form key={transition.to} action={transitionMatchStatusAction} className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="matchNumber" value={match.match_number} />
-                  <input type="hidden" name="targetStatus" value={transition.to} />
-                  {transition.requiresWinnerSelection ? (
-                    <Field label="Winner">
-                      <Select name="winnerSide" defaultValue="">
-                        <option value="">No winner / draw</option>
-                        <option value="a">{getRelationshipLabel(match.participant_a_entry_id)}</option>
-                        <option value="b">{getRelationshipLabel(match.participant_b_entry_id)}</option>
-                      </Select>
-                    </Field>
-                  ) : null}
-                  {transition.requiresConfirm ? (
-                    <ConfirmSubmitButton
-                      className={buttonClassName}
-                      confirmMessage={`${transition.label}. Are you sure?`}
-                    >
-                      {transition.label}
-                    </ConfirmSubmitButton>
-                  ) : (
-                    <SubmitButton>{transition.label}</SubmitButton>
-                  )}
-                </form>
-              ))}
+              {allowedTransitions.map((transition) => {
+                const formId = `match-transition-${transition.to}`
+                return (
+                  <form key={transition.to} id={formId} action={transitionMatchStatusAction} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="matchNumber" value={match.match_number} />
+                    <input type="hidden" name="targetStatus" value={transition.to} />
+                    {transition.requiresWinnerSelection ? (
+                      <Field label="Winner">
+                        <Select name="winnerSide" defaultValue="">
+                          <option value="">No winner / draw</option>
+                          <option value="a">{getRelationshipLabel(match.participant_a_entry_id)}</option>
+                          <option value="b">{getRelationshipLabel(match.participant_b_entry_id)}</option>
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {transition.requiresConfirm ? (
+                      <ConfirmSubmitButton
+                        formId={formId}
+                        tone="default"
+                        confirmMessage={`${transition.label}. Are you sure?`}
+                      >
+                        {transition.label}
+                      </ConfirmSubmitButton>
+                    ) : (
+                      <SubmitButton>{transition.label}</SubmitButton>
+                    )}
+                  </form>
+                )
+              })}
             </div>
           )}
         </Card>

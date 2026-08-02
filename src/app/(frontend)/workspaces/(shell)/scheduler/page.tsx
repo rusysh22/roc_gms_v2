@@ -285,7 +285,7 @@ export default async function SchedulerWorkspacePage({
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 text-sm font-extrabold text-ink [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-2">
               <AlertTriangle
-                className={alertConflicts.length > 0 ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-gold'}
+                className={alertConflicts.length > 0 ? 'h-4 w-4 text-danger' : 'h-4 w-4 text-gold'}
                 aria-hidden="true"
               />
               {conflicts.length} conflict warning{conflicts.length === 1 ? '' : 's'}
@@ -303,7 +303,7 @@ export default async function SchedulerWorkspacePage({
                   key={conflict.id}
                   className={
                     conflict.severity === 'alert'
-                      ? 'flex items-start gap-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700'
+                      ? 'flex items-start gap-2 rounded-card border border-danger/30 bg-danger-surface px-3 py-2 text-sm font-semibold text-danger'
                       : 'flex items-start gap-2 rounded-card border border-gold/40 bg-mist px-3 py-2 text-sm font-semibold text-ink'
                   }
                 >

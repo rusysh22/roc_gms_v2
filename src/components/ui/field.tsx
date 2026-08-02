@@ -69,7 +69,7 @@ const Field = React.forwardRef<HTMLDivElement, FieldProps>(
         {patchedFirstChild}
         {restChildren}
         {error ? (
-          <p id={errorId} role="alert" className="mt-1 text-xs font-semibold text-red-700">
+          <p id={errorId} role="alert" className="mt-1 text-xs font-semibold text-danger">
             {error}
           </p>
         ) : null}

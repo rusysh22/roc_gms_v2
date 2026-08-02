@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
@@ -214,11 +215,18 @@ export default async function EditArticlePage({
         </div>
       </form>
 
-      <form action={deleteArticleAction} className="mt-6">
+      <form id="delete-article-form" action={deleteArticleAction} className="mt-6">
         <input type="hidden" name="id" value={String(article.id)} />
-        <SubmitButton variant="secondary" className="text-red-700 hover:bg-red-50">
-          Delete article
-        </SubmitButton>
+        <ConfirmDialog
+          trigger={
+            <Button type="button" variant="destructive">
+              Delete article
+            </Button>
+          }
+          description={`Delete "${article.title}"? This can't be undone.`}
+          confirmLabel="Delete article"
+          confirmButtonProps={{ type: 'submit', form: 'delete-article-form' }}
+        />
       </form>
     </>
   )

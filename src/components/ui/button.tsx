@@ -25,6 +25,9 @@ const buttonVariants = cva(
         brand: 'border-0 bg-brand-primary text-paper hover:bg-brand-primary/90',
         secondary: 'border border-line bg-paper text-ink hover:border-green hover:text-green',
         ghost: 'border-0 text-ink hover:bg-mist',
+        // AUDIT_UI_UX_CSS FORM-09/ADM-13: delete/destructive actions had no shared variant, so
+        // each call site picked its own ad hoc styling for "this is dangerous."
+        destructive: 'border-0 bg-danger text-paper hover:bg-danger/90',
       },
       size: {
         default: 'h-11 px-6 text-[0.95rem]',

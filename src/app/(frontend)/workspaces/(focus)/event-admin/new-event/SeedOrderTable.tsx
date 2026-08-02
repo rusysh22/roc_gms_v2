@@ -135,7 +135,7 @@ export const SeedOrderTable = ({
                       type="number"
                       min="1"
                       aria-invalid={isDuplicate}
-                      className={cn('w-20', isDuplicate && 'border-red-200 bg-red-50 text-red-700')}
+                      className={cn('w-20', isDuplicate && 'border-danger/40 bg-danger-surface text-danger')}
                       value={value}
                       onChange={(event) => setSeeds((current) => ({ ...current, [id]: event.target.value }))}
                     />

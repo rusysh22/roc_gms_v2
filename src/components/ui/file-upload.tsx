@@ -224,7 +224,7 @@ export const FileUpload = ({
         ) : null}
       </label>
 
-      {error ? <p className="text-xs font-semibold text-red-700">{error}</p> : null}
+      {error ? <p className="text-xs font-semibold text-danger">{error}</p> : null}
 
       {showRemoveOption && existingPreviewUrl && removeFieldName ? (
         <label className="flex items-center gap-2 text-sm font-semibold text-ink">

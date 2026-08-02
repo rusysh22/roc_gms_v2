@@ -112,7 +112,7 @@ export default async function LiveScorePage({
             </p>
           ) : null}
           {matchError ? (
-            <p className="mb-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+            <p className="mb-3 rounded-card border border-danger/30 bg-danger-surface px-3 py-2 text-sm font-bold text-danger">
               {MATCH_ACTION_ERROR_MESSAGES[matchError] || 'The last live score action could not be completed.'}
             </p>
           ) : null}
@@ -202,7 +202,7 @@ export default async function LiveScorePage({
           <section className="rounded-panel border border-line bg-paper p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Finish result</p>
             {publishTransition ? (
-              <form action={transitionMatchStatusAction} className="mt-3 grid gap-3">
+              <form id="publish-result-form" action={transitionMatchStatusAction} className="mt-3 grid gap-3">
                 <input type="hidden" name="matchNumber" value={match.match_number} />
                 <input type="hidden" name="targetStatus" value={publishTransition.to} />
                 <label className="grid gap-1 text-sm font-bold text-ink">
@@ -218,8 +218,9 @@ export default async function LiveScorePage({
                   </select>
                 </label>
                 <ConfirmSubmitButton
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-green bg-green px-6 font-sans font-semibold text-paper"
-                  confirmMessage="Publish the final result from live score?"
+                  formId="publish-result-form"
+                  tone="default"
+                  confirmMessage="Publish the final result from live score? This makes it visible on the public match page."
                 >
                   <Trophy className="h-4 w-4" aria-hidden="true" />
                   Publish result

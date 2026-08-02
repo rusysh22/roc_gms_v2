@@ -1,4 +1,6 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
+import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -114,11 +116,18 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams?
               )}
               <p className="truncate text-sm font-bold text-ink">{item.alt || item.filename}</p>
               {item.caption ? <p className="truncate text-xs text-ink-soft">{item.caption}</p> : null}
-              <form action={deleteMediaAction}>
+              <form id={`delete-media-${item.id}`} action={deleteMediaAction}>
                 <input type="hidden" name="id" value={String(item.id)} />
-                <SubmitButton variant="secondary" size="sm" className="w-full text-red-700 hover:bg-red-50">
-                  Delete
-                </SubmitButton>
+                <ConfirmDialog
+                  trigger={
+                    <Button type="button" variant="destructive" size="sm" className="w-full">
+                      Delete
+                    </Button>
+                  }
+                  description={`Delete "${item.alt || item.filename}"? This removes it from the media library; any page still referencing it will show a broken image.`}
+                  confirmLabel="Delete"
+                  confirmButtonProps={{ type: 'submit', form: `delete-media-${item.id}` }}
+                />
               </form>
             </Card>
           ))}
