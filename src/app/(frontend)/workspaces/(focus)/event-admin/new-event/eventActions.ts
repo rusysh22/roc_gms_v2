@@ -3,9 +3,11 @@
 import type { Payload } from 'payload'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
+import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
 import { slugify, text, wizardPage } from './wizardShared'
 
 // Tries base-2, base-3, ... until one isn't taken, so a duplicate-slug error can offer a ready-to-use
@@ -105,6 +107,18 @@ export async function createEventAction(formData: FormData): Promise<void> {
     before: null,
     after: data,
     actorUserId: user.id,
+  })
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 13: without this, the workspace's "active event" stayed
+  // whatever it was before the wizard ran (or fell back to the earliest-starting event), so an
+  // admin who just finished creating an event could leave the wizard and land back on an old one.
+  const cookieStore = await cookies()
+  cookieStore.set(ACTIVE_EVENT_COOKIE, String(created.id), {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 365,
   })
 
   revalidatePath(wizardPage)
