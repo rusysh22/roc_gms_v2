@@ -151,7 +151,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
                 calendar for a match that hasn't been scheduled yet. */}
             {match.scheduled_start_at ? (
               <a
-                href={`/api/calendar/match/${match.match_number}`}
+                href={`${eventPath}/matches/${match.match_number}/calendar.ics`}
                 className="mt-3 inline-block text-sm font-bold text-brand-secondary underline underline-offset-2"
               >
                 Add to calendar (.ics)
