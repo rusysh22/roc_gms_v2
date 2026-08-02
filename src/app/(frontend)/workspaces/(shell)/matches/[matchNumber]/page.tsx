@@ -34,7 +34,11 @@ import {
   transitionMatchStatusAction,
   updateMatchSetScoreAction,
 } from '../../../matches/matchActions'
-import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../../../matches/matchLifecycle'
+import {
+  MATCH_ACTION_ERROR_MESSAGES,
+  getAllowedTransitions,
+  getPublishResultConfirmMessage,
+} from '../../../matches/matchLifecycle'
 import { addDocumentationAssetAction } from '../../../matches/documentationActions'
 import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../../../matches/documentationErrors'
 import { addMatchCommentAction } from '../../../matches/commentActions'
@@ -96,6 +100,11 @@ export default async function AdminMatchDetailPage({
   const canAssignOfficers = access.user.roles?.some((role) =>
     ['super_admin', 'event_admin', 'scheduler'].includes(role),
   )
+  const stageType =
+    match.stage_id && typeof match.stage_id === 'object'
+      ? (match.stage_id as { stage_type?: string }).stage_type
+      : undefined
+  const publishConfirmMessage = getPublishResultConfirmMessage(stageType)
   const eligibleOfficersResult = canAssignOfficers
     ? await access.payload.find({
         collection: 'users',
@@ -423,7 +432,11 @@ export default async function AdminMatchDetailPage({
                       <ConfirmSubmitButton
                         formId={formId}
                         tone="default"
-                        confirmMessage={`${transition.label}. Are you sure?`}
+                        confirmMessage={
+                          transition.to === 'result_published'
+                            ? getPublishResultConfirmMessage(stageType)
+                            : `${transition.label}. Are you sure?`
+                        }
                       >
                         {transition.label}
                       </ConfirmSubmitButton>

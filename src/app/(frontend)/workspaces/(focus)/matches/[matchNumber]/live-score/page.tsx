@@ -21,7 +21,11 @@ import {
   addMatchSetAction,
   transitionMatchStatusAction,
 } from '../../../../matches/matchActions'
-import { MATCH_ACTION_ERROR_MESSAGES, getAllowedTransitions } from '../../../../matches/matchLifecycle'
+import {
+  MATCH_ACTION_ERROR_MESSAGES,
+  getAllowedTransitions,
+  getPublishResultConfirmMessage,
+} from '../../../../matches/matchLifecycle'
 import { FocusHeader } from '../../../FocusHeader'
 import { LiveScoreControls } from './LiveScoreControls'
 
@@ -84,6 +88,10 @@ export default async function LiveScorePage({
     ['ongoing', 'paused', 'finished'].includes(transition.to),
   )
   const publishTransition = allowedTransitions.find((transition) => transition.to === 'result_published')
+  const stageType =
+    match.stage_id && typeof match.stage_id === 'object'
+      ? (match.stage_id as { stage_type?: string }).stage_type
+      : undefined
   const participantAName = getRelationshipLabel(match.participant_a_entry_id)
   const participantBName = getRelationshipLabel(match.participant_b_entry_id)
 
@@ -220,7 +228,7 @@ export default async function LiveScorePage({
                 <ConfirmSubmitButton
                   formId="publish-result-form"
                   tone="default"
-                  confirmMessage="Publish the final result from live score? This makes it visible on the public match page."
+                  confirmMessage={`${getPublishResultConfirmMessage(stageType)} This also makes it visible on the public match page.`}
                 >
                   <Trophy className="h-4 w-4" aria-hidden="true" />
                   Publish result

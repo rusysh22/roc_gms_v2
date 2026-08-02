@@ -42,6 +42,31 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
 export const getAllowedTransitions = (status: string) =>
   MATCH_TRANSITIONS.filter((transition) => transition.from.includes(status))
 
+const STANDINGS_STAGE_TYPES = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.5/15.7 (P0): "Confirm and Publish Result" previously
+// showed only a generic "Are you sure?" - the actual downstream effects (standings recalculation,
+// bracket advancement) were invisible until after confirming. A true per-winner dry-run preview
+// would need to extend the bracket-advancement engine (src/lib/winnerAdvancement.ts, already
+// hardened against real historical bugs - AUDIT_E2E BRK-02/BRK-03) to compute a hypothetical
+// outcome without persisting anything - deliberately out of scope for a single pass given how
+// correctness-sensitive that code already is. This is the safer, still-honest middle ground: tell
+// the admin generically what category of consequence this specific match's publish will trigger.
+export const getPublishResultConfirmMessage = (stageType: string | undefined): string => {
+  const consequences: string[] = []
+  if (stageType && STANDINGS_STAGE_TYPES.has(stageType)) {
+    consequences.push('recalculate standings for this category')
+  }
+  if (stageType === 'single_elimination') {
+    consequences.push("advance the winner into next round's slot")
+  }
+
+  const consequenceText =
+    consequences.length > 0 ? ` This will ${consequences.join(' and ')}.` : ''
+
+  return `Publish this result?${consequenceText} Once published, correcting it requires a reason and event admin approval.`
+}
+
 export const isValidTransition = (from: string, to: string) =>
   MATCH_TRANSITIONS.some((transition) => transition.from.includes(from) && transition.to === to)
 
