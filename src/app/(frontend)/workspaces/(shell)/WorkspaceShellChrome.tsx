@@ -136,6 +136,12 @@ const GROUPS: SidebarGroup[] = [
         href: '/workspaces/match-officer',
         roles: ['super_admin', 'event_admin', 'match_officer'],
       },
+      {
+        label: 'Matches',
+        icon: ListChecks,
+        href: '/workspaces/matches',
+        roles: ['super_admin', 'event_admin', 'scheduler'],
+      },
     ],
   },
   {

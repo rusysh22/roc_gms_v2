@@ -130,7 +130,7 @@ export default async function CommandCenterPage() {
             title={(count) => `Review ${count} result${count === 1 ? '' : 's'}`}
             actionLabel={(count) => `Review ${count} result${count === 1 ? '' : 's'}`}
             matches={finishedNotOfficial}
-            href="/workspaces/matches"
+            href="/workspaces/matches?status=finished"
           />
           <WorkCard
             icon={AlertTriangle}

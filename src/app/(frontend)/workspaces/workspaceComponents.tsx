@@ -27,6 +27,7 @@ export type WorkspaceMatch = {
   scheduled_start_at?: string | null
   scheduled_end_at?: string | null
   status: string
+  score_summary?: string | null
   generation_source?: string | null
   is_public?: boolean | null
   documentation_status?: string | null
