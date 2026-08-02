@@ -249,6 +249,9 @@ export default async function SchedulerWorkspacePage({
             <Button asChild variant="secondary">
               <Link href={`/events/${activeEvent.slug}/schedule`}>Public Schedule</Link>
             </Button>
+            <Button asChild variant="secondary">
+              <a href="/workspaces/scheduler/export">Export (.xlsx)</a>
+            </Button>
           </>
         }
       />
