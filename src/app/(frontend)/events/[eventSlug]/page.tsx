@@ -25,6 +25,7 @@ import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
+import { ShareEventPanel } from '@/components/share-event-panel'
 import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
 import { getPublicArticles, getScopedPublicAnnouncements } from '../../contentData'
 import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publicEditComponents'
@@ -658,6 +659,12 @@ export default async function EventHomePage({
               ) : null}
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="px-4 pb-10" aria-label="Share this event">
+        <div className="mx-auto max-w-5xl">
+          <ShareEventPanel eventName={event.name} eventPath={eventPath} />
         </div>
       </section>
 
