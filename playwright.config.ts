@@ -6,7 +6,11 @@ import { defineConfig, devices } from '@playwright/test'
 // and Postgres/Redis/Mailpit sidecars aren't things Playwright can boot itself).
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  // Tests hit a single shared Next.js *dev* server (not a production build), whose on-demand
+  // per-route compilation serializes anyway - running workers in parallel just makes every test
+  // queue behind the same recompiles and time out. One worker is slower but actually reliable.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'html',

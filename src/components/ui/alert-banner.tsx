@@ -32,13 +32,27 @@ export interface AlertBannerProps extends React.HTMLAttributes<HTMLDivElement> {
   tone?: AlertTone
 }
 
+// AUDIT_UI_UX_CSS FORM-20: async messages (import errors, save confirmations) had no implicit
+// role, so screen readers had no guarantee of hearing them when they appeared without a focus
+// change. "error" is assertive (interrupts, for validation/failure); success/info/warning are
+// polite "status" (announced without stealing focus). Callers needing something else (e.g. a
+// tone="error" banner that's actually just neutral instructional copy) can still pass `role`
+// explicitly to override.
+const toneRole: Record<AlertTone, 'alert' | 'status'> = {
+  success: 'status',
+  error: 'alert',
+  info: 'status',
+  warning: 'status',
+}
+
 const AlertBanner = React.forwardRef<HTMLDivElement, AlertBannerProps>(
-  ({ className, tone = 'success', children, ...props }, ref) => {
+  ({ className, tone = 'success', role, children, ...props }, ref) => {
     const Icon = toneIcon[tone]
 
     return (
       <div
         ref={ref}
+        role={role ?? toneRole[tone]}
         className={cn(
           'flex items-start gap-2 rounded-card border px-4 py-3 font-sans text-sm font-bold',
           toneClasses[tone],
