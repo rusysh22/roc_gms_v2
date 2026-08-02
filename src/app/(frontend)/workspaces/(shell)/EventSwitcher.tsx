@@ -25,11 +25,19 @@ export function EventSwitcher({
   return (
     <form action={setActiveEventAction} className="flex flex-col gap-1 px-3 py-2">
       <input type="hidden" name="returnTo" value={pathname} />
-      <span className="flex items-center gap-1.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+      {/* AUDIT_UI_UX_CSS axe: this was a plain <span>, visually next to the select but never
+          actually associated with it - screen readers had no accessible name for the select
+          at all (critical: select-name). A real <label htmlFor> fixes it without changing
+          how it looks. */}
+      <label
+        htmlFor="active-event-select"
+        className="flex items-center gap-1.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase"
+      >
         <CalendarRange className="h-3 w-3" aria-hidden="true" />
         Active event
-      </span>
+      </label>
       <select
+        id="active-event-select"
         name="eventId"
         defaultValue={activeEventId ? String(activeEventId) : ''}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}

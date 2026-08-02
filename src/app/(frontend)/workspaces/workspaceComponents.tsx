@@ -211,7 +211,11 @@ export const PageHero = ({
   actions?: ReactNode
 }) => (
   <section className="mb-6">
-    <p className="text-xs font-bold tracking-wide text-green uppercase">{eyebrow}</p>
+    {/* AUDIT_UI_UX_CSS axe: text-green measured 4.24:1 here - PageHero sits directly on the
+        workspace shell's bg-mist body (no paper wrapper of its own), and this is the header
+        used across essentially every workspace page, so the shortfall was universal. ink-soft
+        passes on both mist and paper and reads as a standard neutral "eyebrow" label. */}
+    <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">{eyebrow}</p>
     <h1 className="mt-1 text-2xl font-extrabold text-ink md:text-3xl">{title}</h1>
     {summary ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">{summary}</p> : null}
     {actions ? <div className="mt-4 flex flex-wrap gap-2">{actions}</div> : null}

@@ -201,7 +201,10 @@ function SidebarContent({
     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3" aria-label="Workspace navigation">
       {visibleGroups.map((group) => (
         <div key={group.label} className="flex flex-col gap-0.5">
-          <p className="px-3 pb-1 text-[0.65rem] font-bold tracking-wide text-ink-soft/70 uppercase">
+          {/* AUDIT_UI_UX_CSS axe: 70%-opacity ink-soft at this size measured 3.65:1, under the
+              4.5:1 minimum - full-opacity ink-soft passes comfortably and these labels don't
+              need to be any more muted than the nav items already below them. */}
+          <p className="px-3 pb-1 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
             {group.label}
           </p>
           {group.sections.map((section) => {
