@@ -183,7 +183,7 @@ export default async function SchedulerWorkspacePage({
             <TableHead>Participants</TableHead>
             <TableHead>Schedule</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead />
+            <TableHead className="sr-only">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

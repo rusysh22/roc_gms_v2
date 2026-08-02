@@ -86,7 +86,7 @@ export default async function AnnouncementsListPage({ searchParams }: { searchPa
               <TableHead>Scope</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Published</TableHead>
-              <TableHead />
+              <TableHead className="sr-only">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

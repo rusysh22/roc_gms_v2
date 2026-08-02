@@ -82,7 +82,7 @@ export default async function ArticlesListPage({ searchParams }: { searchParams?
               <TableHead>Status</TableHead>
               <TableHead>Published</TableHead>
               <TableHead>Updated</TableHead>
-              <TableHead />
+              <TableHead className="sr-only">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

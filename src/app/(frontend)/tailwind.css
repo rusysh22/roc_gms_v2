@@ -73,3 +73,23 @@
   --radius-panel: 16px;
   --radius-input: 10px;
 }
+
+/* AUDIT_UI_UX_CSS UI-01: CSS-only scroll-shadow hint for horizontally-scrollable tables - see
+ * src/components/ui/table.tsx for the full rationale. The `local`-attachment gradients travel
+ * with the scrolled content and cancel themselves out against the solid `--color-paper` layer
+ * once an edge is reached; the `scroll`-attachment shadows stay pinned to the viewport and only
+ * become visible where a local gradient hasn't already covered them.
+ */
+@layer components {
+  .table-scroll-shadow {
+    background:
+      linear-gradient(to right, var(--color-paper) 30%, rgb(255 255 255 / 0%)),
+      linear-gradient(to right, rgb(255 255 255 / 0%), var(--color-paper) 70%) 100% 0,
+      linear-gradient(to right, rgb(12 35 31 / 12%), rgb(12 35 31 / 0%)),
+      linear-gradient(to left, rgb(12 35 31 / 12%), rgb(12 35 31 / 0%)) 100% 0;
+    background-repeat: no-repeat;
+    background-color: var(--color-paper);
+    background-size: 40px 100%, 40px 100%, 14px 100%, 14px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+}
