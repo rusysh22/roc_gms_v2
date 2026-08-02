@@ -11,28 +11,37 @@ const ALLOWED_ADMIN_COMMENT_TYPES = new Set(['internal', 'official_note'])
 const toStringField = (value: FormDataEntryValue | null) =>
   typeof value === 'string' ? value.trim() : ''
 
+// Optional - lets a caller elsewhere in the match-officer flow (e.g. live-score's inline
+// "Incident note" form) land back where it started instead of always bouncing to the full match
+// details page. Same pattern as matchActions.ts's getSafeReturnTo.
+const getSafeReturnTo = (formData: FormData, fallback: string) => {
+  const returnTo = toStringField(formData.get('returnTo'))
+  return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : fallback
+}
+
 export async function addMatchCommentAction(formData: FormData): Promise<void> {
   const matchNumber = toStringField(formData.get('matchNumber'))
   const commentType = toStringField(formData.get('commentType')) || 'internal'
   const authorName = toStringField(formData.get('authorName')) || 'System / Unknown'
   const body = toStringField(formData.get('body'))
   const isPinned = formData.get('isPinned') === 'on'
+  const returnTo = getSafeReturnTo(formData, `/workspaces/matches/${matchNumber}`)
 
   if (!matchNumber) {
     redirect('/workspaces/scheduler?commentError=invalid_request')
   }
 
   if (!ALLOWED_ADMIN_COMMENT_TYPES.has(commentType)) {
-    redirect(`/workspaces/matches/${matchNumber}?commentError=invalid_type`)
+    redirect(`${returnTo}?commentError=invalid_type`)
   }
 
   if (!body) {
-    redirect(`/workspaces/matches/${matchNumber}?commentError=missing_body`)
+    redirect(`${returnTo}?commentError=missing_body`)
   }
 
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
-    returnTo: `/workspaces/matches/${matchNumber}`,
+    returnTo,
   })
   const matches = await payload.find({
     collection: 'matches',
@@ -43,7 +52,7 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
   const match = matches.docs[0]
 
   if (!match) {
-    redirect(`/workspaces/matches/${matchNumber}?commentError=not_found`)
+    redirect(`${returnTo}?commentError=not_found`)
   }
 
   const actorUserId = user.id
@@ -88,5 +97,5 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
 
   revalidatePath(`/workspaces/matches/${matchNumber}`)
   revalidatePath(`/matches/${matchNumber}`)
-  redirect(`/workspaces/matches/${matchNumber}?commentUpdated=1`)
+  redirect(`${returnTo}?commentUpdated=1`)
 }

@@ -4,6 +4,7 @@ import { Flag, Pause, Play, Plus, Trophy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { getMatchDetail } from '../../../../../matchDetailData'
 import {
@@ -14,9 +15,11 @@ import {
 import {
   formatDateTime,
   formatStatus,
+  getRelationshipId,
   getRelationshipLabel,
 } from '../../../../workspaceComponents'
 import { ConfirmSubmitButton } from '../../../../matches/ConfirmSubmitButton'
+import { addMatchCommentAction } from '../../../../matches/commentActions'
 import {
   addMatchSetAction,
   transitionMatchStatusAction,
@@ -75,6 +78,7 @@ export default async function LiveScorePage({
   const query = searchParams ? await searchParams : {}
   const matchUpdated = query.matchUpdated === '1'
   const matchError = typeof query.matchError === 'string' ? query.matchError : ''
+  const commentUpdated = query.commentUpdated === '1'
   const result = await getMatchDetail(matchNumber)
 
   if (!result) {
@@ -83,6 +87,28 @@ export default async function LiveScorePage({
 
   const { match, matchSets } = result
   const currentSet = matchSets[matchSets.length - 1]
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.2: "aturan target/deuce/timer terlihat
+  // kontekstual" - a match officer entering scores shouldn't have to remember or go look up the
+  // category's ruleset separately.
+  const categoryId = getRelationshipId(match.category_id)
+  const category = categoryId
+    ? ((await access.payload.findByID({ collection: 'competition-categories', id: categoryId, depth: 1 }).catch(() => null)) as
+        | { ruleset_id?: unknown }
+        | null)
+    : null
+  const ruleset =
+    category?.ruleset_id && typeof category.ruleset_id === 'object'
+      ? (category.ruleset_id as {
+          best_of?: number | null
+          target_score?: number | null
+          max_score?: number | null
+          deuce_enabled?: boolean | null
+          timer_enabled?: boolean | null
+          period_count?: number | null
+          period_duration?: number | null
+        })
+      : null
   const allowedTransitions = getAllowedTransitions(match.status)
   const quickTransitions = allowedTransitions.filter((transition) =>
     ['ongoing', 'paused', 'finished'].includes(transition.to),
@@ -255,6 +281,62 @@ export default async function LiveScorePage({
                 </dd>
               </div>
             </dl>
+          </section>
+
+          {ruleset ? (
+            <section className="rounded-panel border border-line bg-paper p-4 text-sm text-ink-soft">
+              <p className="font-bold text-ink">Rules</p>
+              <dl className="mt-3 grid grid-cols-2 gap-2">
+                {ruleset.best_of ? (
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide">Best of</dt>
+                    <dd className="font-semibold text-ink">{ruleset.best_of}</dd>
+                  </div>
+                ) : null}
+                {ruleset.target_score ? (
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide">Target</dt>
+                    <dd className="font-semibold text-ink">
+                      {ruleset.target_score}
+                      {ruleset.max_score ? ` (max ${ruleset.max_score})` : ''}
+                    </dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-xs font-bold uppercase tracking-wide">Deuce</dt>
+                  <dd className="font-semibold text-ink">{ruleset.deuce_enabled ? 'Enabled' : 'Off'}</dd>
+                </div>
+                {ruleset.timer_enabled ? (
+                  <div>
+                    <dt className="text-xs font-bold uppercase tracking-wide">Periods</dt>
+                    <dd className="font-semibold text-ink">
+                      {ruleset.period_count || '—'}
+                      {ruleset.period_duration ? ` × ${ruleset.period_duration}min` : ''}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            </section>
+          ) : null}
+
+          <section className="rounded-panel border border-line bg-paper p-4">
+            <p className="text-sm font-bold text-ink">Incident note</p>
+            <p className="mt-1 text-xs text-ink-soft">
+              Logged internally for the event admin - not shown on the public match page. For
+              photo evidence, use Documentation on the full match details page.
+            </p>
+            {commentUpdated ? (
+              <p className="mt-2 text-xs font-bold text-green">Incident note logged.</p>
+            ) : null}
+            <form action={addMatchCommentAction} className="mt-3 flex flex-col gap-2">
+              <input type="hidden" name="matchNumber" value={match.match_number} />
+              <input type="hidden" name="commentType" value="official_note" />
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <Textarea name="body" required placeholder="What happened, and when." rows={3} />
+              <SubmitButton variant="secondary" size="sm">
+                Log incident note
+              </SubmitButton>
+            </form>
           </section>
         </aside>
       </section>
