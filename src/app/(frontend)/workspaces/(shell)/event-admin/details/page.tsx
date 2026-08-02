@@ -9,6 +9,7 @@ import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { updateEventDetailsAction } from './detailsActions'
+import { ReadinessChecklist } from './ReadinessChecklist'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +104,10 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
           Saved.
         </AlertBanner>
       ) : null}
+
+      <div className="mb-6">
+        <ReadinessChecklist payload={access.payload} eventId={String(activeEvent.id)} />
+      </div>
 
       <form action={updateEventDetailsAction} className="flex flex-col gap-6">
         <Card className="flex flex-col gap-4">
