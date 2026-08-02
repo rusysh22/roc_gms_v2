@@ -15,10 +15,13 @@ import {
   formatStatus,
   formatTimeOnly,
   getDateKey,
+  getRelationshipId,
   getRelationshipLabel,
   type RelationshipDoc,
 } from '../../../workspaces/workspaceComponents'
 import { getPublicEventBySlug } from '../../publicEvents'
+import { FavoriteStar } from '@/components/favorite-star'
+import { ScheduleFavoritesToggle } from '@/components/schedule-favorites-toggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -251,37 +254,40 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
       {activeTab === 'schedule' ? (
         <>
           <div className="border-b border-line bg-mist/50 px-4 py-3">
-            <div className="mx-auto flex max-w-4xl gap-2 overflow-x-auto">
-              <Link
-                href={`${schedulePath}?tab=schedule`}
-                className={cn(
-                  'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                  !activeSport ?
-                    'border-brand-primary bg-brand-primary text-paper'
-                  : 'border-line bg-paper text-ink-soft hover:text-ink',
-                )}
-              >
-                All Sports
-              </Link>
-              {sports.map((sport) => (
+            <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+              <div className="flex gap-2 overflow-x-auto">
                 <Link
-                  key={sport.id}
-                  href={`${schedulePath}?tab=schedule&sport=${sport.slug}`}
+                  href={`${schedulePath}?tab=schedule`}
                   className={cn(
                     'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                    activeSport?.slug === sport.slug ?
+                    !activeSport ?
                       'border-brand-primary bg-brand-primary text-paper'
                     : 'border-line bg-paper text-ink-soft hover:text-ink',
                   )}
                 >
-                  {sport.name}
+                  All Sports
                 </Link>
-              ))}
+                {sports.map((sport) => (
+                  <Link
+                    key={sport.id}
+                    href={`${schedulePath}?tab=schedule&sport=${sport.slug}`}
+                    className={cn(
+                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
+                      activeSport?.slug === sport.slug ?
+                        'border-brand-primary bg-brand-primary text-paper'
+                      : 'border-line bg-paper text-ink-soft hover:text-ink',
+                    )}
+                  >
+                    {sport.name}
+                  </Link>
+                ))}
+              </div>
+              <ScheduleFavoritesToggle eventSlug={event.slug} containerId="schedule-matches" />
             </div>
           </div>
 
           <section className="px-4 py-8" aria-label="Published matches">
-            <div className="mx-auto max-w-4xl">
+            <div className="mx-auto max-w-4xl" id="schedule-matches">
               {matches.length === 0 ? (
                 <Card className="text-sm text-ink-soft">
                   No public matches match this filter yet. Check back closer to the event.
@@ -303,18 +309,44 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                         <div className="flex flex-col gap-3">
                           {rows.map((match) => {
                             const categoryHref = getCategoryHref(match)
+                            const entryAId = getRelationshipId(match.participant_a_entry_id)
+                            const entryBId = getRelationshipId(match.participant_b_entry_id)
 
                             return (
-                              <Card key={match.id} interactive accent="blue">
+                              <Card
+                                key={match.id}
+                                interactive
+                                accent="blue"
+                                data-match-entries={[entryAId, entryBId].filter(Boolean).join(',')}
+                              >
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
                                     <CardDescription>
                                       {getRelationshipLabel(match.sport_id)} /{' '}
                                       {getRelationshipLabel(match.category_id)}
                                     </CardDescription>
-                                    <CardTitle className="mt-1">
-                                      {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
-                                      {getRelationshipLabel(match.participant_b_entry_id)}
+                                    <CardTitle className="mt-1 flex flex-wrap items-center gap-x-1.5">
+                                      <span className="inline-flex items-center gap-0.5">
+                                        {getRelationshipLabel(match.participant_a_entry_id)}
+                                        {entryAId ? (
+                                          <FavoriteStar
+                                            eventSlug={event.slug}
+                                            entryId={entryAId}
+                                            label={getRelationshipLabel(match.participant_a_entry_id)}
+                                          />
+                                        ) : null}
+                                      </span>
+                                      <span>vs</span>
+                                      <span className="inline-flex items-center gap-0.5">
+                                        {getRelationshipLabel(match.participant_b_entry_id)}
+                                        {entryBId ? (
+                                          <FavoriteStar
+                                            eventSlug={event.slug}
+                                            entryId={entryBId}
+                                            label={getRelationshipLabel(match.participant_b_entry_id)}
+                                          />
+                                        ) : null}
+                                      </span>
                                     </CardTitle>
                                     <p className="mt-1 text-xs font-semibold text-ink-soft">
                                       {match.match_number} / {match.round_name || 'Scheduled Match'}

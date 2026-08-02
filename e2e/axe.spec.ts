@@ -48,3 +48,8 @@ test('new-event wizard has no serious a11y violations', async ({ page }) => {
   await page.goto('/workspaces/event-admin/new-event')
   await assertNoSeriousViolations(page, 'new-event-wizard')
 })
+
+test('schedule page (My Schedule favorites) has no serious a11y violations', async ({ page }) => {
+  await page.goto(`/events/${PUBLIC_EVENT_SLUG}/schedule`)
+  await assertNoSeriousViolations(page, 'schedule')
+})
