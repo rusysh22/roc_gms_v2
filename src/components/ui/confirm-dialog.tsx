@@ -52,8 +52,25 @@ export function ConfirmDialog({
             <Button
               type="button"
               variant={tone === 'destructive' ? 'destructive' : 'primary'}
-              onClick={onConfirm}
               {...confirmButtonProps}
+              onClick={(event) => {
+                onConfirm?.()
+                confirmButtonProps?.onClick?.(event)
+                // AUDIT_UI_UX_CSS: a plain type="submit" form={id} button here races against
+                // Radix's own close-on-click - closing (unmounting) the dialog can happen before
+                // the browser's default submit action for the click fires, silently dropping the
+                // submission. Requesting it explicitly, synchronously, in this handler - and
+                // suppressing the native default action so it can't double-fire - submits before
+                // any unmount is committed, regardless of that race.
+                const formId = confirmButtonProps?.form
+                if (typeof formId === 'string') {
+                  event.preventDefault()
+                  const form = document.getElementById(formId)
+                  if (form instanceof HTMLFormElement) {
+                    form.requestSubmit()
+                  }
+                }
+              }}
             >
               {confirmLabel}
             </Button>

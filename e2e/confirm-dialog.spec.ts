@@ -30,3 +30,30 @@ test('destructive action opens a real alertdialog and Cancel closes it without s
   // Still on the same page - Cancel didn't submit the form.
   await expect(page.getByRole('button', { name: 'Shuffle Seeds' })).toBeVisible()
 })
+
+// Regression test for a real bug: AlertDialogAction's own close-on-click raced against the
+// browser's default submit action for a type="submit" form={id} button portalled outside the
+// form's DOM subtree - closing (unmounting) could win the race and silently drop the submission.
+// This actually clicks Confirm (unlike the test above) because that race is exactly what needs
+// covering; shuffling seed order is reversible (re-shuffling fixes it), unlike the destructive
+// actions ConfirmDialog is normally used for.
+test('destructive action Confirm actually submits the form', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(ADMIN_EMAIL)
+  await page.getByLabel('Password').fill(ADMIN_PASSWORD)
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 })
+
+  await page.goto(`/workspaces/event-admin/new-event?eventId=${EVENT_ID}&step=draw`)
+
+  await page.getByRole('button', { name: 'Shuffle Seeds' }).click()
+  const dialog = page.getByRole('alertdialog')
+  await expect(dialog).toBeVisible()
+
+  const [response] = await Promise.all([
+    page.waitForResponse((res) => res.request().method() === 'POST'),
+    dialog.getByRole('button', { name: 'Shuffle Seeds' }).click(),
+  ])
+  expect(response.status()).toBeLessThan(400)
+  await expect(dialog).toBeHidden()
+})
