@@ -1097,11 +1097,27 @@ const ParticipantsStep = async ({
       issues = []
     }
   }
-  const [clubs, teams, players] = await Promise.all([
+  const [clubs, teams, players, categories] = await Promise.all([
     payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'players', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({
+      collection: 'competition-categories',
+      depth: 0,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+    }),
   ])
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2: this step used to show every directory form
+  // (Club/Team/Player) regardless of whether any category actually needed that participant type -
+  // full "adaptive Step 4" (a form set driven by which category you're working on) is a bigger
+  // rearchitecture than this pass covers, but the narrowest, highest-value slice is not showing the
+  // Club/Pair forms at all when nothing in the event uses them yet. Before any category exists,
+  // show everything - there's no signal yet to narrow by.
+  const participantModes = new Set(categories.docs.map((category) => String(category.participant_mode)))
+  const needsClubForm = categories.docs.length === 0 || participantModes.has('club')
+  const needsPairForm = categories.docs.length === 0 || participantModes.has('pair')
 
   return (
     <>
@@ -1179,33 +1195,41 @@ const ParticipantsStep = async ({
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="flex flex-col gap-4">
-          {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 3: this used to be the only one of the three
-              headings ("Add a club" / "Add a team (optional)" / "Add a player (optional)") without
-              an explicit "(optional)" - the missing label read as "Club is mandatory," which isn't
-              true for any category except a Club-type one. */}
-          <CardTitle>4. Add a club (optional unless a category&apos;s participants are clubs)</CardTitle>
-          <form action={addClubAction} className="flex flex-col gap-4">
-            <input type="hidden" name="eventId" value={eventId} />
-            <Field label="Club name">
-              <Input name="name" required />
-            </Field>
-            <Field label="Contact person">
-              <Input name="contactPerson" />
-            </Field>
-            <Field label="Contact email">
-              <Input name="contactEmail" type="email" />
-            </Field>
-            <SubmitButton>Add club</SubmitButton>
-          </form>
-          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {clubs.docs.map((club) => (
-              <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                <strong className="text-sm font-bold text-ink">{club.name}</strong>
-              </div>
-            ))}
-          </div>
-        </Card>
+        {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2: a narrow, safe slice of "adaptive Step 4" - the
+            full redesign would drive this entire step's form set from which category you're
+            working on, which is a much larger rearchitecture than this pass covers. This form adds
+            real value only once some category's participants actually are clubs (item 3), so it's
+            hidden until then instead of always occupying screen space. Shown by default before any
+            category exists yet, since there's nothing to narrow by. */}
+        {needsClubForm ? (
+          <Card className="flex flex-col gap-4">
+            {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 3: this used to be the only one of the three
+                headings ("Add a club" / "Add a team (optional)" / "Add a player (optional)") without
+                an explicit "(optional)" - the missing label read as "Club is mandatory," which isn't
+                true for any category except a Club-type one. */}
+            <CardTitle>4. Add a club (optional unless a category&apos;s participants are clubs)</CardTitle>
+            <form action={addClubAction} className="flex flex-col gap-4">
+              <input type="hidden" name="eventId" value={eventId} />
+              <Field label="Club name">
+                <Input name="name" required />
+              </Field>
+              <Field label="Contact person">
+                <Input name="contactPerson" />
+              </Field>
+              <Field label="Contact email">
+                <Input name="contactEmail" type="email" />
+              </Field>
+              <SubmitButton>Add club</SubmitButton>
+            </form>
+            <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+              {clubs.docs.map((club) => (
+                <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                  <strong className="text-sm font-bold text-ink">{club.name}</strong>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
 
         <Card className="flex flex-col gap-4">
           <CardTitle>Add a team (optional)</CardTitle>
@@ -1240,54 +1264,58 @@ const ParticipantsStep = async ({
         </Card>
       </div>
 
-      <Card className="flex flex-col gap-4">
-        {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: a doubles pair is stored as a 2-player Team
-            internally (rosters always need a team_id), but this form never says "team" - it picks
-            two existing players and addPairAction creates the team + both roster rows in one
-            submit. Requires players to already exist, so it's placed after the player form/list. */}
-        <CardTitle>Add a pair (optional unless a category pairs up players)</CardTitle>
-        <p className="text-xs text-ink-soft">
-          For categories like mixed doubles, where two players compete together as one entry.
-        </p>
-        {players.docs.length < 2 ? (
-          <EmptyState>Add at least two players above before pairing them up.</EmptyState>
-        ) : (
-          <form action={addPairAction} className="grid gap-4 sm:grid-cols-2">
-            <input type="hidden" name="eventId" value={eventId} />
-            <Field label="Player 1">
-              <SearchableSelect
-                name="player1Id"
-                placeholder="Select player"
-                options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
-              />
-            </Field>
-            <Field label="Player 2">
-              <SearchableSelect
-                name="player2Id"
-                placeholder="Select player"
-                options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
-              />
-            </Field>
-            <Field label="Pair name (optional)" className="sm:col-span-2">
-              <Input name="name" placeholder="Defaults to Player 1 / Player 2" />
-            </Field>
-            <Field label="Club (optional)" className="sm:col-span-2">
-              <SearchableSelect
-                name="clubId"
-                placeholder="None"
-                options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
-              />
-            </Field>
-            <div className="sm:col-span-2">
-              <SubmitButton>Add pair</SubmitButton>
-            </div>
-          </form>
-        )}
-        <p className="text-xs text-ink-soft">
-          Pairs you create here show up in the team list above, too - a pair is two players sharing
-          one entry, which the rest of the system already tracks as a team.
-        </p>
-      </Card>
+      {needsPairForm ? (
+        <Card className="flex flex-col gap-4">
+          {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: a doubles pair is stored as a 2-player Team
+              internally (rosters always need a team_id), but this form never says "team" - it picks
+              two existing players and addPairAction creates the team + both roster rows in one
+              submit. Requires players to already exist, so it's placed after the player form/list.
+              Item 2: hidden entirely once categories exist and none of them is pair-mode - same
+              "only show what's needed" narrowing as the Club form above. */}
+          <CardTitle>Add a pair (optional unless a category pairs up players)</CardTitle>
+          <p className="text-xs text-ink-soft">
+            For categories like mixed doubles, where two players compete together as one entry.
+          </p>
+          {players.docs.length < 2 ? (
+            <EmptyState>Add at least two players above before pairing them up.</EmptyState>
+          ) : (
+            <form action={addPairAction} className="grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="eventId" value={eventId} />
+              <Field label="Player 1">
+                <SearchableSelect
+                  name="player1Id"
+                  placeholder="Select player"
+                  options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
+                />
+              </Field>
+              <Field label="Player 2">
+                <SearchableSelect
+                  name="player2Id"
+                  placeholder="Select player"
+                  options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
+                />
+              </Field>
+              <Field label="Pair name (optional)" className="sm:col-span-2">
+                <Input name="name" placeholder="Defaults to Player 1 / Player 2" />
+              </Field>
+              <Field label="Club (optional)" className="sm:col-span-2">
+                <SearchableSelect
+                  name="clubId"
+                  placeholder="None"
+                  options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <SubmitButton>Add pair</SubmitButton>
+              </div>
+            </form>
+          )}
+          <p className="text-xs text-ink-soft">
+            Pairs you create here show up in the team list above, too - a pair is two players
+            sharing one entry, which the rest of the system already tracks as a team.
+          </p>
+        </Card>
+      ) : null}
 
       <Card className="flex flex-col gap-4">
         <CardTitle>Add a player (optional)</CardTitle>
