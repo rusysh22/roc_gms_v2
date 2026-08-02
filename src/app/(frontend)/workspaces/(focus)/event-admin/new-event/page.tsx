@@ -728,6 +728,27 @@ type Payload = Awaited<ReturnType<typeof requireWorkspaceAccess>> extends { payl
   ? P
   : never
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 3: "Ruleset preset per sport dan contextual field" -
+// the ruleset form used to default every sport to the same score_type="points"/no-set/no-best-of
+// combination regardless of what kind of sport it was for, so a badminton or table tennis ruleset
+// (best-of-N sets) needed the same manual field-by-field setup as a football one (single-goal
+// count). Suggests sane starting values from the sport's own `sport_type` instead - still fully
+// editable, none of this is enforced.
+const RULESET_PRESET_BY_SPORT_TYPE: Record<
+  string,
+  { scoreType: string; setBased: boolean; bestOf: number | ''; allowDraw: boolean }
+> = {
+  court: { scoreType: 'sets', setBased: true, bestOf: 3, allowDraw: false },
+  table: { scoreType: 'sets', setBased: true, bestOf: 3, allowDraw: false },
+  field: { scoreType: 'goals', setBased: false, bestOf: '', allowDraw: true },
+  board: { scoreType: 'result', setBased: false, bestOf: '', allowDraw: true },
+  esport: { scoreType: 'points', setBased: false, bestOf: '', allowDraw: false },
+  track: { scoreType: 'time', setBased: false, bestOf: '', allowDraw: false },
+  other: { scoreType: 'points', setBased: false, bestOf: '', allowDraw: false },
+}
+const getRulesetPreset = (sportType: string) =>
+  RULESET_PRESET_BY_SPORT_TYPE[sportType] ?? RULESET_PRESET_BY_SPORT_TYPE.other
+
 const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
   const [sports, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -792,27 +813,48 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
                 <Field label="Ruleset name" className="sm:col-span-2">
                   <Input name="name" required placeholder={`${sport.name} Standard`} />
                 </Field>
-                <Field label="Score type">
-                  <Select name="scoreType" defaultValue="points">
-                    <option value="points">Points</option>
-                    <option value="goals">Goals</option>
-                    <option value="sets">Sets</option>
-                    <option value="time">Time</option>
-                    <option value="result">Result</option>
-                    <option value="custom">Custom</option>
-                  </Select>
-                </Field>
-                <Field label="Best of">
-                  <Input name="bestOf" type="number" min="1" />
-                </Field>
-                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <input name="setBased" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
-                  Set based
-                </label>
-                <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                  <input name="allowDraw" type="checkbox" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
-                  Allow draw
-                </label>
+                {(() => {
+                  const preset = getRulesetPreset(String(sport.sport_type))
+                  return (
+                    <>
+                      <Field label="Score type">
+                        <Select name="scoreType" defaultValue={preset.scoreType}>
+                          <option value="points">Points</option>
+                          <option value="goals">Goals</option>
+                          <option value="sets">Sets</option>
+                          <option value="time">Time</option>
+                          <option value="result">Result</option>
+                          <option value="custom">Custom</option>
+                        </Select>
+                      </Field>
+                      <Field label="Best of">
+                        <Input name="bestOf" type="number" min="1" defaultValue={preset.bestOf} />
+                      </Field>
+                      <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                        <input
+                          name="setBased"
+                          type="checkbox"
+                          defaultChecked={preset.setBased}
+                          className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                        />
+                        Set based
+                      </label>
+                      <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                        <input
+                          name="allowDraw"
+                          type="checkbox"
+                          defaultChecked={preset.allowDraw}
+                          className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                        />
+                        Allow draw
+                      </label>
+                      <p className="text-xs text-ink-soft sm:col-span-2">
+                        Pre-filled for a &ldquo;{String(sport.sport_type)}&rdquo; sport - change
+                        anything before saving.
+                      </p>
+                    </>
+                  )
+                })()}
                 <div className="sm:col-span-2">
                   <SubmitButton variant="secondary">
                     Add ruleset
