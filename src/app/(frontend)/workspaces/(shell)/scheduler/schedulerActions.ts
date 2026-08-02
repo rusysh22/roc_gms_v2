@@ -93,7 +93,10 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   // status back to scheduled here is what actually resolves the postponement, not just filling in
   // a date field while the badge keeps reading "Postponed."
   const isRecoveringFromPostponed = match.status === 'postponed'
-  await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId), ...(isRecoveringFromPostponed ? { status: 'scheduled' as const } : {}) } })
+  // AUDIT_UI_UX_CSS: enforceMatchMutationCapabilities (src/access/roles.ts) needs req.user to
+  // check the scheduleMatch capability - without `user` here, every reschedule (not just the
+  // postponed-recovery path) threw Forbidden unconditionally, for every role.
+  await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId), ...(isRecoveringFromPostponed ? { status: 'scheduled' as const } : {}) }, user })
   await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { status: isRecoveringFromPostponed ? 'scheduled' : match.status, scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleRescheduled=1`)
 }

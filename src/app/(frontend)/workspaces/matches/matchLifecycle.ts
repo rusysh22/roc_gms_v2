@@ -12,12 +12,26 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
   { from: ['paused'], to: 'ongoing', label: 'Resume Match' },
   { from: ['ongoing'], to: 'finished', label: 'Finish Match' },
   {
-    from: ['finished'],
+    from: ['finished', 'under_review'],
     to: 'result_published',
     label: 'Confirm and Publish Result',
     requiresConfirm: true,
     requiresWinnerSelection: true,
   },
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.3/15.7 (P1): `under_review` and `disputed` were
+  // enum values on the Matches collection with zero transitions in or out anywhere in this state
+  // machine - a match could never actually reach either status through the app. This wires up the
+  // lifecycle the audit itself describes: Finished -> Under review -> Result published, with
+  // Disputed as a side branch reachable from either Finished or Under review and resolvable back
+  // into Under review once addressed.
+  { from: ['finished'], to: 'under_review', label: 'Send for Review' },
+  {
+    from: ['finished', 'under_review'],
+    to: 'disputed',
+    label: 'Mark Disputed',
+    requiresConfirm: true,
+  },
+  { from: ['disputed'], to: 'under_review', label: 'Resume Review' },
   {
     from: ['scheduled', 'published'],
     to: 'postponed',

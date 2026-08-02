@@ -294,10 +294,18 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     winner_entry_id: match.winner_entry_id ?? null,
   }
 
+  // AUDIT_UI_UX_CSS: enforceMatchMutationCapabilities (src/access/roles.ts) reads req.user to
+  // decide whether this status change is allowed on an already-locked match - Payload's Local API
+  // does not otherwise know who's calling, so omitting `user` here made every transition off a
+  // finished/result_published/walkover/disputed match throw Forbidden unconditionally, for every
+  // role including super_admin. This was the actual reason "Confirm and Publish Result" never
+  // worked, discovered while adding the dispute-workflow transitions (which hit the exact same
+  // path from a different angle).
   await payload.update({
     collection: 'matches',
     id: match.id,
     data: updateData,
+    user,
   })
 
   const actorUserId = user.id
@@ -416,10 +424,14 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     notes: notes || null,
   }
 
+  // Same enforceMatchSetMutationCapabilities/req.user gap as transitionMatchStatusAction above -
+  // without `user`, this would throw Forbidden even for the already-verified event_admin/
+  // super_admin revision path checked at canReviseFinishedScore just above.
   await payload.update({
     collection: 'match-sets',
     id: matchSetId,
     data: afterSnapshot,
+    user,
   })
 
   const actorUserId = user.id
@@ -487,6 +499,9 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     redirect(`${returnTo}?matchError=best_of_decided`)
   }
 
+  // enforceMatchSetMutationCapabilities runs on create too (no operation guard, unlike the
+  // matches-collection hook) - without `user`, adding a set on an already-locked match would
+  // throw Forbidden even for an admin, same root cause as the two fixes above.
   const createdSet = await payload.create({
     collection: 'match-sets',
     data: {
@@ -496,6 +511,7 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
       participant_a_score: 0,
       participant_b_score: 0,
     },
+    user,
   })
 
   const actorUserId = user.id
@@ -555,6 +571,7 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
     collection: 'matches',
     id: match.id,
     data: { officer_ids: officerIds.map(Number) },
+    user,
   })
 
   await recordAuditLog({
