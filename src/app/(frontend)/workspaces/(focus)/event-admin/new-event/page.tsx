@@ -31,7 +31,7 @@ import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '
 import { FocusHeader } from '../../FocusHeader'
 import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
-import { createEventAction } from './eventActions'
+import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { addRulesetAction, addSportAction } from './sportActions'
 import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
@@ -92,6 +92,7 @@ const errorMessages: Record<string, string> = {
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
   unsupported_format:
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
+  invalid_publish_option: 'Choose one of the three publish options.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 7") that works on its
@@ -376,9 +377,12 @@ export default async function NewEventWizardPage({
               payload={payload}
               eventId={eventId}
               eventSlug={String(event.slug || '')}
+              eventStatus={String(event.status || 'draft')}
+              eventVisibility={String(event.visibility || 'hidden')}
               categoryId={get(params, 'categoryId')}
               generated={get(params, 'wizardGenerated')}
               failed={get(params, 'wizardGenerateFailed')}
+              published={get(params, 'wizardPublished')}
             />
           ) : null}
         </div>
@@ -2072,16 +2076,22 @@ const BracketStep = async ({
   payload,
   eventId,
   eventSlug,
+  eventStatus,
+  eventVisibility,
   categoryId,
   generated,
   failed,
+  published,
 }: {
   payload: Payload
   eventId: string
   eventSlug: string
+  eventStatus: string
+  eventVisibility: string
   categoryId: string
   generated: string
   failed: string
+  published: string
 }) => {
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 14: this step used to dead-end on "Generate matches for
   // a category first" whenever the URL had no `categoryId`, even if the event already had several
@@ -2208,10 +2218,78 @@ const BracketStep = async ({
         <Button asChild variant="secondary">
           <Link href="/workspaces/brackets">Go to Brackets Workspace</Link>
         </Button>
-        <Button asChild>
-          <Link href={`/events/${eventSlug}`}>Finish Setup &amp; View Event Page</Link>
-        </Button>
       </StepActions>
+
+      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 9: "Publish harus memberi tiga opsi yang mudah
+          dipahami: Simpan sebagai draft; Publish informasi event saja; Publish event dan schedule."
+          Previously the wizard's last action was a single "Finish Setup & View Event Page" link
+          that never actually changed status/visibility at all - every event silently stayed
+          status=draft/visibility=hidden (its create-time default) unless the admin separately found
+          the Event Details workspace page. Three explicit choices instead of one implicit no-op. */}
+      <Card className="flex flex-col gap-4">
+        <div>
+          <CardTitle>9. Publish</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            Choose what visitors can see right now. You can change this anytime from Event Details.
+          </p>
+        </div>
+        {published === 'draft' ? (
+          <AlertBanner tone="info">Saved as draft. Nothing is visible to visitors yet.</AlertBanner>
+        ) : null}
+        <p className="text-xs font-semibold text-ink-soft">
+          Current status: <span className="text-ink">{eventStatus.replaceAll('_', ' ')}</span>
+          {' · '}Visibility: <span className="text-ink">{eventVisibility.replaceAll('_', ' ')}</span>
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <form
+            action={publishEventAction}
+            className="flex flex-col gap-2 rounded-card border border-line bg-paper p-4"
+          >
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="publishOption" value="draft" />
+            <strong className="text-sm font-bold text-ink">Keep as draft</strong>
+            <p className="flex-1 text-xs text-ink-soft">
+              Nothing is visible publicly. Come back and publish whenever you&apos;re ready.
+            </p>
+            <SubmitButton variant="secondary" size="sm">
+              Save as draft
+            </SubmitButton>
+          </form>
+          <form
+            action={publishEventAction}
+            className="flex flex-col gap-2 rounded-card border border-line bg-paper p-4"
+          >
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="publishOption" value="info" />
+            <strong className="text-sm font-bold text-ink">Publish event info only</strong>
+            <p className="flex-1 text-xs text-ink-soft">
+              The public page goes live as &ldquo;Coming Soon&rdquo; - visitors see the event
+              details, not results.
+            </p>
+            <SubmitButton variant="secondary" size="sm">
+              Publish info
+            </SubmitButton>
+          </form>
+          <form
+            action={publishEventAction}
+            className="flex flex-col gap-2 rounded-card border border-line bg-paper p-4"
+          >
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="publishOption" value="full" />
+            <strong className="text-sm font-bold text-ink">Publish event &amp; schedule</strong>
+            <p className="flex-1 text-xs text-ink-soft">
+              Everything goes live - schedule, standings, and brackets become visible to visitors.
+            </p>
+            <SubmitButton size="sm">Publish everything</SubmitButton>
+          </form>
+        </div>
+        {/* No separate desktop/mobile preview frame - the public page is responsive by design
+            (same breakpoints used throughout this app), and staff already see a live "Admin
+            Preview" bar on it regardless of publish state (see events/[eventSlug]/page.tsx). */}
+        <Button asChild variant="ghost" size="sm" className="self-start">
+          <Link href={`/events/${eventSlug}`}>Preview event page (desktop &amp; mobile) →</Link>
+        </Button>
+      </Card>
     </>
   )
 }

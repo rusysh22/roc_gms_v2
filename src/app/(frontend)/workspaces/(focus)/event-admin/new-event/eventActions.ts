@@ -125,3 +125,57 @@ export async function createEventAction(formData: FormData): Promise<void> {
   revalidatePath('/workspaces/event-admin')
   redirect(`${wizardPage}?eventId=${created.id}&step=sports&wizardCreated=1`)
 }
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 9: the wizard's last step used to be a single "Finish
+// Setup & View Event Page" link that never actually changed the event's own status/visibility -
+// every event stayed status=draft/visibility=hidden (the create-time default) forever unless the
+// admin separately found the Event Details workspace page and changed it there themselves, with no
+// hint from the wizard that this step was still needed. Three explicit choices instead of one
+// implicit no-op, matching the doc's own "Simpan sebagai draft / Publish informasi event saja /
+// Publish event dan schedule" - each is a distinct (status, visibility) pair on the Events
+// collection, not a new concept of its own.
+const PUBLISH_OPTIONS = {
+  draft: { status: 'draft', visibility: 'hidden' },
+  info: { status: 'coming_soon', visibility: 'published' },
+  full: { status: 'live', visibility: 'published' },
+} as const
+
+export async function publishEventAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const option = text(formData, 'publishOption')
+  if (!eventId || !(option in PUBLISH_OPTIONS)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=bracket&wizardError=invalid_publish_option`)
+  }
+
+  const before = await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+  if (!before) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+
+  const data = PUBLISH_OPTIONS[option as keyof typeof PUBLISH_OPTIONS]
+  await payload.update({ collection: 'events', id: eventId, data })
+  await recordAuditLog({
+    payload,
+    action: 'event.publish',
+    entityType: 'events',
+    entityId: eventId,
+    before,
+    after: { ...before, ...data },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  revalidatePath('/workspaces/event-admin')
+  revalidatePath(`/events/${before!.slug}`)
+
+  const eventSlug = String(before!.slug)
+  if (option === 'draft') {
+    redirect(`${wizardPage}?eventId=${eventId}&step=bracket&wizardPublished=draft`)
+  }
+  redirect(`/events/${eventSlug}`)
+}
