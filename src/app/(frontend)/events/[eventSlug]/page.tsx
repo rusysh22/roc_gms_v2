@@ -220,12 +220,21 @@ export default async function EventHomePage({
   const sports = sportsResult.docs as SportDoc[]
   const sportsSummary = formatSportsSummary(sports.map((sport) => sport.name))
 
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 12: this query had no status filter at all, so a
+  // category still in `draft` (never confirmed ready by the event admin) rendered on the public
+  // event page right alongside published ones - the same open/locked/published allowlist
+  // src/app/(frontend)/sports/publicSportData.ts already uses for the sports/category browse page.
   const categoriesResult = sports.length
     ? await payload.find({
         collection: 'competition-categories',
         depth: 0,
         limit: 200,
-        where: { sport_id: { in: sports.map((sport) => sport.id) } },
+        where: {
+          and: [
+            { sport_id: { in: sports.map((sport) => sport.id) } },
+            { status: { in: ['open', 'locked', 'published'] } },
+          ],
+        },
       })
     : null
 
