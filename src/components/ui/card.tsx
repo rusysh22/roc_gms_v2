@@ -42,11 +42,17 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 )
 CardHeader.displayName = 'CardHeader'
 
-const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('font-sans text-base font-bold text-ink', className)} {...props} />
-  ),
-)
+// AUDIT_UI_UX_CSS A11Y-12: rendered as a plain <p>, so every Card's title was invisible to
+// screen-reader users navigating by heading (H key) - not just "wrong level," but no heading at
+// all. Defaults to h2 (a Card is almost always a page-section-level block); pass `as="h3"` (or
+// deeper) for a Card genuinely nested inside another heading's section, since the right level is a
+// per-usage judgment call this shared primitive can't make for every caller.
+const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement> & { as?: 'h2' | 'h3' | 'h4' }
+>(({ className, as: Comp = 'h2', ...props }, ref) => (
+  <Comp ref={ref} className={cn('font-sans text-base font-bold text-ink', className)} {...props} />
+))
 CardTitle.displayName = 'CardTitle'
 
 const CardDescription = React.forwardRef<

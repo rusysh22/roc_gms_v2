@@ -76,7 +76,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
             <button
               type="button"
               aria-label="Open menu"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition-colors hover:bg-mist md:hidden"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-mist md:hidden"
             >
               <Menu className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -93,7 +93,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
                   <button
                     type="button"
                     aria-label="Close menu"
-                    className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition-colors hover:bg-mist"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-mist"
                   >
                     <X className="h-5 w-5" aria-hidden="true" />
                   </button>

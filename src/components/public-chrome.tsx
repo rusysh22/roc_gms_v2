@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ChevronDown, LogOut } from 'lucide-react'
 
 import { NavBar, type NavItem } from '@/components/nav-bar'
@@ -20,9 +20,14 @@ const EVENT_SLUG_PATTERN = /^\/events\/([^/]+)/
 // no session, so the current event slug is read straight off the URL and every non-Home link is
 // prefixed with it. Off an event page entirely, this is the marketing/company-profile site (the
 // SaaS "sales" homepage) instead, so it gets its own nav pointing at the marketing sections.
-// Articles+Announcements collapse into one "Updates" destination, and Schedule/Standings/Champions
-// collapse into "Schedule" (which shows all three as tabs) - Brackets is dropped from top-level
-// nav entirely (still reachable from a category's own page) to keep the bar short.
+// Articles+Announcements collapse into one "Updates" destination, and Champions collapses into
+// Schedule's own tabs - Brackets is dropped from top-level nav entirely (still reachable from a
+// category's own page, since there's no single event-wide bracket) to keep the bar short.
+//
+// AUDIT_UI_UX_CSS PUB-06: Standings used to be reachable only as a tab buried inside Schedule -
+// legible once you're already on that page, invisible from anywhere else. It's a single
+// well-defined destination (unlike Bracket, which is genuinely per-category), so it earns its own
+// top-level entry.
 const buildNavItems = (eventSlug: string | null): NavItem[] => {
   if (!eventSlug) {
     return [
@@ -38,6 +43,7 @@ const buildNavItems = (eventSlug: string | null): NavItem[] => {
     { label: 'Sports', href: `${base}/sports` },
     { label: 'Updates', href: `${base}/updates` },
     { label: 'Schedule', href: `${base}/schedule` },
+    { label: 'Standings', href: `${base}/schedule?tab=standings` },
   ]
 }
 
@@ -118,13 +124,28 @@ export interface PublicChromeProps {
 
 export function PublicChrome({ brand, user, children }: PublicChromeProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const showChrome = !CHROME_EXCLUDED_PREFIXES.some((prefix) => pathname?.startsWith(prefix))
   const eventSlug = pathname?.match(EVENT_SLUG_PATTERN)?.[1] || null
   const navItems = buildNavItems(eventSlug)
   const homeHref = navItems[0].href
-  const activeHref =
-    pathname === homeHref ? homeHref
-    : navItems.find((item) => item.href !== homeHref && pathname?.startsWith(item.href))?.href
+  // Schedule and Standings share a pathname (Standings is a `?tab=` query variant of the same
+  // page), so pathname alone can't tell them apart. Two passes: first try to find a `?tab=`-
+  // specific item whose tab actually matches the current URL (Standings); only fall back to a
+  // plain pathname-only match (Schedule, Sports, Updates - which also happens to use its own
+  // unrelated `?tab=` query, correctly ignored here since it has no `?` in its *nav* href) if
+  // nothing tab-specific matched.
+  const currentTab = searchParams?.get('tab')
+  const tabSpecificMatch = navItems.find(
+    (item) =>
+      item.href.includes('?') &&
+      pathname?.startsWith(item.href.split('?')[0]) &&
+      new URLSearchParams(item.href.split('?')[1]).get('tab') === currentTab,
+  )
+  const plainMatch = navItems.find(
+    (item) => item.href !== homeHref && !item.href.includes('?') && pathname?.startsWith(item.href),
+  )
+  const activeHref = pathname === homeHref ? homeHref : (tabSpecificMatch ?? plainMatch)?.href
 
   if (!showChrome) {
     return <>{children}</>
