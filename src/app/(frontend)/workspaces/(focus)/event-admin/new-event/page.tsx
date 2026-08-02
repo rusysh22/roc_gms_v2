@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
+import type { Where } from 'payload'
 import { Check } from 'lucide-react'
 
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
@@ -13,6 +14,7 @@ import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { SelectAllCheckbox } from '@/components/ui/select-all-checkbox'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -39,7 +41,7 @@ import {
   importParticipantsAction,
 } from './participantActions'
 import {
-  addEntryAction,
+  addEntriesAction,
   saveSeedOrderAction,
   shuffleSeedsAction,
   withdrawEntryAction,
@@ -346,7 +348,13 @@ export default async function NewEventWizardPage({
             />
           ) : null}
           {step === 'entries' && event ? (
-            <EntriesStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
+            <EntriesStep
+              payload={payload}
+              eventId={eventId}
+              categoryId={get(params, 'categoryId')}
+              sourceSearch={get(params, 'sourceSearch')}
+              sourceClub={get(params, 'sourceClub')}
+            />
           ) : null}
           {step === 'generate' && event ? <GenerateStep payload={payload} eventId={eventId} /> : null}
           {step === 'bracket' && event ? (
@@ -1221,10 +1229,14 @@ const EntriesStep = async ({
   payload,
   eventId,
   categoryId,
+  sourceSearch,
+  sourceClub,
 }: {
   payload: Payload
   eventId: string
   categoryId: string
+  sourceSearch?: string
+  sourceClub?: string
 }) => {
   const categories = await payload.find({
     collection: 'competition-categories',
@@ -1276,10 +1288,20 @@ const EntriesStep = async ({
   }
 
   const collection = ParticipantModeToCollection[String(selectedCategory.participant_mode)] || 'players'
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 6: a 80-player event made this an unfiltered scroll of
+  // "Add as entry" rows one click at a time. Search matches the source's own name; club filter only
+  // applies to teams/players (a club-mode category's "sources" are clubs themselves).
+  const sourceWhere: Where[] = [{ event_id: { equals: eventId } }]
+  if (sourceSearch) {
+    sourceWhere.push({ name: { contains: sourceSearch } })
+  }
+  if (sourceClub && collection !== 'clubs') {
+    sourceWhere.push({ club_id: { equals: sourceClub } })
+  }
   // depth: 1 on sourceDocs populates each team/player's own club_id. depth: 2 on entries reaches
   // one level further (entry -> team/player -> club) so both lists can show a club caption.
-  const [sourceDocs, entries] = await Promise.all([
-    payload.find({ collection, depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+  const [sourceDocs, entries, clubOptionsResult] = await Promise.all([
+    payload.find({ collection, depth: 1, limit: 300, where: { and: sourceWhere }, sort: 'name' }),
     payload.find({
       collection: 'competition-entries',
       depth: 2,
@@ -1292,7 +1314,17 @@ const EntriesStep = async ({
       },
       sort: 'seed_number',
     }),
+    collection === 'clubs'
+      ? Promise.resolve(null)
+      : payload.find({
+          collection: 'clubs',
+          depth: 0,
+          limit: 300,
+          where: { event_id: { equals: eventId } },
+          sort: 'name',
+        }),
   ])
+  const clubFilterOptions = clubOptionsResult?.docs ?? []
 
   const enteredSourceIds = new Set(
     entries.docs.map((entry) =>
@@ -1350,15 +1382,18 @@ const EntriesStep = async ({
         </form>
       </Card>
 
-      <Card className="flex flex-col gap-2">
-        <CardTitle>
-          Add {collectionLabel} as entries into {getRelationshipLabel(selectedCategory as RelationshipDoc)}
-        </CardTitle>
-        <p className="text-xs text-ink-soft">
-          This category&apos;s participant mode ({String(selectedCategory.participant_mode)}) only
-          accepts {collectionLabel} as entries.
-        </p>
-        {sourceDocs.totalDocs === 0 ? (
+      <Card className="flex flex-col gap-3">
+        <div>
+          <CardTitle>
+            Add {collectionLabel} as entries into {getRelationshipLabel(selectedCategory as RelationshipDoc)}
+          </CardTitle>
+          <p className="mt-1 text-xs text-ink-soft">
+            This category&apos;s participant mode ({String(selectedCategory.participant_mode)}) only
+            accepts {collectionLabel} as entries.
+          </p>
+        </div>
+
+        {sourceDocs.totalDocs === 0 && !sourceSearch && !sourceClub ? (
           <EmptyState>
             No {collectionLabel} exist for this event yet.{' '}
             <Link
@@ -1369,34 +1404,95 @@ const EntriesStep = async ({
             </Link>{' '}
             to add some, then come back here.
           </EmptyState>
-        ) : availableSources.length === 0 ? (
-          <EmptyState>All {collectionLabel} in this event are already entered here.</EmptyState>
         ) : (
-          <div className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
-            {availableSources.map((source) => {
-              const clubLabel = getSourceClubLabel(source)
-              return (
-                <form
-                  action={addEntryAction}
-                  key={source.id}
-                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
-                >
-                  <input type="hidden" name="eventId" value={eventId} />
-                  <input type="hidden" name="categoryId" value={selectedCategoryId} />
-                  <input type="hidden" name="sourceId" value={source.id} />
-                  <div className="min-w-0">
-                    <strong className="block truncate text-sm font-bold text-ink">{source.name}</strong>
-                    {clubLabel ? (
-                      <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
-                    ) : null}
-                  </div>
-                  <SubmitButton size="sm" variant="secondary">
-                    Add as entry
-                  </SubmitButton>
-                </form>
-              )
-            })}
-          </div>
+          <>
+            {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 6: search/club filter, both server-side (GET
+                query params) so the filtered list is what actually gets bulk-added below - no
+                client-side re-filtering to keep in sync with the checkbox form. */}
+            <form
+              className="flex flex-wrap items-end gap-3 border-b border-line pb-3"
+              method="get"
+              action="/workspaces/event-admin/new-event"
+            >
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="step" value="entries" />
+              <input type="hidden" name="categoryId" value={selectedCategoryId} />
+              <Field label="Search by name" className="min-w-[180px] flex-1">
+                <Input name="sourceSearch" defaultValue={sourceSearch || ''} placeholder={`Search ${collectionLabel}...`} />
+              </Field>
+              {clubFilterOptions.length > 0 ? (
+                <Field label="Club" className="min-w-[160px]">
+                  <Select name="sourceClub" defaultValue={sourceClub || ''}>
+                    <option value="">All clubs</option>
+                    {clubFilterOptions.map((club) => (
+                      <option key={club.id} value={String(club.id)}>
+                        {String(club.name)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : null}
+              <Button type="submit" variant="secondary" size="sm">
+                Filter
+              </Button>
+              {sourceSearch || sourceClub ? (
+                <Button asChild variant="ghost" size="sm">
+                  <Link
+                    href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries&categoryId=${selectedCategoryId}`}
+                  >
+                    Clear
+                  </Link>
+                </Button>
+              ) : null}
+            </form>
+
+            {availableSources.length === 0 ? (
+              <EmptyState>
+                {sourceSearch || sourceClub
+                  ? 'No match for this filter.'
+                  : `All ${collectionLabel} in this event are already entered here.`}
+              </EmptyState>
+            ) : (
+              <form action={addEntriesAction} className="flex flex-col gap-3">
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                <label className="flex items-center gap-2 text-xs font-bold text-ink-soft">
+                  <SelectAllCheckbox
+                    targetName="sourceIds"
+                    className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                  />
+                  Select all {availableSources.length} shown
+                </label>
+                <div className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
+                  {availableSources.map((source) => {
+                    const clubLabel = getSourceClubLabel(source)
+                    return (
+                      <label
+                        key={source.id}
+                        className="flex cursor-pointer items-center gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
+                      >
+                        <input
+                          type="checkbox"
+                          name="sourceIds"
+                          value={String(source.id)}
+                          className="h-4 w-4 shrink-0 rounded border-line text-green focus:ring-green/40"
+                        />
+                        <div className="min-w-0">
+                          <strong className="block truncate text-sm font-bold text-ink">{source.name}</strong>
+                          {clubLabel ? (
+                            <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
+                          ) : null}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div>
+                  <SubmitButton size="sm">Add selected as entries</SubmitButton>
+                </div>
+              </form>
+            )}
+          </>
         )}
       </Card>
 

@@ -21,7 +21,10 @@ const entryTypeByMode = (mode: string) =>
   : mode === 'individual' ? 'individual'
   : 'open'
 
-export async function addEntryAction(formData: FormData): Promise<void> {
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 6: registering entries one row-click at a time doesn't
+// scale to a 80-player roster - accepts one or many source ids in a single submit (the checkbox
+// list in EntriesStep always posts through this, whether one box is checked or fifty).
+export async function addEntriesAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
@@ -29,14 +32,16 @@ export async function addEntryAction(formData: FormData): Promise<void> {
 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
-  const sourceId = text(formData, 'sourceId')
+  const sourceIds = formData.getAll('sourceIds').map(String).filter(Boolean)
 
   const event = await getWizardEvent(payload, eventId)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
-  if (!categoryId || !sourceId) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=invalid_entry`)
+  if (!categoryId || sourceIds.length === 0) {
+    redirect(
+      `${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_entry`,
+    )
   }
 
   const category = await payload
@@ -50,55 +55,66 @@ export async function addEntryAction(formData: FormData): Promise<void> {
   const collection = sourceCollectionByMode(mode)
   const entryType = entryTypeByMode(mode)
 
-  const source = await payload.findByID({ collection, id: sourceId, depth: 0 }).catch(() => null)
-  if (!source || String(source.event_id) !== String(eventId)) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=invalid_relationship`)
-  }
-
   const existing = await payload.find({
     collection: 'competition-entries',
     depth: 0,
     limit: 500,
     where: { category_id: { equals: categoryId } },
   })
-  const alreadyEntered = existing.docs.some((entry) => {
-    const linkedId =
-      collection === 'teams' ? entry.team_id
-      : collection === 'clubs' ? entry.club_id
-      : entry.player_id
-    return String(linkedId) === String(sourceId)
-  })
-  if (alreadyEntered) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=duplicate_entry`)
-  }
-
-  const nextSeed =
+  const enteredSourceIds = new Set(
+    existing.docs.map((entry) => {
+      const linkedId =
+        collection === 'teams' ? entry.team_id
+        : collection === 'clubs' ? entry.club_id
+        : entry.player_id
+      return String(linkedId)
+    }),
+  )
+  let nextSeed =
     existing.docs.reduce((max, entry) => Math.max(max, Number(entry.seed_number) || 0), 0) + 1
 
-  const data = {
-    event_id: Number(eventId),
-    category_id: Number(categoryId),
-    display_name: String(source.name),
-    entry_type: entryType,
-    status: 'confirmed' as const,
-    seed_number: nextSeed,
-    player_id: collection === 'players' ? Number(sourceId) : undefined,
-    team_id: collection === 'teams' ? Number(sourceId) : undefined,
-    club_id: collection === 'clubs' ? Number(sourceId) : undefined,
+  let addedCount = 0
+  for (const sourceId of sourceIds) {
+    // Silently skip already-entered/invalid sources instead of failing the whole batch - the
+    // checklist can't fully prevent a stale checkbox (another admin adding the same person in a
+    // race, or a duplicate row before the page refreshed) from being submitted alongside valid ones.
+    if (enteredSourceIds.has(sourceId)) {
+      continue
+    }
+    const source = await payload.findByID({ collection, id: sourceId, depth: 0 }).catch(() => null)
+    if (!source || String(source.event_id) !== String(eventId)) {
+      continue
+    }
+
+    const data = {
+      event_id: Number(eventId),
+      category_id: Number(categoryId),
+      display_name: String(source.name),
+      entry_type: entryType,
+      status: 'confirmed' as const,
+      seed_number: nextSeed,
+      player_id: collection === 'players' ? Number(sourceId) : undefined,
+      team_id: collection === 'teams' ? Number(sourceId) : undefined,
+      club_id: collection === 'clubs' ? Number(sourceId) : undefined,
+    }
+    const created = await payload.create({ collection: 'competition-entries', data })
+    await recordAuditLog({
+      payload,
+      action: 'competition_entry.create',
+      entityType: 'competition-entries',
+      entityId: created.id,
+      before: null,
+      after: data,
+      actorUserId: user.id,
+    })
+    enteredSourceIds.add(sourceId)
+    nextSeed += 1
+    addedCount += 1
   }
-  const created = await payload.create({ collection: 'competition-entries', data })
-  await recordAuditLog({
-    payload,
-    action: 'competition_entry.create',
-    entityType: 'competition-entries',
-    entityId: created.id,
-    before: null,
-    after: data,
-    actorUserId: user.id,
-  })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardUpdated=1`)
+  const suffix = addedCount === 0 ? '&wizardError=duplicate_entry' : `&wizardUpdated=1&wizardBulkAdded=${addedCount}`
+  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}${suffix}`)
 }
 
 export async function shuffleSeedsAction(formData: FormData): Promise<void> {
