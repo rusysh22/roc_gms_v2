@@ -14,7 +14,15 @@ const text = (data: FormData, key: string) => {
   return typeof value === 'string' ? value.trim() : ''
 }
 const scheduleReturn = '/workspaces/scheduler'
+// Only the statuses a NEW match can be manually created with (AddMatchDialog's Status <select>
+// never offers "postponed" as a starting state - creating a match that starts postponed makes no
+// sense).
 const scheduleStates = new Set(['draft', 'ready_for_scheduling', 'scheduled'])
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.4: which EXISTING match statuses can be
+// rescheduled - separate from `scheduleStates` above because this is a different question
+// (can this match's time move?) that happens to include one more status (postponed) than
+// (what status can a brand-new match start in?).
+const reschedulableFromStates = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'postponed'])
 
 const dateValue = (value: string) => {
   const time = new Date(value).getTime()
@@ -73,14 +81,19 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   if (!matchNumber || !reason || !start || !end || new Date(end) <= new Date(start) || !venueId || !courtId) redirect(`${scheduleReturn}?scheduleError=invalid_reschedule`)
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: scheduleReturn })
   const result = await payload.find({ collection: 'matches', depth: 2, limit: 1, where: { match_number: { equals: matchNumber } } }); const match = result.docs[0] as WorkspaceMatch | undefined
-  if (!match || !scheduleStates.has(match.status)) redirect(`${scheduleReturn}?scheduleError=reschedule_not_allowed`)
+  if (!match || !reschedulableFromStates.has(match.status)) redirect(`${scheduleReturn}?scheduleError=reschedule_not_allowed`)
   const court = await payload.findByID({ collection: 'courts', id: courtId, depth: 0 }) as { venue_id?: string | number }
   if (String(court.venue_id) !== venueId) redirect(`${scheduleReturn}?scheduleError=invalid_relationship`)
   const all = await payload.find({ collection: 'matches', depth: 2, limit: 500 })
   const candidate = { ...match, id: 'candidate', scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId }
   if (detectScheduleConflicts([...all.docs.filter((item) => item.id !== match.id) as WorkspaceMatch[], candidate]).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
-  const before = { scheduled_start_at: match.scheduled_start_at || null, scheduled_end_at: match.scheduled_end_at || null, venue_id: match.venue_id || null, court_id: match.court_id || null }
-  await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId) } })
-  await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
+  const before = { status: match.status, scheduled_start_at: match.scheduled_start_at || null, scheduled_end_at: match.scheduled_end_at || null, venue_id: match.venue_id || null, court_id: match.court_id || null }
+  // A postponed match confirmed onto a new time is "Rescheduled - new time confirmed," not still
+  // "Postponed - new time pending" (section 15.4's explicit public-page distinction) - flipping
+  // status back to scheduled here is what actually resolves the postponement, not just filling in
+  // a date field while the badge keeps reading "Postponed."
+  const isRecoveringFromPostponed = match.status === 'postponed'
+  await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId), ...(isRecoveringFromPostponed ? { status: 'scheduled' as const } : {}) } })
+  await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { status: isRecoveringFromPostponed ? 'scheduled' : match.status, scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleRescheduled=1`)
 }

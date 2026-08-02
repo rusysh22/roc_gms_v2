@@ -33,7 +33,10 @@ import { ConflictWarning, detectScheduleConflicts } from './conflicts'
 
 export const dynamic = 'force-dynamic'
 
-const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled'])
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.4: postponed was previously a dead end -
+// RescheduleMatchDialog couldn't reach a postponed match at all, so "postpone" had no guided way
+// back to a real schedule. Included here alongside the original three statuses.
+const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'postponed'])
 
 const scheduleErrorMessages: Record<string, string> = {
   invalid_match: 'Fill in every field with valid values before creating the match.',

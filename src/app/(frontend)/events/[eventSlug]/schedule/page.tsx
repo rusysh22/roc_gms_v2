@@ -36,6 +36,7 @@ type ScheduleMatch = {
   round_name?: string | null
   scheduled_start_at?: string | null
   status: string
+  score_summary?: string | null
   sport_id?: SportDoc | string | number | null
   category_id?: CategoryDoc | string | number | null
   participant_a_entry_id?: RelationshipDoc | string | number | null
@@ -353,9 +354,26 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                     </p>
                                   </div>
                                   <div className="flex flex-col items-start gap-2 sm:items-end">
-                                    <StatusBadge tone={getMatchStatusTone(match.status)}>
-                                      {formatStatus(match.status)}
-                                    </StatusBadge>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <StatusBadge tone={getMatchStatusTone(match.status)}>
+                                        {formatStatus(match.status)}
+                                      </StatusBadge>
+                                      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.6: the
+                                          schedule list previously required opening match detail
+                                          to see who won or what the score was - now shown inline
+                                          for any match that already has one, "Provisional" for a
+                                          finished-but-not-yet-official result. */}
+                                      {match.score_summary ? (
+                                        <span className="text-sm font-bold tabular-nums text-ink">
+                                          {match.score_summary}
+                                          {match.status === 'finished' ? (
+                                            <span className="ml-1 text-xs font-semibold text-ink-soft">
+                                              (Provisional)
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
                                       <span className="inline-flex items-center gap-1">
                                         <Clock className="h-3.5 w-3.5" aria-hidden="true" />
