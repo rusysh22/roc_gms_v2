@@ -33,7 +33,7 @@ export async function addClubAction(formData: FormData): Promise<void> {
     collection: 'clubs',
     depth: 0,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=duplicate_slug`)
@@ -96,7 +96,7 @@ export async function addTeamAction(formData: FormData): Promise<void> {
     collection: 'teams',
     depth: 0,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=duplicate_slug`)
@@ -196,7 +196,7 @@ export async function importParticipantsAction(formData: FormData): Promise<void
         collection: 'clubs',
         depth: 0,
         limit: 1,
-        where: { slug: { equals: slug } },
+        where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
       })
       if (duplicate.docs.length > 0) {
         skip('Clubs', row.name, 'A club with this name already exists')
@@ -228,7 +228,7 @@ export async function importParticipantsAction(formData: FormData): Promise<void
         collection: 'teams',
         depth: 0,
         limit: 1,
-        where: { slug: { equals: slug } },
+        where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
       })
       if (duplicate.docs.length > 0) {
         skip('Teams', row.name, 'A team with this name already exists')

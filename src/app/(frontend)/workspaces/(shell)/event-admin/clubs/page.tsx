@@ -73,9 +73,16 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
       <Field label="Name" className="sm:col-span-2">
         <Input name="name" required defaultValue={editing?.name || ''} />
       </Field>
-      <Field label="Slug (advanced)">
-        <Input name="slug" defaultValue={editing?.slug || ''} placeholder="generated-from-name" />
-      </Field>
+      <details>
+        <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+          Advanced: custom URL slug
+        </summary>
+        <div className="mt-2">
+          <Field label="Slug">
+            <Input name="slug" defaultValue={editing?.slug || ''} placeholder="generated-from-name" />
+          </Field>
+        </div>
+      </details>
       <Field label="Logo URL">
         <Input name="logo" type="url" defaultValue={editing?.logo || ''} />
       </Field>

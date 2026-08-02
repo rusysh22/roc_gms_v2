@@ -16,6 +16,10 @@ export const Rulesets: CollectionConfig = {
     read: publicReadScopedToEvent(),
     update: canManageEventStructure,
   },
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 9: slug uniqueness must be scoped per
+  // event, not global, so two different events can each define their own ruleset
+  // slugs without colliding at the DB level.
+  indexes: [{ fields: ['event_id', 'slug'], unique: true }],
   fields: [
     {
       name: 'event_id',
@@ -40,8 +44,6 @@ export const Rulesets: CollectionConfig = {
       name: 'slug',
       type: 'text',
       required: true,
-      unique: true,
-      index: true,
     },
     {
       name: 'description',

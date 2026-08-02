@@ -18,7 +18,7 @@ export async function saveClubAction(formData: FormData): Promise<void> {
   const id = text(formData, 'id'); const name = text(formData, 'name'); const requestedSlug = text(formData, 'slug'); const email = text(formData, 'contactEmail')
   const slug = slugify(requestedSlug || name)
   if (!event || !name || !slug || !emailIsValid(email)) redirect(`${page}?clubError=invalid_input`)
-  const duplicate = await payload.find({ collection: 'clubs', depth: 0, limit: 10, where: { slug: { equals: slug } } })
+  const duplicate = await payload.find({ collection: 'clubs', depth: 0, limit: 10, where: { and: [{ slug: { equals: slug } }, { event_id: { equals: event.id } }] } })
   if (duplicate.docs.some((club) => String(club.id) !== id)) redirect(`${page}?clubError=duplicate_slug`)
   const data = { event_id: event.id, name, slug, logo: text(formData, 'logo') || undefined, description: text(formData, 'description') || undefined, contact_person: text(formData, 'contactPerson') || undefined, contact_email: email || undefined }
   if (id) {

@@ -136,9 +136,16 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
       <Field label="Name">
         <Input name="name" required defaultValue={team?.name || ''} />
       </Field>
-      <Field label="Slug">
-        <Input name="slug" defaultValue={team?.slug || ''} />
-      </Field>
+      <details>
+        <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+          Advanced: custom URL slug
+        </summary>
+        <div className="mt-2">
+          <Field label="Slug">
+            <Input name="slug" defaultValue={team?.slug || ''} placeholder="generated-from-name" />
+          </Field>
+        </div>
+      </details>
       <ChoiceField name="clubId" label="Club" options={toOptions(clubs.docs)} value={idOf(team?.club_id)} />
       <ChoiceField
         name="captainId"

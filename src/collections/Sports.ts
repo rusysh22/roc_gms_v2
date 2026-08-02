@@ -16,6 +16,10 @@ export const Sports: CollectionConfig = {
     read: publicReadScopedToEvent(),
     update: canManageEventStructure,
   },
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 9: slug uniqueness must be scoped per
+  // event, not global, so two different events can each have their own "badminton"
+  // sport without colliding at the DB level.
+  indexes: [{ fields: ['event_id', 'slug'], unique: true }],
   fields: [
     {
       name: 'event_id',
@@ -33,8 +37,6 @@ export const Sports: CollectionConfig = {
       name: 'slug',
       type: 'text',
       required: true,
-      unique: true,
-      index: true,
     },
     {
       name: 'description',

@@ -626,9 +626,16 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
           <Field label="Sport name">
             <Input name="name" required placeholder="Badminton" />
           </Field>
-          <Field label="Slug (advanced)">
-            <Input name="slug" />
-          </Field>
+          <details>
+            <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+              Advanced: custom URL slug
+            </summary>
+            <div className="mt-2">
+              <Field label="Slug">
+                <Input name="slug" placeholder="generated-from-name" />
+              </Field>
+            </div>
+          </details>
           <Field label="Sport type" className="sm:col-span-2">
             <Select name="sportType" defaultValue="court">
               <option value="court">Court</option>
@@ -745,9 +752,16 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
             <Field label="Category name">
               <Input name="name" required placeholder="Men's Singles" />
             </Field>
-            <Field label="Slug (advanced)">
-              <Input name="slug" />
-            </Field>
+            <details>
+              <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+                Advanced: custom URL slug
+              </summary>
+              <div className="mt-2">
+                <Field label="Slug">
+                  <Input name="slug" placeholder="generated-from-name" />
+                </Field>
+              </div>
+            </details>
             <Field label="Participant mode">
               <Select name="participantMode" defaultValue="team">
                 <option value="individual">Individual</option>
@@ -1118,7 +1132,34 @@ const EntriesStep = async ({
     where: { event_id: { equals: eventId } },
     sort: 'name',
   })
-  const selectedCategoryId = categoryId || String(categories.docs[0]?.id || '')
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 8: defaulting to "first category alphabetically" meant
+  // an admin landing on this step often saw a category that was already fully entered, with no
+  // signal that three other categories still had zero entries. Default to the first non-draft
+  // category with no entries yet instead - draft categories aren't ready to register anyone into,
+  // so they never grab default focus even if they sort first.
+  const categoryIds = categories.docs.map((cat) => String(cat.id))
+  const entryCountsResult = categoryId
+    ? null // an explicit categoryId was requested - no need to compute a default
+    : categoryIds.length
+      ? await payload.find({
+          collection: 'competition-entries',
+          depth: 0,
+          limit: 2000,
+          where: { category_id: { in: categoryIds } },
+        })
+      : null
+  const entryCountByCategory = new Map<string, number>()
+  for (const entry of entryCountsResult?.docs ?? []) {
+    const catId = String(getRelationshipId(entry.category_id as RelationshipDoc))
+    entryCountByCategory.set(catId, (entryCountByCategory.get(catId) || 0) + 1)
+  }
+  const nextIncompleteCategory = categories.docs.find(
+    (cat) => cat.status !== 'draft' && (entryCountByCategory.get(String(cat.id)) || 0) === 0,
+  )
+
+  const selectedCategoryId =
+    categoryId || String(nextIncompleteCategory?.id ?? categories.docs[0]?.id ?? '')
   const selectedCategory = categories.docs.find((c) => String(c.id) === selectedCategoryId)
   const categoryOptions = categories.docs.map((category) => ({
     id: String(category.id),
@@ -1409,23 +1450,66 @@ const BracketStep = async ({
   generated: string
   failed: string
 }) => {
-  if (!categoryId) {
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 14: this step used to dead-end on "Generate matches for
+  // a category first" whenever the URL had no `categoryId`, even if the event already had several
+  // categories with generated matches - the only way in was clicking a link that happened to carry
+  // the param. It now always fetches every category and offers a switcher, matching the pattern
+  // EntriesStep already uses, and only falls back to the empty state when the event truly has zero
+  // categories yet.
+  const categories = await payload.find({
+    collection: 'competition-categories',
+    depth: 1,
+    limit: 200,
+    where: { event_id: { equals: eventId } },
+    sort: 'name',
+  })
+  // AUDIT item 8: default to a category that already has a generated stage, so landing here
+  // without an explicit categoryId shows a real bracket instead of the "no stage yet" empty state
+  // for whichever category happens to sort first.
+  const categoryIds = categories.docs.map((cat) => String(cat.id))
+  const stagedCategoryIds = categoryId
+    ? new Set<string>()
+    : categoryIds.length
+      ? new Set(
+          (
+            await payload.find({
+              collection: 'stages',
+              depth: 0,
+              limit: 200,
+              where: { and: [{ category_id: { in: categoryIds } }, { order: { equals: 1 } }] },
+            })
+          ).docs.map((stage) => String(getRelationshipId(stage.category_id as RelationshipDoc))),
+        )
+      : new Set<string>()
+  const categoryWithStage = categories.docs.find((cat) => stagedCategoryIds.has(String(cat.id)))
+
+  const selectedCategoryId =
+    categoryId || String(categoryWithStage?.id ?? categories.docs[0]?.id ?? '')
+  const categoryOptions = categories.docs.map((cat) => ({
+    id: String(cat.id),
+    label: `${getRelationshipLabel(cat.sport_id as RelationshipDoc)} — ${cat.name}`,
+  }))
+
+  if (!selectedCategoryId) {
     return (
       <Card>
-        <EmptyState>Generate matches for a category first.</EmptyState>
+        <EmptyState>
+          Add a competition category first, then generate matches for it before viewing a bracket
+          here.
+        </EmptyState>
       </Card>
     )
   }
 
   const category = await payload
-    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .findByID({ collection: 'competition-categories', id: selectedCategoryId, depth: 0 })
     .catch(() => null)
   const stageResult = category
     ? await payload.find({
         collection: 'stages',
         depth: 0,
         limit: 1,
-        where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 1 } }] },
+        where: { and: [{ category_id: { equals: selectedCategoryId } }, { order: { equals: 1 } }] },
       })
     : null
   const stage = stageResult?.docs[0]
@@ -1434,6 +1518,22 @@ const BracketStep = async ({
     <>
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-extrabold text-ink">7. Bracket / fixtures</h2>
+        <Card>
+          <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="step" value="bracket" />
+            <Field label="Sport & category" className="min-w-[240px] flex-1">
+              <SearchableSelect
+                name="categoryId"
+                defaultValue={selectedCategoryId}
+                options={categoryOptions.map((cat) => ({ value: cat.id, label: cat.label }))}
+              />
+            </Field>
+            <Button type="submit" variant="secondary">
+              Switch category
+            </Button>
+          </form>
+        </Card>
         {generated ? (
           <AlertBanner tone="success">
             Generated {generated} match(es) for {category?.name}.

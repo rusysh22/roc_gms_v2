@@ -33,7 +33,7 @@ export async function addSportAction(formData: FormData): Promise<void> {
     collection: 'sports',
     depth: 0,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=duplicate_slug`)
@@ -87,7 +87,7 @@ export async function addRulesetAction(formData: FormData): Promise<void> {
     collection: 'rulesets',
     depth: 0,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=duplicate_slug`)

@@ -69,7 +69,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     collection: 'competition-categories',
     depth: 0,
     limit: 1,
-    where: { slug: { equals: slug } },
+    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=duplicate_slug`)
