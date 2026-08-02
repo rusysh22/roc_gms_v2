@@ -206,7 +206,12 @@ const StepProgress = ({
                   </span>
                 </Link>
               ) : (
-                <span className="flex flex-col items-center gap-1 text-ink-soft/50">
+                // AUDIT_UI_UX_CSS axe: 50%-opacity ink-soft measured 2.38:1 on this step's label
+                // text (still real, readable content - not decorative) - well under the 4.5:1
+                // normal-text minimum. Full-opacity ink-soft already passes on its own (see the
+                // reachable/inactive branch above, which never used the opacity modifier) and
+                // still reads as visually muted next to the active step's full-ink label.
+                <span className="flex flex-col items-center gap-1 text-ink-soft">
                   {pill}
                   <span className="max-w-20 text-center text-[11px] font-bold leading-tight">
                     {step.label}

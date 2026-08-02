@@ -160,7 +160,18 @@ export default function MarketingHomePage() {
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step) => (
               <Card key={step.number} className="flex flex-col gap-2">
-                <span className="text-3xl font-extrabold text-line">{step.number}</span>
+                {/* AUDIT_UI_UX_CSS axe: text-line on white measured 1.27:1, nowhere near the 3:1
+                    large-text minimum. aria-hidden alone doesn't fix this - it only removes the
+                    numeral from the accessibility tree (reasonable on its own, since the real
+                    content is the CardTitle/description right below it and a screen reader
+                    doesn't need "01" read aloud), but WCAG contrast still applies to anything
+                    actually visible on screen, aria-hidden or not, for low-vision sighted users.
+                    text-ink-soft/70 keeps the same quiet/faint design intent while clearing 3:1
+                    (~3.67:1) - full-opacity text-ink-soft would look too heavy for a background
+                    flourish. */}
+                <span className="text-3xl font-extrabold text-ink-soft/70" aria-hidden="true">
+                  {step.number}
+                </span>
                 <CardTitle className="text-base">{step.title}</CardTitle>
                 <CardDescription className="leading-relaxed">{step.description}</CardDescription>
               </Card>
