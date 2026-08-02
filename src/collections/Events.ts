@@ -195,6 +195,39 @@ export const Events: CollectionConfig = {
       ],
     },
     {
+      type: 'row',
+      fields: [
+        {
+          name: 'setup_tournament_type',
+          type: 'select',
+          admin: {
+            description:
+              'Set by the wizard\'s Setup Assistant (Step 0) - pre-selects the Categories step\'s format picker. Optional; leave empty if skipped.',
+          },
+          options: [
+            { label: 'Single Elimination', value: 'single_elimination' },
+            { label: 'Round Robin', value: 'round_robin' },
+            { label: 'Group Stage to Knockout', value: 'group_stage_to_knockout' },
+            { label: 'League', value: 'league' },
+          ],
+        },
+        {
+          name: 'setup_participant_mode',
+          type: 'select',
+          admin: {
+            description:
+              'Set by the wizard\'s Setup Assistant (Step 0) - pre-selects the Categories step\'s "who\'s competing" choice card. Optional; leave empty if skipped.',
+          },
+          options: [
+            { label: 'Individual player', value: 'individual' },
+            { label: 'Pair', value: 'pair' },
+            { label: 'Team', value: 'team' },
+            { label: 'Club / delegation', value: 'club' },
+          ],
+        },
+      ],
+    },
+    {
       name: 'location',
       type: 'text',
     },

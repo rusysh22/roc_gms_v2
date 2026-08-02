@@ -1,7 +1,17 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import type { Where } from 'payload'
-import { Building2, Check, User, UserRound, Users } from 'lucide-react'
+import {
+  Building2,
+  CalendarRange,
+  Check,
+  GitBranch,
+  Repeat,
+  Trophy,
+  User,
+  UserRound,
+  Users,
+} from 'lucide-react'
 
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
 import { AlertBanner } from '@/components/ui/alert-banner'
@@ -22,9 +32,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { BracketTree } from '../../../../brackets/bracketTree'
 import {
+  AuditLogPanel,
   getRelationshipId,
   getRelationshipLabel,
   toOptions,
+  type AuditLogSummary,
   type RelationshipDoc,
 } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
@@ -42,13 +54,10 @@ import {
   addTeamAction,
   importParticipantsAction,
 } from './participantActions'
-import {
-  addEntriesAction,
-  saveSeedOrderAction,
-  shuffleSeedsAction,
-  withdrawEntryAction,
-} from './entriesSeedActions'
+import { addEntriesAction, shuffleSeedsAction, withdrawEntryAction } from './entriesSeedActions'
 import { generateMatchesAction } from './generateActions'
+import { GroupKnockoutPanel } from './GroupKnockoutPanel'
+import { SeedOrderTable } from './SeedOrderTable'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +70,7 @@ const get = (params: Record<string, string | string[] | undefined>, key: string)
 // oleh orang/waktu berbeda" per the doc. Split into Registration and Draw & Seeding so each has its
 // own screen, its own "done" criterion, and its own place in the step nav.
 const STEPS = [
+  { key: 'setup', label: 'Setup Assistant' },
   { key: 'event', label: 'Event' },
   { key: 'sports', label: 'Sports & Rulesets' },
   { key: 'categories', label: 'Categories' },
@@ -69,6 +79,7 @@ const STEPS = [
   { key: 'draw', label: 'Draw & Seeding' },
   { key: 'generate', label: 'Generate Matches' },
   { key: 'bracket', label: 'Bracket' },
+  { key: 'history', label: 'History' },
 ] as const
 
 const errorMessages: Record<string, string> = {
@@ -90,6 +101,14 @@ const errorMessages: Record<string, string> = {
   invalid_import_file: 'Upload a valid .xlsx file exported from the template.',
   empty_import: 'That file has no rows in its Clubs, Teams, or Players sheets.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
+  duplicate_seed: 'Two entries had the same seed number. Give each entry a unique seed and save again.',
+  invalid_group_count: 'Choose between 2 and 12 groups.',
+  missing_groups: 'Create groups first.',
+  invalid_qualify_count: 'Enter how many entries qualify per group (1 or more).',
+  missing_qualify_count: 'Set how many entries qualify per group before finalizing.',
+  groups_not_finished: 'Every group match needs a published result before finalizing the group stage.',
+  group_stage_not_finalized: 'Finalize the group stage before promoting to knockout.',
+  no_qualifiers: 'No qualified entries were found for this group stage.',
   unsupported_format:
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
   invalid_publish_option: 'Choose one of the three publish options.',
@@ -145,7 +164,9 @@ const StepProgress = ({
 
       <ol className="hidden items-start lg:flex" aria-label="Wizard steps">
         {STEPS.map((step, index) => {
-          const reachable = index === 0 || Boolean(eventId)
+          // Setup Assistant (index 0) and Event (index 1) are both reachable before an event
+          // exists - everything from Sports onward needs a real eventId.
+          const reachable = index <= 1 || Boolean(eventId)
           const active = index === currentIndex
           const done = completedSteps.has(step.key) && !active
           const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
@@ -217,7 +238,7 @@ export default async function NewEventWizardPage({
   const payload = access.payload
   const params = searchParams ? await searchParams : {}
   const eventId = get(params, 'eventId')
-  const step = get(params, 'step') || (eventId ? 'sports' : 'event')
+  const step = get(params, 'step') || (eventId ? 'sports' : 'setup')
   const wizardError = get(params, 'wizardError')
   const wizardUpdated = get(params, 'wizardUpdated')
 
@@ -241,6 +262,12 @@ export default async function NewEventWizardPage({
   const completedSteps = new Set<string>()
   if (event) {
     completedSteps.add('event')
+    // History has no "done" criterion of its own - it's a passive viewer over data other steps
+    // already produced, not a task to complete. Counting it done once the event exists keeps 100%
+    // reachable once every real task step clears its own bar. Setup Assistant is the same shape:
+    // answered or skipped, it's definitionally behind you once an event exists.
+    completedSteps.add('history')
+    completedSteps.add('setup')
     const [sportsCount, categoriesResult, clubsCount, teamsCount, playersCount, confirmedEntries, eventMatches] =
       await Promise.all([
         payload.count({ collection: 'sports', where: { event_id: { equals: eventId } } }),
@@ -295,10 +322,41 @@ export default async function NewEventWizardPage({
     const autoGenerateCategories = nonDraftCategories.filter((category) =>
       AUTO_GENERATE_FORMATS.has(String(category.format_type)),
     )
-    if (
-      autoGenerateCategories.length > 0 &&
-      autoGenerateCategories.every((category) => categoriesWithMatches.has(String(category.id)))
-    ) {
+    // group_stage_to_knockout is deliberately excluded from AUTO_GENERATE_FORMATS (it's a
+    // multi-action pipeline, not a single "Generate Matches" click) - but it still needs its own
+    // "done" signal, or these categories would never contribute to 100% and would also never show
+    // as complete once actually promoted. "Done" here means matches exist on the knockout stage
+    // specifically (order 2, single_elimination) - not just any group-stage match, which would
+    // fire the moment group matches generate, long before promotion.
+    const groupKnockoutCategories = nonDraftCategories.filter(
+      (category) => category.format_type === 'group_stage_to_knockout',
+    )
+    const knockoutStagesResult = groupKnockoutCategories.length
+      ? await payload.find({
+          collection: 'stages',
+          depth: 0,
+          limit: 200,
+          where: {
+            and: [
+              { event_id: { equals: eventId } },
+              { order: { equals: 2 } },
+              { stage_type: { equals: 'single_elimination' } },
+            ],
+          },
+        })
+      : null
+    const knockoutStageIds = new Set((knockoutStagesResult?.docs ?? []).map((stage) => String(stage.id)))
+    const categoriesWithKnockoutMatches = new Set(
+      eventMatches.docs
+        .filter((match) => knockoutStageIds.has(String(match.stage_id)))
+        .map((match) => String(match.category_id)),
+    )
+    const generateReadyCategories = [...autoGenerateCategories, ...groupKnockoutCategories]
+    const isGenerateDone = (category: (typeof generateReadyCategories)[number]) =>
+      category.format_type === 'group_stage_to_knockout'
+        ? categoriesWithKnockoutMatches.has(String(category.id))
+        : categoriesWithMatches.has(String(category.id))
+    if (generateReadyCategories.length > 0 && generateReadyCategories.every(isGenerateDone)) {
       completedSteps.add('generate')
       completedSteps.add('bracket')
     }
@@ -335,7 +393,14 @@ export default async function NewEventWizardPage({
             <AlertBanner tone="error">{errorMessages[wizardError]}</AlertBanner>
           ) : null}
           {wizardUpdated ? <AlertBanner tone="success">Saved.</AlertBanner> : null}
+          {get(params, 'wizardPromoteWarning') ? (
+            <AlertBanner tone="warning">
+              {get(params, 'wizardPromoteWarning')} qualifier(s) were withdrawn/disqualified after
+              the group stage was finalized and were dropped from the knockout bracket.
+            </AlertBanner>
+          ) : null}
 
+          {step === 'setup' ? <SetupStep /> : null}
           {step === 'event' ? (
             <EventStep
               defaultName={get(params, 'name')}
@@ -345,14 +410,24 @@ export default async function NewEventWizardPage({
               defaultEnd={get(params, 'eventEnd')}
               defaultLocation={get(params, 'location')}
               defaultOrganizerName={get(params, 'organizerName')}
+              defaultSetupTournamentType={get(params, 'setupTournamentType')}
+              defaultSetupParticipantMode={get(params, 'setupParticipantMode')}
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
-          {step === 'categories' && event ? <CategoriesStep payload={payload} eventId={eventId} /> : null}
+          {step === 'categories' && event ? (
+            <CategoriesStep
+              payload={payload}
+              eventId={eventId}
+              setupTournamentType={String(event.setup_tournament_type || '')}
+              setupParticipantMode={String(event.setup_participant_mode || '')}
+            />
+          ) : null}
           {step === 'participants' && event ? (
             <ParticipantsStep
               payload={payload}
               eventId={eventId}
+              tab={get(params, 'tab')}
               imported={get(params, 'wizardImported')}
               importSkipped={get(params, 'wizardImportSkipped')}
               importIssues={get(params, 'wizardImportIssues')}
@@ -371,7 +446,9 @@ export default async function NewEventWizardPage({
           {step === 'draw' && event ? (
             <DrawStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
           ) : null}
-          {step === 'generate' && event ? <GenerateStep payload={payload} eventId={eventId} /> : null}
+          {step === 'generate' && event ? (
+            <GenerateStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
+          ) : null}
           {step === 'bracket' && event ? (
             <BracketStep
               payload={payload}
@@ -385,6 +462,7 @@ export default async function NewEventWizardPage({
               published={get(params, 'wizardPublished')}
             />
           ) : null}
+          {step === 'history' && event ? <HistoryStep payload={payload} eventId={eventId} /> : null}
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
@@ -580,10 +658,24 @@ const SummaryPanel = async ({
   const categoryIdsWithMatches = new Set(
     matches.docs.map((match) => String(getRelationshipId(match.category_id as RelationshipDoc))),
   )
+  // group_stage_to_knockout categories are only "ready" once qualifiers have actually been
+  // promoted into a knockout bracket - not the moment group-stage matches exist, which would fire
+  // long before promotion and contradict the Groups panel's own state.
+  const categoryIdsWithKnockoutMatches = new Set(
+    matches.docs
+      .filter((match) => {
+        const stage = match.stage_id as { stage_type?: string } | string | number | null | undefined
+        return Boolean(stage && typeof stage === 'object' && stage.stage_type === 'single_elimination')
+      })
+      .map((match) => String(getRelationshipId(match.category_id as RelationshipDoc))),
+  )
   const categoryReadiness = categories.docs.map((category) => {
     const confirmedCount = confirmedCountByCategoryId.get(String(category.id)) || 0
-    const hasMatches = categoryIdsWithMatches.has(String(category.id))
-    const autoGenerates = AUTO_GENERATE_FORMATS.has(String(category.format_type))
+    const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
+    const hasMatches = isGroupStageToKnockout
+      ? categoryIdsWithKnockoutMatches.has(String(category.id))
+      : categoryIdsWithMatches.has(String(category.id))
+    const autoGenerates = AUTO_GENERATE_FORMATS.has(String(category.format_type)) || isGroupStageToKnockout
     let tone: 'green' | 'blue' | 'gold' | 'neutral'
     let label: string
     if (category.status === 'draft') {
@@ -668,6 +760,106 @@ const StepActions = ({ children }: { children: ReactNode }) => (
   <div className="flex flex-wrap justify-end gap-2">{children}</div>
 )
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1 (option A, full): a curated 4-option subset of
+// CompetitionCategories.format_type - not all 8 values from the Categories step's own dropdown,
+// since the whole point of an assistant is fewer, friendlier choices up front. Mirrors
+// PARTICIPANT_MODE_CHOICES' shape/style exactly (defined further below, referenced here only
+// inside SetupStep's render - by the time that runs the whole module has already loaded).
+const TOURNAMENT_TYPE_CHOICES = [
+  {
+    value: 'single_elimination',
+    label: 'Single Elimination',
+    helper: 'Knockout bracket - lose once and you\'re out.',
+    Icon: Trophy,
+  },
+  {
+    value: 'round_robin',
+    label: 'Round Robin',
+    helper: 'Everyone plays everyone once, ranked by results.',
+    Icon: Repeat,
+  },
+  {
+    value: 'group_stage_to_knockout',
+    label: 'Group Stage → Knockout',
+    helper: 'Groups play round robin first, top finishers advance to a bracket.',
+    Icon: GitBranch,
+  },
+  {
+    value: 'league',
+    label: 'League',
+    helper: 'Multiple rounds across a season, ranked by points.',
+    Icon: CalendarRange,
+  },
+] as const
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1, option A: unlike the ruleset preset (P1 item 3, purely
+// a client-side JSX default keyed off a sibling field chosen the same step), this answer has to
+// survive past a page the admin hasn't reached yet - there's no `events` row to persist it on
+// until createEventAction runs. Both fields are plain, optional GET params here, carried through
+// as hidden inputs in EventStep's form, and only actually persisted (onto Events.setup_*) once
+// the event is created - see eventActions.ts. Fully skippable; skipping preserves every existing
+// default exactly as it was before this step existed.
+const SetupStep = () => (
+  <Card className="flex flex-col gap-6">
+    <div>
+      <CardTitle>0. Setup Assistant</CardTitle>
+      <p className="mt-1 text-sm text-ink-soft">
+        Answer a couple of quick questions and we&apos;ll pre-fill the format and participant type
+        choices in later steps. Everything here stays fully editable - skip it if you&apos;d
+        rather decide as you go.
+      </p>
+    </div>
+    <form method="get" action="/workspaces/event-admin/new-event" className="flex flex-col gap-6">
+      <input type="hidden" name="step" value="event" />
+      <fieldset>
+        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+          What kind of tournament is this?
+        </legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {TOURNAMENT_TYPE_CHOICES.map(({ value, label, helper, Icon }) => (
+            <label
+              key={value}
+              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+            >
+              <input type="radio" name="setupTournamentType" value={value} className="sr-only" />
+              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+              <span className="text-sm font-bold text-ink">{label}</span>
+              <span className="text-xs text-ink-soft">{helper}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+          Who&apos;s competing?
+        </legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {PARTICIPANT_MODE_CHOICES.map(({ value, label, helper, Icon }) => (
+            <label
+              key={value}
+              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+            >
+              <input type="radio" name="setupParticipantMode" value={value} className="sr-only" />
+              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+              <span className="text-sm font-bold text-ink">{label}</span>
+              <span className="text-xs text-ink-soft">{helper}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap items-center gap-3">
+        <SubmitButton>Continue</SubmitButton>
+        <Link
+          href="/workspaces/event-admin/new-event?step=event"
+          className="text-sm font-bold text-ink-soft underline underline-offset-2 hover:text-ink"
+        >
+          Skip for now
+        </Link>
+      </div>
+    </form>
+  </Card>
+)
+
 const EventStep = ({
   defaultName,
   defaultSlug,
@@ -676,6 +868,8 @@ const EventStep = ({
   defaultEnd,
   defaultLocation,
   defaultOrganizerName,
+  defaultSetupTournamentType,
+  defaultSetupParticipantMode,
 }: {
   defaultName: string
   defaultSlug: string
@@ -684,6 +878,8 @@ const EventStep = ({
   defaultEnd: string
   defaultLocation: string
   defaultOrganizerName: string
+  defaultSetupTournamentType: string
+  defaultSetupParticipantMode: string
 }) => (
   <Card className="flex flex-col gap-4">
     <div>
@@ -693,6 +889,10 @@ const EventStep = ({
       </p>
     </div>
     <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
+      {/* Carried through from the Setup Assistant (Step 0), if answered - createEventAction
+          persists these onto the new event so every later step can read a real default off it. */}
+      <input type="hidden" name="setupTournamentType" value={defaultSetupTournamentType} />
+      <input type="hidden" name="setupParticipantMode" value={defaultSetupParticipantMode} />
       <EventNameSlugFields
         defaultName={defaultName}
         defaultSlug={defaultSlug}
@@ -921,7 +1121,17 @@ const PARTICIPANT_MODE_CHOICES = [
   },
 ] as const
 
-const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+const CategoriesStep = async ({
+  payload,
+  eventId,
+  setupTournamentType,
+  setupParticipantMode,
+}: {
+  payload: Payload
+  eventId: string
+  setupTournamentType: string
+  setupParticipantMode: string
+}) => {
   const [sports, categories, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({
@@ -973,7 +1183,14 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
                     key={value}
                     className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
                   >
-                    <input type="radio" name="participantMode" value={value} required className="sr-only" />
+                    <input
+                      type="radio"
+                      name="participantMode"
+                      value={value}
+                      required
+                      defaultChecked={value === setupParticipantMode}
+                      className="sr-only"
+                    />
                     <Icon className="h-5 w-5 text-green" aria-hidden="true" />
                     <span className="text-sm font-bold text-ink">{label}</span>
                     <span className="text-xs text-ink-soft">{helper}</span>
@@ -1007,7 +1224,10 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
               </details>
             </fieldset>
             <Field label="Format">
-              <Select name="formatType" defaultValue="single_elimination">
+              {/* Pre-filled from the Setup Assistant's tournament-type answer (item 1, option A),
+                  same "suggestion, not lock" spirit as the ruleset preset above - still a plain
+                  editable <select>. */}
+              <Select name="formatType" defaultValue={setupTournamentType || 'single_elimination'}>
                 <optgroup label="Auto-generates matches in step 6">
                   <option value="single_elimination">Single Elimination</option>
                   <option value="round_robin">Round Robin</option>
@@ -1132,9 +1352,17 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
 
 type ImportIssue = { sheet: string; name: string; reason: string }
 
+const PARTICIPANT_TABS = [
+  { key: 'clubs', label: 'Clubs' },
+  { key: 'teams', label: 'Teams' },
+  { key: 'pairs', label: 'Pairs' },
+  { key: 'players', label: 'Players' },
+] as const
+
 const ParticipantsStep = async ({
   payload,
   eventId,
+  tab,
   imported,
   importSkipped,
   importIssues,
@@ -1142,6 +1370,7 @@ const ParticipantsStep = async ({
 }: {
   payload: Payload
   eventId: string
+  tab?: string
   imported?: string
   importSkipped?: string
   importIssues?: string
@@ -1177,6 +1406,19 @@ const ParticipantsStep = async ({
   const participantModes = new Set(categories.docs.map((category) => String(category.participant_mode)))
   const needsClubForm = categories.docs.length === 0 || participantModes.has('club')
   const needsPairForm = categories.docs.length === 0 || participantModes.has('pair')
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2, option B: this step used to stack all four
+  // form+list sections (Club/Team/Pair/Player) on one long page, which got heavy fast on a real
+  // roster (e.g. 80+ players in the Nusantara Grand Games demo data). Splitting into tabs via a
+  // plain `?tab=` GET param - not client-side state - keeps this a pure server component,
+  // matching the same GET-form/query-param pattern every other step's category switcher already
+  // uses (DrawStep, RegistrationStep, BracketStep).
+  const availableTabs = PARTICIPANT_TABS.filter((participantTab) =>
+    participantTab.key === 'clubs' ? needsClubForm
+    : participantTab.key === 'pairs' ? needsPairForm
+    : true,
+  )
+  const activeTab = availableTabs.find((participantTab) => participantTab.key === tab)?.key ?? availableTabs[0].key
 
   return (
     <>
@@ -1253,43 +1495,65 @@ const ParticipantsStep = async ({
         </div>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2: a narrow, safe slice of "adaptive Step 4" - the
-            full redesign would drive this entire step's form set from which category you're
-            working on, which is a much larger rearchitecture than this pass covers. This form adds
-            real value only once some category's participants actually are clubs (item 3), so it's
-            hidden until then instead of always occupying screen space. Shown by default before any
-            category exists yet, since there's nothing to narrow by. */}
-        {needsClubForm ? (
-          <Card className="flex flex-col gap-4">
-            {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 3: this used to be the only one of the three
-                headings ("Add a club" / "Add a team (optional)" / "Add a player (optional)") without
-                an explicit "(optional)" - the missing label read as "Club is mandatory," which isn't
-                true for any category except a Club-type one. */}
-            <CardTitle>4. Add a club (optional unless a category&apos;s participants are clubs)</CardTitle>
-            <form action={addClubAction} className="flex flex-col gap-4">
-              <input type="hidden" name="eventId" value={eventId} />
-              <Field label="Club name">
-                <Input name="name" required />
-              </Field>
-              <Field label="Contact person">
-                <Input name="contactPerson" />
-              </Field>
-              <Field label="Contact email">
-                <Input name="contactEmail" type="email" />
-              </Field>
-              <SubmitButton>Add club</SubmitButton>
-            </form>
-            <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-              {clubs.docs.map((club) => (
-                <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                  <strong className="text-sm font-bold text-ink">{club.name}</strong>
-                </div>
-              ))}
-            </div>
-          </Card>
-        ) : null}
+      <div className="flex flex-col gap-3">
+        <h2 className="text-sm font-extrabold text-ink">4. Participants</h2>
+        <nav className="flex flex-wrap gap-2" aria-label="Participant type">
+          {availableTabs.map((participantTab) => {
+            const isActive = participantTab.key === activeTab
+            return (
+              <Link
+                key={participantTab.key}
+                href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants&tab=${participantTab.key}`}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'inline-flex h-9 items-center rounded-full border px-4 text-sm font-semibold no-underline transition-colors',
+                  isActive ? 'border-green bg-green text-paper' : 'border-line bg-paper text-ink-soft hover:text-ink',
+                )}
+              >
+                {participantTab.label}
+              </Link>
+            )
+          })}
+        </nav>
+      </div>
 
+      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2: a narrow, safe slice of "adaptive Step 4" - the
+          full redesign would drive this entire step's form set from which category you're
+          working on, which is a much larger rearchitecture than this pass covers. This form adds
+          real value only once some category's participants actually are clubs (item 3), so it's
+          hidden until then instead of always occupying screen space. Shown by default before any
+          category exists yet, since there's nothing to narrow by. */}
+      {activeTab === 'clubs' ? (
+        <Card className="flex flex-col gap-4">
+          {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 3: this used to be the only one of the three
+              headings ("Add a club" / "Add a team (optional)" / "Add a player (optional)") without
+              an explicit "(optional)" - the missing label read as "Club is mandatory," which isn't
+              true for any category except a Club-type one. */}
+          <CardTitle>Add a club (optional unless a category&apos;s participants are clubs)</CardTitle>
+          <form action={addClubAction} className="flex flex-col gap-4">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Club name">
+              <Input name="name" required />
+            </Field>
+            <Field label="Contact person">
+              <Input name="contactPerson" />
+            </Field>
+            <Field label="Contact email">
+              <Input name="contactEmail" type="email" />
+            </Field>
+            <SubmitButton>Add club</SubmitButton>
+          </form>
+          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+            {clubs.docs.map((club) => (
+              <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                <strong className="text-sm font-bold text-ink">{club.name}</strong>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'teams' ? (
         <Card className="flex flex-col gap-4">
           <CardTitle>Add a team (optional)</CardTitle>
           <form action={addTeamAction} className="flex flex-col gap-4">
@@ -1321,9 +1585,9 @@ const ParticipantsStep = async ({
             })}
           </div>
         </Card>
-      </div>
+      ) : null}
 
-      {needsPairForm ? (
+      {activeTab === 'pairs' ? (
         <Card className="flex flex-col gap-4">
           {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: a doubles pair is stored as a 2-player Team
               internally (rosters always need a team_id), but this form never says "team" - it picks
@@ -1376,48 +1640,50 @@ const ParticipantsStep = async ({
         </Card>
       ) : null}
 
-      <Card className="flex flex-col gap-4">
-        <CardTitle>Add a player (optional)</CardTitle>
-        <form action={addPlayerAction} className="grid gap-4 sm:grid-cols-2">
-          <input type="hidden" name="eventId" value={eventId} />
-          <Field label="Player name">
-            <Input name="name" required />
-          </Field>
-          <Field label="Club">
-            <SearchableSelect
-              name="clubId"
-              placeholder="None"
-              options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
-            />
-          </Field>
-          <Field label="Email">
-            <Input name="email" type="email" />
-          </Field>
-          <Field label="Gender">
-            <Select name="gender" defaultValue="">
-              <option value="">Not set</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </Select>
-          </Field>
-          <div className="sm:col-span-2">
-            <SubmitButton>Add player</SubmitButton>
+      {activeTab === 'players' ? (
+        <Card className="flex flex-col gap-4">
+          <CardTitle>Add a player (optional)</CardTitle>
+          <form action={addPlayerAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Player name">
+              <Input name="name" required />
+            </Field>
+            <Field label="Club">
+              <SearchableSelect
+                name="clubId"
+                placeholder="None"
+                options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+              />
+            </Field>
+            <Field label="Email">
+              <Input name="email" type="email" />
+            </Field>
+            <Field label="Gender">
+              <Select name="gender" defaultValue="">
+                <option value="">Not set</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+                <option value="prefer_not_to_say">Prefer not to say</option>
+              </Select>
+            </Field>
+            <div className="sm:col-span-2">
+              <SubmitButton>Add player</SubmitButton>
+            </div>
+          </form>
+          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+            {players.docs.map((player) => {
+              const clubLabel = getRelationshipLabel(player.club_id as RelationshipDoc, '')
+              return (
+                <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
+                  <strong className="block text-sm font-bold text-ink">{player.name}</strong>
+                  {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                </div>
+              )
+            })}
           </div>
-        </form>
-        <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-          {players.docs.map((player) => {
-            const clubLabel = getRelationshipLabel(player.club_id as RelationshipDoc, '')
-            return (
-              <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                <strong className="block text-sm font-bold text-ink">{player.name}</strong>
-                {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
-              </div>
-            )
-          })}
-        </div>
-      </Card>
+        </Card>
+      ) : null}
 
       <StepActions>
         <Button asChild>
@@ -1562,12 +1828,12 @@ const RegistrationStep = async ({
 
   // A club-mode entry's own name already IS the club - only surface a secondary club caption for
   // team/pair (via club_id) and individual (via nested team_id/player_id.club_id) participants.
-  const getSourceClubLabel = (doc: Record<string, unknown>) =>
+  const getSourceClubLabel = (doc: object) =>
     collection === 'clubs'
       ? undefined
-      : getRelationshipLabel(doc.club_id as RelationshipDoc, '') || undefined
+      : getRelationshipLabel((doc as { club_id?: unknown }).club_id as RelationshipDoc, '') || undefined
 
-  const getEntryClubLabel = (entry: Record<string, unknown>) => {
+  const getEntryClubLabel = (entry: { team_id?: unknown; player_id?: unknown }) => {
     if (collection === 'clubs') {
       return undefined
     }
@@ -1840,7 +2106,7 @@ const DrawStep = async ({
     sort: 'seed_number',
   })
 
-  const getEntryClubLabel = (entry: Record<string, unknown>) => {
+  const getEntryClubLabel = (entry: { team_id?: unknown; player_id?: unknown }) => {
     if (collection === 'clubs') {
       return undefined
     }
@@ -1907,51 +2173,16 @@ const DrawStep = async ({
                 Shuffle Seeds
               </SubmitButton>
             </form>
-            <form action={saveSeedOrderAction} className="flex flex-col gap-3">
-              <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="categoryId" value={selectedCategoryId} />
-              <div className="max-h-80 overflow-y-auto">
-                <Table>
-                  <TableHeader className="sticky top-0 z-10">
-                    <TableRow>
-                      <TableHead>Participant</TableHead>
-                      {/* Seed's glossary hint lives in the card intro above, not here - a
-                          popover anchored inside this scrollable/sticky table header gets clipped
-                          by the table's own overflow-y-auto boundary (confirmed via screenshot: the
-                          definition text was cut off mid-sentence). */}
-                      <TableHead>Seed</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {entries.docs.map((entry) => {
-                      const clubLabel = getEntryClubLabel(entry)
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell className="font-bold">
-                            {entry.display_name}
-                            {clubLabel ? (
-                              <span className="block text-xs font-normal text-ink-soft">{clubLabel}</span>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              name={`seed_${entry.id}`}
-                              type="number"
-                              min="1"
-                              className="w-20"
-                              defaultValue={entry.seed_number ?? ''}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              <div>
-                <SubmitButton>Save Order</SubmitButton>
-              </div>
-            </form>
+            <SeedOrderTable
+              eventId={eventId}
+              categoryId={selectedCategoryId}
+              entries={entries.docs.map((entry) => ({
+                id: String(entry.id),
+                displayName: String(entry.display_name),
+                clubLabel: getEntryClubLabel(entry) || undefined,
+                seedNumber: entry.seed_number != null ? Number(entry.seed_number) : null,
+              }))}
+            />
           </>
         )}
       </Card>
@@ -1967,7 +2198,15 @@ const DrawStep = async ({
   )
 }
 
-const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+const GenerateStep = async ({
+  payload,
+  eventId,
+  categoryId,
+}: {
+  payload: Payload
+  eventId: string
+  categoryId?: string
+}) => {
   const categories = await payload.find({
     collection: 'competition-categories',
     depth: 0,
@@ -2017,58 +2256,91 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
     hasCourt: anyCourtIsSportAgnostic || sportIdsWithCourts.has(String(category.sport_id)),
   }))
 
+  const selectedCategory = categoryId
+    ? categories.docs.find((category) => String(category.id) === categoryId)
+    : undefined
+  const showGroupKnockoutPanel = selectedCategory?.format_type === 'group_stage_to_knockout'
+
   return (
-    <Card className="flex flex-col gap-4">
-      <div>
-        <CardTitle>7. Generate matches</CardTitle>
-        <p className="mt-1 text-sm text-ink-soft">
-          Choose a category with at least two confirmed entries. Single Elimination and Round Robin
-          categories generate a seeded first round automatically; other formats must be scheduled
-          manually in the Scheduler workspace.
-        </p>
-      </div>
-      {courts.docs.length === 0 ? (
-        <AlertBanner tone="warning">
-          No venues or courts are set up for this event yet. Matches can still generate, but
-          nothing will have anywhere to be scheduled until you{' '}
-          <Link href="/workspaces/event-admin/facilities" className="font-bold underline">
-            add at least one court
-          </Link>
-          .
-        </AlertBanner>
+    <>
+      <Card className="flex flex-col gap-4">
+        <div>
+          <CardTitle>7. Generate matches</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            Choose a category with at least two confirmed entries. Single Elimination and Round
+            Robin categories generate a seeded first round automatically; Group Stage to Knockout
+            categories use the Groups panel below; other formats must be scheduled manually in the
+            Scheduler workspace.
+          </p>
+        </div>
+        {courts.docs.length === 0 ? (
+          <AlertBanner tone="warning">
+            No venues or courts are set up for this event yet. Matches can still generate, but
+            nothing will have anywhere to be scheduled until you{' '}
+            <Link href="/workspaces/event-admin/facilities" className="font-bold underline">
+              add at least one court
+            </Link>
+            .
+          </AlertBanner>
+        ) : null}
+        <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
+          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt }) => {
+            const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
+            return (
+              <div
+                key={category.id}
+                className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm font-bold text-ink">{category.name}</strong>
+                  <span className="text-xs font-semibold text-ink-soft">
+                    {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
+                  </span>
+                  {!hasCourt && courts.docs.length > 0 ? (
+                    <span className="block text-xs font-semibold text-gold">
+                      No court covers this sport yet
+                    </span>
+                  ) : null}
+                </div>
+                {isGroupStageToKnockout ? (
+                  <Button asChild size="sm" variant={String(category.id) === categoryId ? 'primary' : 'secondary'}>
+                    <Link
+                      href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${category.id}`}
+                    >
+                      Manage Groups
+                    </Link>
+                  </Button>
+                ) : (
+                  <form action={generateMatchesAction}>
+                    <input type="hidden" name="eventId" value={eventId} />
+                    <input type="hidden" name="categoryId" value={category.id} />
+                    <SubmitButton
+                      size="sm"
+                      disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
+                    >
+                      Generate Matches
+                    </SubmitButton>
+                  </form>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      {showGroupKnockoutPanel ? (
+        <GroupKnockoutPanel
+          payload={payload}
+          eventId={eventId}
+          categoryId={categoryId!}
+          category={{
+            name: String(selectedCategory!.name),
+            slug: String(selectedCategory!.slug),
+            group_qualify_count: selectedCategory!.group_qualify_count ?? null,
+          }}
+        />
       ) : null}
-      <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-        {categoriesWithCounts.map(({ category, confirmedCount, hasCourt }) => (
-          <form
-            action={generateMatchesAction}
-            key={category.id}
-            className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-3"
-          >
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="categoryId" value={category.id} />
-            <div className="min-w-0">
-              <strong className="block truncate text-sm font-bold text-ink">{category.name}</strong>
-              <span className="text-xs font-semibold text-ink-soft">
-                {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
-              </span>
-              {!hasCourt && courts.docs.length > 0 ? (
-                <span className="block text-xs font-semibold text-gold">
-                  No court covers this sport yet
-                </span>
-              ) : null}
-            </div>
-            <SubmitButton
-              size="sm"
-              disabled={
-                confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))
-              }
-            >
-              Generate Matches
-            </SubmitButton>
-          </form>
-        ))}
-      </div>
-    </Card>
+    </>
   )
 }
 
@@ -2147,15 +2419,33 @@ const BracketStep = async ({
   const category = await payload
     .findByID({ collection: 'competition-categories', id: selectedCategoryId, depth: 0 })
     .catch(() => null)
+  const isGroupStageToKnockout = category?.format_type === 'group_stage_to_knockout'
+  // group_stage_to_knockout categories have two stages (group stage order 1, knockout order 2) -
+  // prefer the knockout stage once it exists (post-promotion) so this step shows the actual
+  // bracket instead of getting stuck on the group stage's round-robin fixture list forever.
   const stageResult = category
     ? await payload.find({
         collection: 'stages',
         depth: 0,
         limit: 1,
-        where: { and: [{ category_id: { equals: selectedCategoryId } }, { order: { equals: 1 } }] },
+        where: {
+          and: [
+            { category_id: { equals: selectedCategoryId } },
+            { order: { equals: isGroupStageToKnockout ? 2 : 1 } },
+          ],
+        },
       })
     : null
-  const stage = stageResult?.docs[0]
+  let stage = stageResult?.docs[0]
+  if (!stage && isGroupStageToKnockout) {
+    const groupStageResult = await payload.find({
+      collection: 'stages',
+      depth: 0,
+      limit: 1,
+      where: { and: [{ category_id: { equals: selectedCategoryId } }, { order: { equals: 1 } }] },
+    })
+    stage = groupStageResult.docs[0]
+  }
 
   return (
     <>
@@ -2330,6 +2620,69 @@ const RoundRobinFixtureList = async ({ payload, stageId }: { payload: Payload; s
           ))}
         </div>
       )}
+    </Card>
+  )
+}
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 8: `recordAuditLog` is already called from nearly every
+// action in this wizard (and in event-admin proper), so the data exists - this step just needed a
+// viewer. `audit-logs` is a polymorphic table (entity_type + entity_id, no event_id column), so
+// "everything that happened to this event" means collecting every entity id this event owns across
+// the collections that carry an `event_id` field, then matching audit rows against that set.
+const HISTORY_ENTITY_COLLECTIONS = [
+  'sports',
+  'rulesets',
+  'competition-categories',
+  'clubs',
+  'teams',
+  'players',
+  'competition-entries',
+  'venues',
+  'courts',
+  'matches',
+  'match-sets',
+] as const
+
+const HistoryStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const idsByCollection = await Promise.all(
+    HISTORY_ENTITY_COLLECTIONS.map((collection) =>
+      payload.find({
+        collection,
+        depth: 0,
+        limit: 5000,
+        where: { event_id: { equals: eventId } },
+      }),
+    ),
+  )
+
+  const orConditions: Where[] = [
+    { and: [{ entity_type: { equals: 'events' } }, { entity_id: { equals: String(eventId) } }] },
+  ]
+  HISTORY_ENTITY_COLLECTIONS.forEach((collection, index) => {
+    const ids = idsByCollection[index].docs.map((doc) => String(doc.id))
+    if (ids.length > 0) {
+      orConditions.push({ and: [{ entity_type: { equals: collection } }, { entity_id: { in: ids } }] })
+    }
+  })
+
+  const logs = await payload.find({
+    collection: 'audit-logs',
+    depth: 1,
+    limit: 300,
+    sort: '-createdAt',
+    where: { or: orConditions },
+  })
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <div>
+        <CardTitle>Change history</CardTitle>
+        <p className="mt-1 text-sm text-ink-soft">
+          Every recorded change for this event across sports, categories, participants, entries,
+          venues, and matches — most recent first.
+        </p>
+      </div>
+      <AuditLogPanel entries={logs.docs as unknown as AuditLogSummary[]} />
     </Card>
   )
 }

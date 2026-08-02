@@ -39,7 +39,20 @@ export async function addSportAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=duplicate_slug`)
   }
 
-  const data = { event_id: Number(eventId), name, slug, sport_type: sportType, is_active: true }
+  const data = {
+    event_id: Number(eventId),
+    name,
+    slug,
+    sport_type: sportType as
+      | 'court'
+      | 'field'
+      | 'table'
+      | 'board'
+      | 'esport'
+      | 'track'
+      | 'other',
+    is_active: true,
+  }
   const created = await payload.create({ collection: 'sports', data })
   await recordAuditLog({
     payload,
@@ -98,7 +111,7 @@ export async function addRulesetAction(formData: FormData): Promise<void> {
     sport_id: Number(sportId),
     name,
     slug,
-    score_type: scoreType,
+    score_type: scoreType as 'custom' | 'time' | 'result' | 'points' | 'goals' | 'sets',
     set_based: text(formData, 'setBased') === 'on',
     allow_draw: text(formData, 'allowDraw') === 'on',
     best_of: bestOf ? Number(bestOf) : undefined,

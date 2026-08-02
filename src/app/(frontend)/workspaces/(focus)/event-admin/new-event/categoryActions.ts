@@ -80,12 +80,26 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     sport_id: Number(sportId),
     name,
     slug,
-    participant_mode: participantMode,
+    participant_mode: participantMode as
+      | 'individual'
+      | 'pair'
+      | 'team'
+      | 'club'
+      | 'open'
+      | 'tbd',
     roster_required: text(formData, 'rosterRequired') === 'on',
     min_roster_size: minRoster ? Number(minRoster) : 0,
     max_roster_size: maxRoster ? Number(maxRoster) : undefined,
     ruleset_id: rulesetId ? Number(rulesetId) : undefined,
-    format_type: formatType,
+    format_type: formatType as
+      | 'single_elimination'
+      | 'double_elimination'
+      | 'round_robin'
+      | 'group_stage_to_knockout'
+      | 'league'
+      | 'friendly'
+      | 'time_trial'
+      | 'score_ranking',
     status: 'draft' as const,
   }
   const created = await payload.create({ collection: 'competition-categories', data })
@@ -124,7 +138,11 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
   }
 
-  await payload.update({ collection: 'competition-categories', id: categoryId, data: { status } })
+  await payload.update({
+    collection: 'competition-categories',
+    id: categoryId,
+    data: { status: status as 'draft' | 'open' | 'locked' | 'published' | 'archived' },
+  })
   await recordAuditLog({
     payload,
     action: 'competition_category.status_update',

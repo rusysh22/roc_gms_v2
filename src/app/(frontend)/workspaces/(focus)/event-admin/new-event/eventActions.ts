@@ -13,6 +13,14 @@ import { slugify, text, wizardPage } from './wizardShared'
 // Tries base-2, base-3, ... until one isn't taken, so a duplicate-slug error can offer a ready-to-use
 // alternative instead of making the user guess-and-check. Capped at 50 attempts - if a base slug
 // somehow already has 50 numbered variants taken, falling through to "no suggestion" is fine.
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1 (option A): the Setup Assistant (Step 0) is optional and
+// its answers arrive as raw form fields with no prior server-side check - an invalid/tampered
+// value here is a non-critical hint, not worth hard-failing event creation over, so it's silently
+// dropped rather than redirected as an error. Curated subset only (not the full format_type enum -
+// see the Categories step's own dropdown for the rest).
+const setupTournamentTypes = new Set(['single_elimination', 'round_robin', 'group_stage_to_knockout', 'league'])
+const setupParticipantModes = new Set(['individual', 'pair', 'team', 'club'])
+
 const findAvailableSlug = async (payload: Payload, base: string): Promise<string | null> => {
   for (let suffix = 2; suffix <= 50; suffix += 1) {
     const candidate = `${base}-${suffix}`.slice(0, 80)
@@ -35,10 +43,15 @@ export async function createEventAction(formData: FormData): Promise<void> {
   const end = text(formData, 'eventEnd')
   const location = text(formData, 'location')
   const organizerName = text(formData, 'organizerName')
+  const setupTournamentTypeInput = text(formData, 'setupTournamentType')
+  const setupParticipantModeInput = text(formData, 'setupParticipantMode')
+  const setupTournamentType = setupTournamentTypes.has(setupTournamentTypeInput) ? setupTournamentTypeInput : undefined
+  const setupParticipantMode = setupParticipantModes.has(setupParticipantModeInput) ? setupParticipantModeInput : undefined
 
   // Failed submissions redirect back with every entered value in the query string so the form can
   // re-populate itself - previously a validation error (or a taken slug) silently wiped the whole
-  // form and the user had to retype everything from scratch.
+  // form and the user had to retype everything from scratch. Setup Assistant answers ride along
+  // the same way, so a bounced submission doesn't quietly lose them.
   const redirectWithInput = (errorCode: string, extra?: Record<string, string>): never => {
     const query = new URLSearchParams({
       step: 'event',
@@ -49,6 +62,8 @@ export async function createEventAction(formData: FormData): Promise<void> {
       eventEnd: end,
       location,
       organizerName,
+      setupTournamentType: setupTournamentTypeInput,
+      setupParticipantMode: setupParticipantModeInput,
       ...extra,
     })
     redirect(`${wizardPage}?${query.toString()}`)
@@ -97,6 +112,13 @@ export async function createEventAction(formData: FormData): Promise<void> {
     organizer_name: organizerName || undefined,
     status: 'draft' as const,
     visibility: 'hidden' as const,
+    setup_tournament_type: setupTournamentType as
+      | 'single_elimination'
+      | 'round_robin'
+      | 'group_stage_to_knockout'
+      | 'league'
+      | undefined,
+    setup_participant_mode: setupParticipantMode as 'individual' | 'pair' | 'team' | 'club' | undefined,
   }
   const created = await payload.create({ collection: 'events', data })
   await recordAuditLog({

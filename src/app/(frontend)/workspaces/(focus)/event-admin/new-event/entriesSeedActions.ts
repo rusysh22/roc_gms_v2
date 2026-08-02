@@ -14,7 +14,7 @@ const sourceCollectionByMode = (mode: string): 'teams' | 'clubs' | 'players' =>
   : mode === 'club' ? 'clubs'
   : 'players'
 
-const entryTypeByMode = (mode: string) =>
+const entryTypeByMode = (mode: string): 'team' | 'club' | 'pair' | 'individual' | 'open' =>
   mode === 'team' ? 'team'
   : mode === 'club' ? 'club'
   : mode === 'pair' ? 'pair'
@@ -226,6 +226,16 @@ export async function saveSeedOrderAction(formData: FormData): Promise<void> {
     if (Number.isInteger(seed) && seed >= 1) {
       updates.push({ id: match[1], seed })
     }
+  }
+
+  // Safety net behind SeedOrderTable's client-side duplicate check (item 4, option B) - a form
+  // submitted with JS disabled, or a stale tab, could still post duplicate seed numbers.
+  const seenSeeds = new Set<number>()
+  for (const update of updates) {
+    if (seenSeeds.has(update.seed)) {
+      redirect(`${wizardPage}?eventId=${eventId}&step=draw&categoryId=${categoryId}&wizardError=duplicate_seed`)
+    }
+    seenSeeds.add(update.seed)
   }
 
   await Promise.all(

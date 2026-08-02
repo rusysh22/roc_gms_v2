@@ -358,7 +358,9 @@ export async function importParticipantsAction(formData: FormData): Promise<void
       if (row.clubName && !clubId) {
         warn('Players', row.name, `Club "${row.clubName}" not found - saved without a club`)
       }
-      const gender = row.gender && validGenders.has(row.gender) ? row.gender : undefined
+      const gender = row.gender && validGenders.has(row.gender)
+        ? (row.gender as 'male' | 'female' | 'other' | 'prefer_not_to_say')
+        : undefined
       if (row.gender && !gender) {
         warn('Players', row.name, `Gender "${row.gender}" is not valid - saved without a gender`)
       }
@@ -445,7 +447,7 @@ export async function addPlayerAction(formData: FormData): Promise<void> {
     club_id: clubId ? Number(clubId) : undefined,
     name,
     email: email || undefined,
-    gender: gender || undefined,
+    gender: (gender || undefined) as 'male' | 'female' | 'other' | 'prefer_not_to_say' | undefined,
   }
   const created = await payload.create({ collection: 'players', data })
   await recordAuditLog({
