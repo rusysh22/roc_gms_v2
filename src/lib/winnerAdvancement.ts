@@ -212,8 +212,8 @@ export const attemptSingleEliminationWinnerAdvancement = async (
       id: preview.targetMatchId,
       data:
         preview.targetSlot === 'a'
-          ? { participant_a_entry_id: preview.winnerEntryId }
-          : { participant_b_entry_id: preview.winnerEntryId },
+          ? { participant_a_entry_id: Number(preview.winnerEntryId) }
+          : { participant_b_entry_id: Number(preview.winnerEntryId) },
     })
 
     return {
@@ -241,8 +241,8 @@ export const attemptSingleEliminationWinnerAdvancement = async (
       id: preview.targetMatchId,
       data:
         preview.targetSlot === 'a'
-          ? { participant_a_entry_id: preview.winnerEntryId }
-          : { participant_b_entry_id: preview.winnerEntryId },
+          ? { participant_a_entry_id: Number(preview.winnerEntryId) }
+          : { participant_b_entry_id: Number(preview.winnerEntryId) },
     })
 
     return {

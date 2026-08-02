@@ -6,7 +6,10 @@ type Stage = {
   category_id?: Id | { id?: Id; sport_id?: Id | { id?: Id } | null } | null
 }
 type Match = { match_number: string; round_name?: string | null }
-const idOf = (value: Id | { id?: Id } | null | undefined) => typeof value === 'object' ? value?.id : value
+const idOf = (value: Id | { id?: Id } | null | undefined): number | undefined => {
+  const raw = typeof value === 'object' ? value?.id : value
+  return raw === undefined || raw === null ? undefined : Number(raw)
+}
 const nameFor = (remaining: number) => remaining === 0 ? 'Final' : remaining === 1 ? 'Semifinal' : remaining === 2 ? 'Quarterfinal' : `Round of ${2 ** (remaining + 1)}`
 
 /** Safely fills downstream TBD fixtures for legacy wizard brackets. Existing fixtures are never changed. */
@@ -31,7 +34,7 @@ export const ensureSingleEliminationBracketStructure = async (payload: Payload, 
       let number = `repair-${stageId}-r${roundIndex + 1}-${String(slot + 1).padStart(3, '0')}`; let suffix = 2
       while (used.has(number)) { number = `repair-${stageId}-r${roundIndex + 1}-${String(slot + 1).padStart(3, '0')}-${suffix}`; suffix += 1 }
       used.add(number)
-      await payload.create({ collection: 'matches', data: { event_id: eventId, sport_id: sportId, category_id: categoryId, stage_id: stageId, round_name: nameFor(totalRounds - roundIndex - 1), match_number: number, status: 'ready_for_scheduling', generation_source: 'single_elimination', generation_key: key, is_public: true, documentation_status: 'not_started' } })
+      await payload.create({ collection: 'matches', data: { event_id: eventId, sport_id: sportId, category_id: categoryId, stage_id: Number(stageId), round_name: nameFor(totalRounds - roundIndex - 1), match_number: number, status: 'ready_for_scheduling', generation_source: 'single_elimination', generation_key: key, is_public: true, documentation_status: 'not_started' } })
       createdCount += 1
     }
     previousCount = count

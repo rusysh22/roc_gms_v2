@@ -412,7 +412,7 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
   const afterSnapshot = {
     participant_a_score: participantAScore,
     participant_b_score: participantBScore,
-    winner_entry_id: winnerEntryId,
+    winner_entry_id: winnerEntryId == null ? winnerEntryId : Number(winnerEntryId),
     notes: notes || null,
   }
 
@@ -490,8 +490,8 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
   const createdSet = await payload.create({
     collection: 'match-sets',
     data: {
-      event_id: match.event_id,
-      match_id: match.id,
+      event_id: Number(match.event_id),
+      match_id: Number(match.id),
       set_number: nextSetNumber,
       participant_a_score: 0,
       participant_b_score: 0,
@@ -554,7 +554,7 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
   await payload.update({
     collection: 'matches',
     id: match.id,
-    data: { officer_ids: officerIds },
+    data: { officer_ids: officerIds.map(Number) },
   })
 
   await recordAuditLog({

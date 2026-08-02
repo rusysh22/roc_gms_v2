@@ -70,8 +70,8 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
     registration_close_at: toIso(text(formData, 'registrationCloseAt')),
     schedule_publish_at: toIso(text(formData, 'schedulePublishAt')),
     archive_at: toIso(text(formData, 'archiveAt')),
-    status,
-    visibility,
+    status: status as 'draft' | 'setup' | 'coming_soon' | 'live' | 'completed' | 'archived',
+    visibility: visibility as 'hidden' | 'coming_soon' | 'preview_only' | 'published' | 'archived',
   }
 
   const before = await payload.findByID({ collection: 'events', id: event.id, depth: 0 })

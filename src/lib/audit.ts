@@ -1,5 +1,10 @@
 import type { Payload } from 'payload'
 
+// Matches the audit-logs collection's json field type exactly - `unknown` (what callers pass as
+// before/after snapshots) is intentionally broader than this, so it needs a boundary cast rather
+// than a structural match.
+type JsonValue = string | number | boolean | unknown[] | Record<string, unknown> | null
+
 type RecordAuditLogParams = {
   payload: Payload
   action: string
@@ -23,12 +28,12 @@ export const recordAuditLog = async ({
     await payload.create({
       collection: 'audit-logs',
       data: {
-        actor_user_id: actorUserId || undefined,
+        actor_user_id: actorUserId ? Number(actorUserId) : undefined,
         action,
         entity_type: entityType,
         entity_id: String(entityId),
-        before_snapshot: before ?? null,
-        after_snapshot: after ?? null,
+        before_snapshot: (before ?? null) as JsonValue,
+        after_snapshot: (after ?? null) as JsonValue,
       },
     })
   } catch (error) {

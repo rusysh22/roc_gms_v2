@@ -13,9 +13,13 @@ const newPage = `${listPage}/new`
 const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
 const statuses = new Set(['draft', 'review', 'published', 'archived'])
+type AnnouncementStatus = 'draft' | 'review' | 'published' | 'archived'
 const urgencies = new Set(['info', 'warning', 'urgent', 'result', 'schedule_change'])
+type AnnouncementUrgency = 'info' | 'warning' | 'urgent' | 'result' | 'schedule_change'
 const displayModes = new Set(['feed', 'banner', 'urgent_alert'])
+type AnnouncementDisplayMode = 'feed' | 'banner' | 'urgent_alert'
 const targetScopes = new Set(['event', 'sport', 'category', 'match'])
+type AnnouncementTargetScope = 'event' | 'sport' | 'category' | 'match'
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -72,14 +76,14 @@ export async function createAnnouncementAction(formData: FormData): Promise<void
     slug,
     summary,
     body,
-    urgency,
-    display_mode: displayMode,
-    status,
-    target_scope: targetScope,
-    event_id: event.id,
-    sport_id: text(formData, 'sportId') || undefined,
-    category_id: text(formData, 'categoryId') || undefined,
-    match_id: text(formData, 'matchId') || undefined,
+    urgency: urgency as AnnouncementUrgency,
+    display_mode: displayMode as AnnouncementDisplayMode,
+    status: status as AnnouncementStatus,
+    target_scope: targetScope as AnnouncementTargetScope,
+    event_id: Number(event.id),
+    sport_id: text(formData, 'sportId') ? Number(text(formData, 'sportId')) : undefined,
+    category_id: text(formData, 'categoryId') ? Number(text(formData, 'categoryId')) : undefined,
+    match_id: text(formData, 'matchId') ? Number(text(formData, 'matchId')) : undefined,
     published_at: status === 'published' ? new Date().toISOString() : toIso(text(formData, 'publishedAt')),
     expires_at: toIso(text(formData, 'expiresAt')),
     cta_label: text(formData, 'ctaLabel') || undefined,
@@ -151,13 +155,13 @@ export async function updateAnnouncementAction(formData: FormData): Promise<void
     slug,
     summary,
     body,
-    urgency,
-    display_mode: displayMode,
-    status,
-    target_scope: targetScope,
-    sport_id: text(formData, 'sportId') || null,
-    category_id: text(formData, 'categoryId') || null,
-    match_id: text(formData, 'matchId') || null,
+    urgency: urgency as AnnouncementUrgency,
+    display_mode: displayMode as AnnouncementDisplayMode,
+    status: status as AnnouncementStatus,
+    target_scope: targetScope as AnnouncementTargetScope,
+    sport_id: text(formData, 'sportId') ? Number(text(formData, 'sportId')) : null,
+    category_id: text(formData, 'categoryId') ? Number(text(formData, 'categoryId')) : null,
+    match_id: text(formData, 'matchId') ? Number(text(formData, 'matchId')) : null,
     published_at:
       status === 'published' && !before.published_at
         ? new Date().toISOString()

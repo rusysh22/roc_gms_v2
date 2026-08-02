@@ -430,14 +430,14 @@ export const recalculateSingleEliminationBracket = async (
   })
   const data = {
     bracket_key: bracketKey,
-    event_id: layout.eventId,
-    category_id: layout.categoryId,
-    stage_id: layout.stageId,
+    event_id: Number(layout.eventId),
+    category_id: Number(layout.categoryId),
+    stage_id: Number(layout.stageId),
     name: 'Single Elimination Bracket',
-    format: 'single_elimination',
+    format: 'single_elimination' as const,
     seed_config: layout.seedConfig,
     bracket_data: layout.bracketData,
-    status: layout.bracketData.rounds.length > 0 ? 'published' : 'draft',
+    status: (layout.bracketData.rounds.length > 0 ? 'published' : 'draft') as 'published' | 'draft',
   }
   const bracket =
     existing.docs[0] ?

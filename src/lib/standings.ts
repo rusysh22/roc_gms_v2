@@ -446,10 +446,7 @@ export const calculateStandingsForScope = async (
 // generateMatchesAction's round-robin branch passes `eventId`/`categoryId` as strings). Payload's
 // relationship validation rejects a numeric-looking *string* here even though REST/GraphQL callers
 // send strings routinely - normalize to a real number right before writing.
-const toRelationId = (value: Id): Id => {
-  const numeric = Number(value)
-  return Number.isFinite(numeric) ? numeric : value
-}
+const toRelationId = (value: Id): number => Number(value)
 
 export const recalculateStandingsForScope = async (
   payload: Payload,

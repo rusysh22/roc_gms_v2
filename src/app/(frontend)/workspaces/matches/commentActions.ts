@@ -58,9 +58,9 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
     data: {
       entity_type: 'matches',
       entity_id: String(match.id),
-      comment_type: commentType,
+      comment_type: commentType as 'internal' | 'official_note',
       author_name: resolvedAuthorName,
-      author_user_id: actorUserId || undefined,
+      author_user_id: actorUserId ? Number(actorUserId) : undefined,
       body,
       status,
       is_pinned: isPinned,

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Payload } from 'payload'
 
+import type { Article } from '@/generated/payload-types'
 import { recordAuditLog } from '@/lib/audit'
 import { markdownLiteToLexicalContent } from '../../../../contentData'
 import { getActiveEvent } from '../../../activeEvent'
@@ -15,6 +16,7 @@ const newPage = `${listPage}/new`
 const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
 const statuses = new Set(['draft', 'review', 'published', 'archived'])
+type ArticleStatus = 'draft' | 'review' | 'published' | 'archived'
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -78,13 +80,13 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     title,
     slug,
     excerpt,
-    content: markdownLiteToLexicalContent(text(formData, 'content') || excerpt),
+    content: markdownLiteToLexicalContent(text(formData, 'content') || excerpt) as Article['content'],
     cover_image: cover.id,
-    event_id: event.id,
-    sport_id: text(formData, 'sportId') || undefined,
-    category_id: text(formData, 'categoryId') || undefined,
-    match_id: text(formData, 'matchId') || undefined,
-    status,
+    event_id: Number(event.id),
+    sport_id: text(formData, 'sportId') ? Number(text(formData, 'sportId')) : undefined,
+    category_id: text(formData, 'categoryId') ? Number(text(formData, 'categoryId')) : undefined,
+    match_id: text(formData, 'matchId') ? Number(text(formData, 'matchId')) : undefined,
+    status: status as ArticleStatus,
     published_at: status === 'published' ? new Date().toISOString() : undefined,
     share_title: text(formData, 'shareTitle') || undefined,
     share_description: text(formData, 'shareDescription') || undefined,
@@ -147,10 +149,10 @@ export async function updateArticleAction(formData: FormData): Promise<void> {
     excerpt,
     content: markdownLiteToLexicalContent(text(formData, 'content') || excerpt),
     ...(cover.id ? { cover_image: cover.id } : {}),
-    sport_id: text(formData, 'sportId') || null,
-    category_id: text(formData, 'categoryId') || null,
-    match_id: text(formData, 'matchId') || null,
-    status,
+    sport_id: text(formData, 'sportId') ? Number(text(formData, 'sportId')) : null,
+    category_id: text(formData, 'categoryId') ? Number(text(formData, 'categoryId')) : null,
+    match_id: text(formData, 'matchId') ? Number(text(formData, 'matchId')) : null,
+    status: status as ArticleStatus,
     published_at:
       status === 'published' && !before.published_at ? new Date().toISOString() : before.published_at,
     share_title: text(formData, 'shareTitle') || undefined,

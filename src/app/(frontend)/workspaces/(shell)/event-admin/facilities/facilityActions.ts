@@ -25,7 +25,7 @@ export async function saveVenueAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page })
   const event = await getEvent(payload); const id = text(formData, 'id'); const name = text(formData, 'name')
   if (!event || !name) redirect(`${page}?facilityError=invalid_venue`)
-  const data = { event_id: event.id, name, address: text(formData, 'address') || undefined, map_url: text(formData, 'mapUrl') || undefined, description: text(formData, 'description') || undefined, is_virtual: text(formData, 'isVirtual') === 'on', virtual_url: text(formData, 'virtualUrl') || undefined }
+  const data = { event_id: Number(event.id), name, address: text(formData, 'address') || undefined, map_url: text(formData, 'mapUrl') || undefined, description: text(formData, 'description') || undefined, is_virtual: text(formData, 'isVirtual') === 'on', virtual_url: text(formData, 'virtualUrl') || undefined }
   if (id) {
     const before = await payload.findByID({ collection: 'venues', id, depth: 0 })
     await payload.update({ collection: 'venues', id, data })
@@ -51,7 +51,7 @@ export async function saveCourtAction(formData: FormData): Promise<void> {
   } catch { redirect(`${page}?facilityError=invalid_relationship`) }
   const capacity = text(formData, 'capacity'); const parsedCapacity = capacity ? Number(capacity) : undefined
   if (parsedCapacity !== undefined && (!Number.isInteger(parsedCapacity) || parsedCapacity < 0)) redirect(`${page}?facilityError=invalid_court`)
-  const data = { event_id: event.id, venue_id: venueId, name, sport_id: sportId || undefined, capacity: parsedCapacity, is_active: text(formData, 'isActive') === 'on' }
+  const data = { event_id: Number(event.id), venue_id: Number(venueId), name, sport_id: sportId ? Number(sportId) : undefined, capacity: parsedCapacity, is_active: text(formData, 'isActive') === 'on' }
   if (id) {
     const before = await payload.findByID({ collection: 'courts', id, depth: 0 })
     await payload.update({ collection: 'courts', id, data })

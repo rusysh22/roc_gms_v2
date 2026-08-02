@@ -14,6 +14,12 @@ type PublicEditUser = {
   roles?: string[] | null
 }
 
+const eventVisibilities = new Set(['published', 'hidden', 'coming_soon', 'archived', 'preview_only'])
+type EventVisibility = 'published' | 'hidden' | 'coming_soon' | 'archived' | 'preview_only'
+
+const contentStatuses = new Set(['draft', 'published', 'archived', 'review'])
+type ContentStatus = 'draft' | 'published' | 'archived' | 'review'
+
 const textField = (formData: FormData, key: string) => {
   const value = formData.get(key)
   return typeof value === 'string' ? value.trim() : ''
@@ -64,10 +70,13 @@ export async function updateEventPublicContentAction(formData: FormData): Promis
   }
   const before = await payload.findByID({ collection: 'events', id, depth: 0 })
   const visibility = textField(formData, 'visibility')
+  if (visibility && !eventVisibilities.has(visibility)) {
+    redirect(`${returnTo}?editError=invalid_visibility`)
+  }
   const data = {
     description: nullableTextField(formData, 'description'),
     hero_tagline: nullableTextField(formData, 'heroTagline'),
-    visibility: visibility || before.visibility,
+    visibility: (visibility || before.visibility) as EventVisibility,
   }
 
   await payload.update({
@@ -105,7 +114,11 @@ export async function updateArticlePublicContentAction(formData: FormData): Prom
   const payload = await getPayload({ config })
   const actor = await getAuthorizedActor(payload)
   const before = await payload.findByID({ collection: 'articles', id, depth: 0 })
-  const status = textField(formData, 'status') || before.status
+  const statusInput = textField(formData, 'status')
+  if (statusInput && !contentStatuses.has(statusInput)) {
+    redirect(`${returnTo}?editError=invalid_status`)
+  }
+  const status = (statusInput || before.status) as ContentStatus
   const data = {
     title: textField(formData, 'title') || before.title,
     excerpt: textField(formData, 'excerpt') || before.excerpt,
@@ -154,7 +167,11 @@ export async function updateAnnouncementPublicContentAction(formData: FormData):
   const payload = await getPayload({ config })
   const actor = await getAuthorizedActor(payload)
   const before = await payload.findByID({ collection: 'announcements', id, depth: 0 })
-  const status = textField(formData, 'status') || before.status
+  const statusInput = textField(formData, 'status')
+  if (statusInput && !contentStatuses.has(statusInput)) {
+    redirect(`${returnTo}?editError=invalid_status`)
+  }
+  const status = (statusInput || before.status) as ContentStatus
   const data = {
     title: textField(formData, 'title') || before.title,
     summary: textField(formData, 'summary') || before.summary,

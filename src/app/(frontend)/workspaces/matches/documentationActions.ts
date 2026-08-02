@@ -59,10 +59,10 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
     data: {
       event_id: match.event_id,
       match_id: match.id,
-      uploaded_by: user.id,
-      asset_type: assetType,
+      uploaded_by: Number(user.id),
+      asset_type: assetType as 'photo' | 'video' | 'file' | 'score_sheet' | 'other',
       caption: caption || undefined,
-      visibility,
+      visibility: visibility as 'public' | 'internal',
     },
     file: {
       data: Buffer.from(arrayBuffer),

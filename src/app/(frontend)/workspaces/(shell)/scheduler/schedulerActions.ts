@@ -62,7 +62,7 @@ export async function createScheduledMatchAction(formData: FormData): Promise<vo
   const all = await payload.find({ collection: 'matches', depth: 2, limit: 500 })
   const candidate: WorkspaceMatch = { id: 'candidate', match_number: matchNumber, status, scheduled_start_at: start, scheduled_end_at: end, participant_a_entry_id: participantA, participant_b_entry_id: participantB, venue_id: venueId, court_id: courtId }
   if (detectScheduleConflicts([...all.docs as WorkspaceMatch[], candidate]).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
-  const created = await payload.create({ collection: 'matches', data: { event_id: event.id, sport_id: sportId, category_id: categoryId, participant_a_entry_id: participantA, participant_b_entry_id: participantB, venue_id: venueId, court_id: courtId, match_number: matchNumber, scheduled_start_at: start, scheduled_end_at: end, status, is_public: text(formData, 'isPublic') === 'on', generation_source: 'manual', generation_key: `manual-${event.id}-${matchNumber}`, documentation_status: 'not_started' } })
+  const created = await payload.create({ collection: 'matches', data: { event_id: Number(event.id), sport_id: Number(sportId), category_id: Number(categoryId), participant_a_entry_id: Number(participantA), participant_b_entry_id: Number(participantB), venue_id: Number(venueId), court_id: Number(courtId), match_number: matchNumber, scheduled_start_at: start, scheduled_end_at: end, status: status as 'draft' | 'ready_for_scheduling' | 'scheduled', is_public: text(formData, 'isPublic') === 'on', generation_source: 'manual', generation_key: `manual-${event.id}-${matchNumber}`, documentation_status: 'not_started' } })
   await recordAuditLog({ payload, action: 'schedule.match_create', entityType: 'matches', entityId: created.id, before: null, after: { match_number: matchNumber, scheduled_start_at: start, scheduled_end_at: end, reason: 'manual schedule creation' }, actorUserId: user.id })
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleCreated=1`)
 }
@@ -80,7 +80,7 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   const candidate = { ...match, id: 'candidate', scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId }
   if (detectScheduleConflicts([...all.docs.filter((item) => item.id !== match.id) as WorkspaceMatch[], candidate]).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
   const before = { scheduled_start_at: match.scheduled_start_at || null, scheduled_end_at: match.scheduled_end_at || null, venue_id: match.venue_id || null, court_id: match.court_id || null }
-  await payload.update({ collection: 'matches', id: match.id, data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId } })
+  await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId) } })
   await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleRescheduled=1`)
 }

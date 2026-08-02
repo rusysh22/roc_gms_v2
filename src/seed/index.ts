@@ -160,9 +160,9 @@ const linkSingleEliminationNextMatches = async (payload: SeedPayload, eventId: S
 
         await payload.update({
           collection: 'matches',
-          id: getId(sourceMatch),
+          id: Number(getId(sourceMatch)),
           data: {
-            next_match_id: getId(targetMatch),
+            next_match_id: Number(getId(targetMatch)),
             next_match_slot: matchIndex % 2 === 0 ? 'a' : 'b',
           },
         })
@@ -462,7 +462,10 @@ const seed = async () => {
   if (existingConfigs.totalDocs === 0) {
     await payload.create({
       collection: 'site-configs',
-      data: defaultSiteConfig,
+      data: {
+        ...defaultSiteConfig,
+        default_language: defaultSiteConfig.default_language as 'en' | 'id',
+      },
     })
     payload.logger.info('Created default site config')
   } else {
@@ -474,7 +477,22 @@ const seed = async () => {
     existingEvent ||
     (await payload.create({
       collection: 'events',
-      data: demoScenario.event,
+      data: {
+        ...demoScenario.event,
+        status: demoScenario.event.status as
+          | 'draft'
+          | 'setup'
+          | 'coming_soon'
+          | 'live'
+          | 'completed'
+          | 'archived',
+        visibility: demoScenario.event.visibility as
+          | 'hidden'
+          | 'coming_soon'
+          | 'preview_only'
+          | 'published'
+          | 'archived',
+      },
     }))
   const eventId = getId(event)
 
@@ -494,8 +512,15 @@ const seed = async () => {
           slug: sportData.slug,
           description: sportData.description,
           icon: sportData.icon,
-          sport_type: sportData.sport_type,
-          event_id: eventId,
+          sport_type: sportData.sport_type as
+            | 'court'
+            | 'field'
+            | 'table'
+            | 'board'
+            | 'esport'
+            | 'track'
+            | 'other',
+          event_id: Number(eventId),
         },
       }))
 
@@ -513,9 +538,15 @@ const seed = async () => {
           name: rulesetData.name,
           slug: rulesetData.slug,
           description: rulesetData.description,
-          event_id: eventId,
-          sport_id: sportIds.get(rulesetData.sportSlug),
-          score_type: rulesetData.score_type,
+          event_id: Number(eventId),
+          sport_id: Number(sportIds.get(rulesetData.sportSlug)),
+          score_type: rulesetData.score_type as
+            | 'custom'
+            | 'time'
+            | 'result'
+            | 'points'
+            | 'goals'
+            | 'sets',
           allow_draw: rulesetData.allow_draw,
           set_based: rulesetData.set_based,
           timer_enabled: rulesetData.timer_enabled,
@@ -530,7 +561,16 @@ const seed = async () => {
           period_duration: rulesetData.period_duration,
           overtime_enabled: rulesetData.overtime_enabled,
           penalty_enabled: rulesetData.penalty_enabled,
-          tie_breakers: rulesetData.tie_breakers,
+          tie_breakers: rulesetData.tie_breakers as (
+            | 'points'
+            | 'score_for'
+            | 'score_difference'
+            | 'set_for'
+            | 'set_difference'
+            | 'head_to_head'
+            | 'fewest_penalties'
+            | 'manual_decision'
+          )[],
         },
       }))
 
@@ -544,9 +584,9 @@ const seed = async () => {
     if (sportId && defaultRulesetId) {
       await payload.update({
         collection: 'sports',
-        id: sportId,
+        id: Number(sportId),
         data: {
-          default_ruleset_id: defaultRulesetId,
+          default_ruleset_id: Number(defaultRulesetId),
         },
       })
     }
@@ -562,15 +602,29 @@ const seed = async () => {
         data: {
           name: categoryData.name,
           slug: categoryData.slug,
-          event_id: eventId,
-          sport_id: sportIds.get(categoryData.sportSlug),
-          participant_mode: categoryData.participant_mode,
+          event_id: Number(eventId),
+          sport_id: Number(sportIds.get(categoryData.sportSlug)),
+          participant_mode: categoryData.participant_mode as
+            | 'open'
+            | 'individual'
+            | 'pair'
+            | 'team'
+            | 'club'
+            | 'tbd',
           roster_required: categoryData.roster_required,
           min_roster_size: categoryData.min_roster_size,
           max_roster_size: categoryData.max_roster_size,
-          ruleset_id: rulesetIds.get(categoryData.rulesetSlug),
-          format_type: categoryData.format_type,
-          status: categoryData.status,
+          ruleset_id: Number(rulesetIds.get(categoryData.rulesetSlug)),
+          format_type: categoryData.format_type as
+            | 'single_elimination'
+            | 'double_elimination'
+            | 'round_robin'
+            | 'group_stage_to_knockout'
+            | 'league'
+            | 'friendly'
+            | 'time_trial'
+            | 'score_ranking',
+          status: categoryData.status as 'open' | 'draft' | 'published' | 'archived' | 'locked',
         },
       }))
 
@@ -579,9 +633,9 @@ const seed = async () => {
     if (existingCategory) {
       await payload.update({
         collection: 'competition-categories',
-        id: getId(existingCategory),
+        id: Number(getId(existingCategory)),
         data: {
-          ruleset_id: rulesetIds.get(categoryData.rulesetSlug),
+          ruleset_id: Number(rulesetIds.get(categoryData.rulesetSlug)),
         },
       })
     }
@@ -596,7 +650,7 @@ const seed = async () => {
         collection: 'clubs',
         data: {
           ...clubData,
-          event_id: eventId,
+          event_id: Number(eventId),
         },
       }))
 
@@ -614,9 +668,9 @@ const seed = async () => {
           name: playerData.name,
           employee_id: playerData.employee_id,
           email: playerData.email,
-          gender: playerData.gender,
-          event_id: eventId,
-          club_id: clubIds.get(playerData.clubSlug),
+          gender: playerData.gender as 'other' | 'male' | 'female' | 'prefer_not_to_say',
+          event_id: Number(eventId),
+          club_id: Number(clubIds.get(playerData.clubSlug)),
         },
       }))
 
@@ -633,9 +687,9 @@ const seed = async () => {
         data: {
           name: teamData.name,
           slug: teamData.slug,
-          event_id: eventId,
-          club_id: clubIds.get(teamData.clubSlug),
-          captain_player_id: playerIds.get(teamData.captainEmployeeId),
+          event_id: Number(eventId),
+          club_id: Number(clubIds.get(teamData.clubSlug)),
+          captain_player_id: Number(playerIds.get(teamData.captainEmployeeId)),
           contact_email: teamData.contact_email,
         },
       }))
@@ -654,11 +708,11 @@ const seed = async () => {
       await payload.create({
         collection: 'rosters',
         data: {
-          event_id: eventId,
-          team_id: teamId,
-          player_id: playerId,
-          category_id: categoryId,
-          role: rosterData.role,
+          event_id: Number(eventId),
+          team_id: Number(teamId),
+          player_id: Number(playerId),
+          category_id: Number(categoryId),
+          role: rosterData.role as 'player' | 'captain' | 'coach' | 'manager' | 'substitute',
           status: 'active',
         },
       })
@@ -679,15 +733,28 @@ const seed = async () => {
       await payload.create({
         collection: 'competition-entries',
         data: {
-          event_id: eventId,
-          category_id: categoryId,
-          entry_type: entryData.entry_type,
-          club_id: entryData.clubSlug ? clubIds.get(entryData.clubSlug) : undefined,
-          team_id: entryData.teamSlug ? teamIds.get(entryData.teamSlug) : undefined,
-          player_id: entryData.playerEmployeeId ? playerIds.get(entryData.playerEmployeeId) : undefined,
+          event_id: Number(eventId),
+          category_id: Number(categoryId),
+          entry_type: entryData.entry_type as
+            | 'individual'
+            | 'pair'
+            | 'team'
+            | 'club'
+            | 'open'
+            | 'tbd',
+          club_id: entryData.clubSlug ? Number(clubIds.get(entryData.clubSlug)) : undefined,
+          team_id: entryData.teamSlug ? Number(teamIds.get(entryData.teamSlug)) : undefined,
+          player_id: entryData.playerEmployeeId
+            ? Number(playerIds.get(entryData.playerEmployeeId))
+            : undefined,
           display_name: entryData.display_name,
           seed_number: entryData.seed_number,
-          status: entryData.status,
+          status: entryData.status as
+            | 'pending'
+            | 'confirmed'
+            | 'waitlisted'
+            | 'withdrawn'
+            | 'disqualified',
         },
       })
     } else {
@@ -695,10 +762,15 @@ const seed = async () => {
       // older version of this file (before an entry's demo status/seed changed) still converges.
       await payload.update({
         collection: 'competition-entries',
-        id: getId(existingEntry),
+        id: Number(getId(existingEntry)),
         data: {
           seed_number: entryData.seed_number,
-          status: entryData.status,
+          status: entryData.status as
+            | 'pending'
+            | 'confirmed'
+            | 'waitlisted'
+            | 'withdrawn'
+            | 'disqualified',
         },
       })
     }
@@ -732,7 +804,7 @@ const seed = async () => {
         collection: 'venues',
         data: {
           ...venueData,
-          event_id: eventId,
+          event_id: Number(eventId),
         },
       }))
 
@@ -746,10 +818,10 @@ const seed = async () => {
       await payload.create({
         collection: 'courts',
         data: {
-          event_id: eventId,
-          venue_id: venueIds.get(courtData.venueName),
+          event_id: Number(eventId),
+          venue_id: Number(venueIds.get(courtData.venueName)),
           name: courtData.name,
-          sport_id: sportIds.get(courtData.sportSlug),
+          sport_id: Number(sportIds.get(courtData.sportSlug)),
           capacity: courtData.capacity,
           is_active: true,
         },
@@ -769,12 +841,22 @@ const seed = async () => {
       (await payload.create({
         collection: 'stages',
         data: {
-          event_id: eventId,
-          category_id: categoryId,
+          event_id: Number(eventId),
+          category_id: Number(categoryId),
           name: stageData.name,
-          stage_type: stageData.stage_type,
+          stage_type: stageData.stage_type as
+            | 'group_stage'
+            | 'round_robin'
+            | 'single_elimination'
+            | 'double_elimination'
+            | 'swiss'
+            | 'league'
+            | 'final_only'
+            | 'friendly'
+            | 'time_trial'
+            | 'score_ranking',
           order: stageData.order,
-          status: stageData.status,
+          status: stageData.status as 'draft' | 'ready' | 'published' | 'completed' | 'archived',
         },
       }))
 
@@ -790,8 +872,8 @@ const seed = async () => {
       (await payload.create({
         collection: 'groups',
         data: {
-          event_id: eventId,
-          stage_id: stageId,
+          event_id: Number(eventId),
+          stage_id: Number(stageId),
           name: groupData.name,
           order: groupData.order,
         },
@@ -842,27 +924,47 @@ const seed = async () => {
       (await payload.create({
         collection: 'matches',
         data: {
-          event_id: eventId,
-          sport_id: sportIds.get(matchData.sportSlug),
-          category_id: categoryIds.get(matchData.categorySlug),
-          stage_id: stageIds.get(matchData.stageCategorySlug),
+          event_id: Number(eventId),
+          sport_id: Number(sportIds.get(matchData.sportSlug)),
+          category_id: Number(categoryIds.get(matchData.categorySlug)),
+          stage_id: Number(stageIds.get(matchData.stageCategorySlug)),
           group_id: matchData.groupName
-            ? groupIds.get(`${matchData.stageCategorySlug}:${matchData.groupName}`)
+            ? Number(groupIds.get(`${matchData.stageCategorySlug}:${matchData.groupName}`))
             : undefined,
           round_name: matchData.round_name,
           match_number: matchData.match_number,
-          participant_a_entry_id: entryIds.get(matchData.participantA || ''),
-          participant_b_entry_id: entryIds.get(matchData.participantB || ''),
+          participant_a_entry_id: Number(entryIds.get(matchData.participantA || '')),
+          participant_b_entry_id: Number(entryIds.get(matchData.participantB || '')),
           scheduled_start_at: matchData.scheduled_start_at,
           scheduled_end_at: matchData.scheduled_end_at,
-          venue_id: matchData.venueName ? venueIds.get(matchData.venueName) : undefined,
-          court_id: matchData.courtName ? courtIds.get(matchData.courtName) : undefined,
-          status: matchData.status,
+          venue_id: matchData.venueName ? Number(venueIds.get(matchData.venueName)) : undefined,
+          court_id: matchData.courtName ? Number(courtIds.get(matchData.courtName)) : undefined,
+          status: matchData.status as
+            | 'draft'
+            | 'ready_for_scheduling'
+            | 'scheduled'
+            | 'published'
+            | 'check_in_open'
+            | 'ready_to_start'
+            | 'ongoing'
+            | 'paused'
+            | 'under_review'
+            | 'finished'
+            | 'result_published'
+            | 'postponed'
+            | 'cancelled'
+            | 'walkover'
+            | 'disputed',
           generation_source: 'manual',
-          winner_entry_id: winnerEntryId,
+          winner_entry_id: winnerEntryId ? Number(winnerEntryId) : undefined,
           score_summary: scoreSummary,
           is_public: matchData.is_public,
-          documentation_status: matchData.documentation_status,
+          documentation_status: matchData.documentation_status as
+            | 'not_started'
+            | 'needed'
+            | 'submitted'
+            | 'approved'
+            | 'not_required',
         },
       }))
 
@@ -875,17 +977,37 @@ const seed = async () => {
     if (existingMatch && matchData.finalStateDeclared !== false) {
       await payload.update({
         collection: 'matches',
-        id: getId(existingMatch),
+        id: Number(getId(existingMatch)),
         data: {
-          status: matchData.status,
-          winner_entry_id: winnerEntryId,
+          status: matchData.status as
+            | 'draft'
+            | 'ready_for_scheduling'
+            | 'scheduled'
+            | 'published'
+            | 'check_in_open'
+            | 'ready_to_start'
+            | 'ongoing'
+            | 'paused'
+            | 'under_review'
+            | 'finished'
+            | 'result_published'
+            | 'postponed'
+            | 'cancelled'
+            | 'walkover'
+            | 'disputed',
+          winner_entry_id: winnerEntryId ? Number(winnerEntryId) : undefined,
           score_summary: scoreSummary,
           is_public: matchData.is_public,
-          documentation_status: matchData.documentation_status,
+          documentation_status: matchData.documentation_status as
+            | 'not_started'
+            | 'needed'
+            | 'submitted'
+            | 'approved'
+            | 'not_required',
           scheduled_start_at: matchData.scheduled_start_at,
           scheduled_end_at: matchData.scheduled_end_at,
-          venue_id: matchData.venueName ? venueIds.get(matchData.venueName) : undefined,
-          court_id: matchData.courtName ? courtIds.get(matchData.courtName) : undefined,
+          venue_id: matchData.venueName ? Number(venueIds.get(matchData.venueName)) : undefined,
+          court_id: matchData.courtName ? Number(courtIds.get(matchData.courtName)) : undefined,
         },
       })
     }
@@ -991,17 +1113,20 @@ const seed = async () => {
         (await payload.create({
           collection: 'matches',
           data: {
-            event_id: eventId,
-            sport_id: sportIds.get(generationData.sportSlug),
-            category_id: categoryId,
-            stage_id: stageId,
-            group_id: groupId,
+            event_id: Number(eventId),
+            sport_id: Number(sportIds.get(generationData.sportSlug)),
+            category_id: Number(categoryId),
+            stage_id: Number(stageId),
+            group_id: groupId ? Number(groupId) : undefined,
             round_name: pairing.roundName,
             match_number: matchNumber,
-            participant_a_entry_id: pairing.participantA.id,
-            participant_b_entry_id: pairing.participantB.id,
+            participant_a_entry_id: Number(pairing.participantA.id),
+            participant_b_entry_id: Number(pairing.participantB.id),
             status: 'ready_for_scheduling',
-            generation_source: generationData.generation_type,
+            generation_source: generationData.generation_type as
+              | 'manual'
+              | 'round_robin'
+              | 'single_elimination',
             generation_key: generationKey,
             is_public: false,
             documentation_status: 'not_started',
@@ -1041,7 +1166,7 @@ const seed = async () => {
     slug: string
     excerpt: string
     paragraphs: string[]
-    status: string
+    status: 'draft' | 'review' | 'published' | 'archived'
     published_at?: string
     sportSlug?: string
     categorySlug?: string
@@ -1095,10 +1220,12 @@ const seed = async () => {
       content: createLexicalContent(articleData.paragraphs),
       status: articleData.status,
       published_at: articleData.published_at,
-      event_id: eventId,
-      sport_id: articleData.sportSlug ? sportIds.get(articleData.sportSlug) : undefined,
-      category_id: articleData.categorySlug ? categoryIds.get(articleData.categorySlug) : undefined,
-      match_id: matchId,
+      event_id: Number(eventId),
+      sport_id: articleData.sportSlug ? Number(sportIds.get(articleData.sportSlug)) : undefined,
+      category_id: articleData.categorySlug
+        ? Number(categoryIds.get(articleData.categorySlug))
+        : undefined,
+      match_id: matchId ? Number(matchId) : undefined,
       share_title: articleData.share_title,
       share_description: articleData.share_description,
       comments_enabled: articleData.comments_enabled || false,
@@ -1107,7 +1234,7 @@ const seed = async () => {
     if (existingArticle) {
       await payload.update({
         collection: 'articles',
-        id: getId(existingArticle),
+        id: Number(getId(existingArticle)),
         data,
       })
     } else {
@@ -1123,10 +1250,10 @@ const seed = async () => {
     slug: string
     summary: string
     body: string
-    urgency: string
-    display_mode: string
-    status: string
-    target_scope: string
+    urgency: 'info' | 'warning' | 'urgent' | 'result' | 'schedule_change'
+    display_mode: 'feed' | 'banner' | 'urgent_alert'
+    status: 'draft' | 'review' | 'published' | 'archived'
+    target_scope: 'event' | 'sport' | 'category' | 'match'
     published_at?: string
     expires_at?: string
     sportSlug?: string
@@ -1188,12 +1315,14 @@ const seed = async () => {
       target_scope: announcementData.target_scope,
       published_at: announcementData.published_at,
       expires_at: announcementData.expires_at,
-      event_id: eventId,
-      sport_id: announcementData.sportSlug ? sportIds.get(announcementData.sportSlug) : undefined,
-      category_id: announcementData.categorySlug
-        ? categoryIds.get(announcementData.categorySlug)
+      event_id: Number(eventId),
+      sport_id: announcementData.sportSlug
+        ? Number(sportIds.get(announcementData.sportSlug))
         : undefined,
-      match_id: matchId,
+      category_id: announcementData.categorySlug
+        ? Number(categoryIds.get(announcementData.categorySlug))
+        : undefined,
+      match_id: matchId ? Number(matchId) : undefined,
       cta_label: announcementData.cta_label,
       cta_url: announcementData.cta_url,
       share_title: announcementData.share_title,
@@ -1203,7 +1332,7 @@ const seed = async () => {
     if (existingAnnouncement) {
       await payload.update({
         collection: 'announcements',
-        id: getId(existingAnnouncement),
+        id: Number(getId(existingAnnouncement)),
         data,
       })
     } else {
@@ -1231,8 +1360,8 @@ const seed = async () => {
       await payload.create({
         collection: 'match-sets',
         data: {
-          event_id: eventId,
-          match_id: matchId,
+          event_id: Number(eventId),
+          match_id: Number(matchId),
           set_number: setData.set_number,
           participant_a_score: setData.participant_a_score,
           participant_b_score: setData.participant_b_score,
@@ -1264,17 +1393,38 @@ const seed = async () => {
 
     await payload.update({
       collection: 'matches',
-      id: matchId,
+      id: Number(matchId),
       data: {
-        status: overrideData.status,
-        winner_entry_id: overrideData.winner ? entryIds.get(overrideData.winner) : undefined,
+        status: overrideData.status as
+          | 'draft'
+          | 'ready_for_scheduling'
+          | 'scheduled'
+          | 'published'
+          | 'check_in_open'
+          | 'ready_to_start'
+          | 'ongoing'
+          | 'paused'
+          | 'under_review'
+          | 'finished'
+          | 'result_published'
+          | 'postponed'
+          | 'cancelled'
+          | 'walkover'
+          | 'disputed',
+        winner_entry_id: overrideData.winner ? Number(entryIds.get(overrideData.winner)) : undefined,
         score_summary: overrideData.score_summary,
         is_public: overrideData.is_public,
-        documentation_status: overrideData.documentation_status,
+        documentation_status: overrideData.documentation_status as
+          | 'not_started'
+          | 'needed'
+          | 'submitted'
+          | 'approved'
+          | 'not_required'
+          | undefined,
         scheduled_start_at: overrideData.scheduled_start_at,
         scheduled_end_at: overrideData.scheduled_end_at,
-        venue_id: overrideData.venueName ? venueIds.get(overrideData.venueName) : undefined,
-        court_id: overrideData.courtName ? courtIds.get(overrideData.courtName) : undefined,
+        venue_id: overrideData.venueName ? Number(venueIds.get(overrideData.venueName)) : undefined,
+        court_id: overrideData.courtName ? Number(courtIds.get(overrideData.courtName)) : undefined,
       },
     })
   }
@@ -1298,17 +1448,22 @@ const seed = async () => {
 
     await payload.update({
       collection: 'matches',
-      id: matchId,
+      id: Number(matchId),
       data: {
         status: 'result_published',
-        winner_entry_id: entryIds.get(resultData.winner),
+        winner_entry_id: Number(entryIds.get(resultData.winner)),
         score_summary: resultData.score_summary,
         is_public: resultData.is_public,
-        documentation_status: resultData.documentation_status,
+        documentation_status: resultData.documentation_status as
+          | 'not_started'
+          | 'needed'
+          | 'submitted'
+          | 'approved'
+          | 'not_required',
         scheduled_start_at: resultData.scheduled_start_at,
         scheduled_end_at: resultData.scheduled_end_at,
-        venue_id: resultData.venueName ? venueIds.get(resultData.venueName) : undefined,
-        court_id: resultData.courtName ? courtIds.get(resultData.courtName) : undefined,
+        venue_id: resultData.venueName ? Number(venueIds.get(resultData.venueName)) : undefined,
+        court_id: resultData.courtName ? Number(courtIds.get(resultData.courtName)) : undefined,
       },
     })
 
@@ -1321,9 +1476,9 @@ const seed = async () => {
   // redesigned public gallery and workspace list actually render differently.
   const documentationSeeds: Array<{
     matchNumber: string
-    asset_type: string
+    asset_type: 'other' | 'photo' | 'video' | 'file' | 'score_sheet'
     caption: string
-    visibility: string
+    visibility: 'public' | 'internal'
     mimetype: string
     filename: string
   }> = [
@@ -1348,8 +1503,8 @@ const seed = async () => {
       await payload.create({
         collection: 'documentation-assets',
         data: {
-          event_id: eventId,
-          match_id: matchId,
+          event_id: Number(eventId),
+          match_id: Number(matchId),
           asset_type: docData.asset_type,
           caption: docData.caption,
           visibility: docData.visibility,
@@ -1368,10 +1523,10 @@ const seed = async () => {
   // (pending, approved, resolved) across a couple of different matches.
   const commentSeeds: Array<{
     matchNumber: string
-    comment_type: string
+    comment_type: 'public' | 'internal' | 'official_note'
     author_name: string
     body: string
-    status: string
+    status: 'deleted' | 'hidden' | 'pending' | 'approved' | 'resolved'
     is_pinned?: boolean
     resolved_at?: string
   }> = [
