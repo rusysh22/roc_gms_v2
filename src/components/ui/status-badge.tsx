@@ -7,8 +7,12 @@ import { cn } from '@/lib/utils'
 // everything else (drafts, postponed, cancelled, walkover, disputed) without implying an error.
 export type StatusTone = 'green' | 'blue' | 'gold' | 'neutral'
 
+// AUDIT_UI_UX_CSS axe: "green" was the one tone still on bg-mist while blue/gold both use
+// bg-paper - CSS-08 verified --color-green against white/paper specifically (~4.6-4.7:1),
+// and mist's slightly lower luminance was enough to tip text-green-on-mist to 4.24:1,
+// under the 4.5:1 minimum. bg-paper matches the other tones and restores the verified ratio.
 const toneClasses: Record<StatusTone, string> = {
-  green: 'border-green/30 bg-mist text-green',
+  green: 'border-green/30 bg-paper text-green',
   blue: 'border-blue/30 bg-paper text-blue',
   gold: 'border-gold/40 bg-paper text-gold',
   neutral: 'border-line bg-paper text-ink-soft',

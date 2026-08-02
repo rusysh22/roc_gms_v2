@@ -78,7 +78,10 @@ function UserMenu({ user }: { user: PublicNavUser }) {
   return (
     <details ref={detailsRef} className="relative">
       <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1.5 text-xs font-bold text-ink no-underline [&::-webkit-details-marker]:hidden">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-mist text-[10px] font-extrabold text-green">
+        {/* AUDIT_UI_UX_CSS axe: text-green on bg-mist at 10px measured 4.24:1, under 4.5:1 -
+            text-ink passes easily and keeps the mist fill that makes this read as an avatar
+            chip (bg-paper would blend into the summary it sits inside). */}
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-mist text-[10px] font-extrabold text-ink">
           {initial}
         </span>
         <span className="max-w-28 truncate">{user.name || user.email}</span>

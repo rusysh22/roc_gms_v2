@@ -15,7 +15,10 @@ import { cn } from '@/lib/utils'
 export type AlertTone = 'success' | 'error' | 'info' | 'warning'
 
 const toneClasses: Record<AlertTone, string> = {
-  success: 'border-green/30 bg-mist text-green',
+  // AUDIT_UI_UX_CSS axe: text-green on bg-mist measured 4.24:1 for this text size/weight,
+  // under the 4.5:1 minimum (bg-paper, like every other tone here, restores the ratio
+  // --color-green was actually verified against in the CSS-08 pass).
+  success: 'border-green/30 bg-paper text-green',
   error: 'border-danger/30 bg-danger-surface text-danger',
   info: 'border-blue/30 bg-mist text-blue',
   warning: 'border-gold/30 bg-mist text-gold',

@@ -232,7 +232,13 @@ function SidebarContent({
                           aria-current={linkActive ? 'page' : undefined}
                           className={cn(
                             'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-ink-soft no-underline transition-colors hover:bg-mist hover:text-ink',
-                            linkActive && 'bg-mist text-green',
+                            // AUDIT_UI_UX_CSS axe: text-green on bg-mist measured 4.24:1 here
+                            // (under 4.5:1) - unlike other bg-mist+text-green fixes in this
+                            // pass, bg-paper isn't an option: the sidebar itself is already
+                            // bg-paper, so the active item would lose its fill entirely.
+                            // text-ink (already proven to pass easily) keeps a real visual
+                            // "you are here" state without relying on colored text for it.
+                            linkActive && 'bg-mist text-ink',
                           )}
                         >
                           <link.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

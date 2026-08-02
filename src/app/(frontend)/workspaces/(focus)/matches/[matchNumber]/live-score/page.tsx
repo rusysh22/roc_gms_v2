@@ -107,7 +107,7 @@ export default async function LiveScorePage({
       <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="flex min-h-[calc(100svh-170px)] flex-col rounded-panel border border-line bg-paper p-4 shadow-sm">
           {matchUpdated ? (
-            <p className="mb-3 rounded-card border border-green/30 bg-mist px-3 py-2 text-sm font-bold text-green">
+            <p className="mb-3 rounded-card border border-green/30 bg-paper px-3 py-2 text-sm font-bold text-green">
               Score saved.
             </p>
           ) : null}

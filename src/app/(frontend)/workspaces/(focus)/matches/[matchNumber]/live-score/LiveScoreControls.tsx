@@ -87,7 +87,7 @@ export function LiveScoreControls({
           className={cn(
             participantButtonClass,
             selectedSide === 'a'
-              ? 'border-green bg-mist text-green shadow-md'
+              ? 'border-green bg-paper text-green shadow-md'
               : 'border-line bg-paper text-ink',
           )}
         >
@@ -105,7 +105,7 @@ export function LiveScoreControls({
           className={cn(
             participantButtonClass,
             selectedSide === 'b'
-              ? 'border-green bg-mist text-green shadow-md'
+              ? 'border-green bg-paper text-green shadow-md'
               : 'border-line bg-paper text-ink',
           )}
         >
