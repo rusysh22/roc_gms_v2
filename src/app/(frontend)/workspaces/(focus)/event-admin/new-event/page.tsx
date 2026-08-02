@@ -36,6 +36,7 @@ import { addRulesetAction, addSportAction } from './sportActions'
 import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
 import {
   addClubAction,
+  addPairAction,
   addPlayerAction,
   addTeamAction,
   importParticipantsAction,
@@ -1226,6 +1227,55 @@ const ParticipantsStep = async ({
           </div>
         </Card>
       </div>
+
+      <Card className="flex flex-col gap-4">
+        {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: a doubles pair is stored as a 2-player Team
+            internally (rosters always need a team_id), but this form never says "team" - it picks
+            two existing players and addPairAction creates the team + both roster rows in one
+            submit. Requires players to already exist, so it's placed after the player form/list. */}
+        <CardTitle>Add a pair (optional unless a category pairs up players)</CardTitle>
+        <p className="text-xs text-ink-soft">
+          For categories like mixed doubles, where two players compete together as one entry.
+        </p>
+        {players.docs.length < 2 ? (
+          <EmptyState>Add at least two players above before pairing them up.</EmptyState>
+        ) : (
+          <form action={addPairAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="eventId" value={eventId} />
+            <Field label="Player 1">
+              <SearchableSelect
+                name="player1Id"
+                placeholder="Select player"
+                options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
+              />
+            </Field>
+            <Field label="Player 2">
+              <SearchableSelect
+                name="player2Id"
+                placeholder="Select player"
+                options={toOptions(players.docs).map((player) => ({ value: player.id, label: player.label }))}
+              />
+            </Field>
+            <Field label="Pair name (optional)" className="sm:col-span-2">
+              <Input name="name" placeholder="Defaults to Player 1 / Player 2" />
+            </Field>
+            <Field label="Club (optional)" className="sm:col-span-2">
+              <SearchableSelect
+                name="clubId"
+                placeholder="None"
+                options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <SubmitButton>Add pair</SubmitButton>
+            </div>
+          </form>
+        )}
+        <p className="text-xs text-ink-soft">
+          Pairs you create here show up in the team list above, too - a pair is two players sharing
+          one entry, which the rest of the system already tracks as a team.
+        </p>
+      </Card>
 
       <Card className="flex flex-col gap-4">
         <CardTitle>Add a player (optional)</CardTitle>

@@ -124,6 +124,106 @@ export async function addTeamAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
 }
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: a pair is stored as a Team internally (rosters always
+// need a team_id, so a doubles pair is modeled as a 2-player team - AUDIT_E2E's own framing) - but
+// an admin building a mixed-doubles category shouldn't have to know that, type a "team name," and
+// separately go build a roster. This creates the Team AND both roster rows in one submit, from two
+// player pickers, and every redirect/copy stays in "pair" language.
+export async function addPairAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const player1Id = text(formData, 'player1Id')
+  const player2Id = text(formData, 'player2Id')
+  const clubId = text(formData, 'clubId')
+
+  const event = await getWizardEvent(payload, eventId)
+  if (!event) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+  if (!player1Id || !player2Id || player1Id === player2Id) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_pair`)
+  }
+
+  const [player1, player2] = await Promise.all([
+    payload.findByID({ collection: 'players', id: player1Id, depth: 0 }).catch(() => null),
+    payload.findByID({ collection: 'players', id: player2Id, depth: 0 }).catch(() => null),
+  ])
+  if (
+    !player1 ||
+    !player2 ||
+    String(player1.event_id) !== String(eventId) ||
+    String(player2.event_id) !== String(eventId)
+  ) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+  if (clubId) {
+    try {
+      const club = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 })
+      if (String(club.event_id) !== String(eventId)) {
+        throw new Error('invalid_relationship')
+      }
+    } catch {
+      redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+    }
+  }
+
+  const name = text(formData, 'name') || `${player1!.name} / ${player2!.name}`
+  const baseSlug = slugify(name)
+  let slug = baseSlug
+  for (let suffix = 2; suffix <= 50; suffix += 1) {
+    const existing = await payload.count({
+      collection: 'teams',
+      where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
+    })
+    if (existing.totalDocs === 0) break
+    slug = `${baseSlug}-${suffix}`.slice(0, 80)
+  }
+
+  const teamData = {
+    event_id: Number(eventId),
+    club_id: clubId ? Number(clubId) : undefined,
+    name,
+    slug,
+  }
+  const team = await payload.create({ collection: 'teams', data: teamData })
+  await recordAuditLog({
+    payload,
+    action: 'team.create',
+    entityType: 'teams',
+    entityId: team.id,
+    before: null,
+    after: { ...teamData, pair: true },
+    actorUserId: user.id,
+  })
+
+  for (const player of [player1!, player2!]) {
+    const rosterData = {
+      event_id: Number(eventId),
+      team_id: Number(team.id),
+      player_id: Number(player.id),
+      role: 'player' as const,
+      status: 'active' as const,
+    }
+    const roster = await payload.create({ collection: 'rosters', data: rosterData })
+    await recordAuditLog({
+      payload,
+      action: 'roster.create',
+      entityType: 'rosters',
+      entityId: roster.id,
+      before: null,
+      after: rosterData,
+      actorUserId: user.id,
+    })
+  }
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
+
 const validGenders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
 export async function importParticipantsAction(formData: FormData): Promise<void> {
