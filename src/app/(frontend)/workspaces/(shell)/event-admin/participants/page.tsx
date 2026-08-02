@@ -3,6 +3,7 @@ import { Pencil, Plus } from 'lucide-react'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -125,7 +126,7 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
           <option value="prefer_not_to_say">Prefer not to say</option>
         </Select>
       </Field>
-      <Button type="submit">Save player</Button>
+      <SubmitButton>Save player</SubmitButton>
     </form>
   )
 
@@ -151,7 +152,7 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
       <Field label="Description">
         <Textarea name="description" defaultValue={team?.description || ''} />
       </Field>
-      <Button type="submit">Save team</Button>
+      <SubmitButton>Save team</SubmitButton>
     </form>
   )
 
@@ -190,9 +191,9 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
         </Select>
       </Field>
       <div className="sm:col-span-2">
-        <Button type="submit" className="w-full sm:w-auto">
+        <SubmitButton className="w-full sm:w-auto">
           Save membership
-        </Button>
+        </SubmitButton>
       </div>
     </form>
   )

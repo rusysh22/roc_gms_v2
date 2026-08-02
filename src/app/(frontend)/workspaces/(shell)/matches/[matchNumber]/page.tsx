@@ -5,6 +5,7 @@ import { getMatchAuditLog, getMatchDetail } from '../../../../matchDetailData'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -310,9 +311,9 @@ export default async function AdminMatchDetailPage({
                   </label>
                 ))}
               </div>
-              <Button type="submit" variant="secondary" className="self-start">
+              <SubmitButton variant="secondary" className="self-start">
                 Save Assignment
-              </Button>
+              </SubmitButton>
             </form>
           ) : null}
         </Card>
@@ -427,7 +428,7 @@ export default async function AdminMatchDetailPage({
                       {transition.label}
                     </ConfirmSubmitButton>
                   ) : (
-                    <Button type="submit">{transition.label}</Button>
+                    <SubmitButton>{transition.label}</SubmitButton>
                   )}
                 </form>
               ))}
@@ -475,7 +476,7 @@ export default async function AdminMatchDetailPage({
                       <Textarea name="revisionReason" rows={2} required />
                     </Field>
                   ) : null}
-                  <Button type="submit">Save Set {set.set_number}</Button>
+                  <SubmitButton>Save Set {set.set_number}</SubmitButton>
                 </form>
               ))}
             </div>
@@ -483,9 +484,9 @@ export default async function AdminMatchDetailPage({
 
           <form action={addMatchSetAction}>
             <input type="hidden" name="matchNumber" value={match.match_number} />
-            <Button type="submit" variant="secondary">
+            <SubmitButton variant="secondary">
               Add Set {matchSets.length + 1}
-            </Button>
+            </SubmitButton>
           </form>
         </Card>
 
@@ -530,7 +531,7 @@ export default async function AdminMatchDetailPage({
               />
             </Field>
             <div className="sm:col-span-2">
-              <Button type="submit">Upload Documentation</Button>
+              <SubmitButton>Upload Documentation</SubmitButton>
             </div>
           </form>
         </Card>
@@ -558,7 +559,7 @@ export default async function AdminMatchDetailPage({
               <input type="checkbox" name="isPinned" className="h-4 w-4 rounded border-line text-green focus:ring-green/40" />
               Pin this note
             </label>
-            <Button type="submit">Save Comment</Button>
+            <SubmitButton>Save Comment</SubmitButton>
           </form>
         </Card>
 

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { Flag, Pause, Play, Plus, Trophy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { getMatchDetail } from '../../../../../matchDetailData'
 import {
@@ -138,10 +139,10 @@ export default async function LiveScorePage({
                 <form action={addMatchSetAction} className="mt-5">
                   <input type="hidden" name="matchNumber" value={match.match_number} />
                   <input type="hidden" name="returnTo" value={returnTo} />
-                  <Button type="submit">
+                  <SubmitButton>
                     <Plus className="h-4 w-4" aria-hidden="true" />
                     Add Set 1
-                  </Button>
+                  </SubmitButton>
                 </form>
               </div>
             </div>
@@ -161,10 +162,10 @@ export default async function LiveScorePage({
                   <form key={transition.to} action={transitionMatchStatusAction}>
                     <input type="hidden" name="matchNumber" value={match.match_number} />
                     <input type="hidden" name="targetStatus" value={transition.to} />
-                    <Button type="submit" className="w-full justify-center">
+                    <SubmitButton className="w-full justify-center">
                       {lifecycleIcon(transition.to)}
                       {transition.label}
-                    </Button>
+                    </SubmitButton>
                   </form>
                 ))
               )}
@@ -190,10 +191,10 @@ export default async function LiveScorePage({
               <form action={addMatchSetAction}>
                 <input type="hidden" name="matchNumber" value={match.match_number} />
                 <input type="hidden" name="returnTo" value={returnTo} />
-                <Button type="submit" variant="secondary" className="w-full">
+                <SubmitButton variant="secondary" className="w-full">
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add Set {matchSets.length + 1}
-                </Button>
+                </SubmitButton>
               </form>
             </div>
           </section>

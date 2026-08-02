@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -231,15 +232,15 @@ export default async function EditAnnouncementPage({
         </Card>
 
         <div className="flex flex-wrap gap-3">
-          <Button type="submit">Save announcement</Button>
+          <SubmitButton>Save announcement</SubmitButton>
         </div>
       </form>
 
       <form action={deleteAnnouncementAction} className="mt-6">
         <input type="hidden" name="id" value={String(announcement.id)} />
-        <Button type="submit" variant="secondary" className="text-red-700 hover:bg-red-50">
+        <SubmitButton variant="secondary" className="text-red-700 hover:bg-red-50">
           Delete announcement
-        </Button>
+        </SubmitButton>
       </form>
     </>
   )

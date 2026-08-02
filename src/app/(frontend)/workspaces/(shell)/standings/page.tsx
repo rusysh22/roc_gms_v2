@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getActiveEvent } from '../../activeEvent'
@@ -163,7 +164,7 @@ export default async function StandingsWorkspacePage({
                   <dd className="font-semibold text-ink">{firstGroup.name || 'Group'}</dd>
                 </div>
               </dl>
-              <Button type="submit">Recalculate Standings</Button>
+              <SubmitButton>Recalculate Standings</SubmitButton>
             </form>
           ) : (
             <EmptyState>No group-stage scope exists yet. Seed the demo event before recalculating standings.</EmptyState>

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Edit3 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import type { PublicEditState } from './publicEditState'
 import {
   updateAnnouncementPublicContentAction,
@@ -134,7 +135,7 @@ const StatusSelect = ({ defaultValue }: { defaultValue?: string | null }) => (
 
 const FormActions = ({ editHref }: { editHref: string }) => (
   <div className="flex flex-wrap items-center gap-2 pt-2">
-    <Button type="submit" size="sm">Save preview</Button>
+    <SubmitButton size="sm">Save preview</SubmitButton>
     <Button asChild variant="secondary" size="sm">
       <Link href={editHref}>Full editor</Link>
     </Button>

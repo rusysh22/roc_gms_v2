@@ -1,5 +1,5 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -93,7 +93,7 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams?
             <Input name="caption" />
           </Field>
           <div className="sm:col-span-2">
-            <Button type="submit">Upload</Button>
+            <SubmitButton>Upload</SubmitButton>
           </div>
         </form>
       </Card>
@@ -116,9 +116,9 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams?
               {item.caption ? <p className="truncate text-xs text-ink-soft">{item.caption}</p> : null}
               <form action={deleteMediaAction}>
                 <input type="hidden" name="id" value={String(item.id)} />
-                <Button type="submit" variant="secondary" size="sm" className="w-full text-red-700 hover:bg-red-50">
+                <SubmitButton variant="secondary" size="sm" className="w-full text-red-700 hover:bg-red-50">
                   Delete
-                </Button>
+                </SubmitButton>
               </form>
             </Card>
           ))}

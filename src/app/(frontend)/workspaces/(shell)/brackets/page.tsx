@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getActiveEvent } from '../../activeEvent'
@@ -163,7 +164,7 @@ export default async function BracketsWorkspacePage({
                   <dd className="font-semibold text-ink">{getRelationshipId(firstStage)}</dd>
                 </div>
               </dl>
-              <Button type="submit">Recalculate Bracket</Button>
+              <SubmitButton>Recalculate Bracket</SubmitButton>
             </form>
           ) : (
             <EmptyState>No single-elimination stage exists yet. Seed the demo event before generating a bracket.</EmptyState>

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
@@ -209,15 +210,15 @@ export default async function EditArticlePage({
         </Card>
 
         <div className="flex flex-wrap gap-3">
-          <Button type="submit">Save article</Button>
+          <SubmitButton>Save article</SubmitButton>
         </div>
       </form>
 
       <form action={deleteArticleAction} className="mt-6">
         <input type="hidden" name="id" value={String(article.id)} />
-        <Button type="submit" variant="secondary" className="text-red-700 hover:bg-red-50">
+        <SubmitButton variant="secondary" className="text-red-700 hover:bg-red-50">
           Delete article
-        </Button>
+        </SubmitButton>
       </form>
     </>
   )

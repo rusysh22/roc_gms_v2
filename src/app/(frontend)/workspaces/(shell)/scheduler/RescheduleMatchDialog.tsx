@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { CalendarClock, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -104,9 +105,9 @@ export function RescheduleMatchDialog({
               <Input name="reason" required placeholder={isScheduled ? 'e.g. Venue conflict resolved' : 'e.g. Initial schedule'} />
             </Field>
             <div className="sm:col-span-2">
-              <Button type="submit" className="w-full">
+              <SubmitButton className="w-full">
                 Confirm {verb.toLowerCase()}
-              </Button>
+              </SubmitButton>
             </div>
           </form>
         </Dialog.Content>

@@ -3,6 +3,7 @@ import { Pencil, Plus } from 'lucide-react'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -88,9 +89,9 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
         <Textarea name="description" defaultValue={editing?.description || ''} />
       </Field>
       <div className="sm:col-span-2">
-        <Button type="submit" className="w-full sm:w-auto">
+        <SubmitButton className="w-full sm:w-auto">
           {editing ? 'Save club' : 'Add club'}
-        </Button>
+        </SubmitButton>
       </div>
     </form>
   )

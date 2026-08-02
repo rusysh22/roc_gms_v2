@@ -3,6 +3,7 @@ import { Pencil, Plus } from 'lucide-react'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -105,7 +106,7 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
       <Field label="Virtual URL">
         <Input name="virtualUrl" type="url" defaultValue={venue?.virtual_url || ''} />
       </Field>
-      <Button type="submit">Save venue</Button>
+      <SubmitButton>Save venue</SubmitButton>
     </form>
   )
 
@@ -150,7 +151,7 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
         <Input name="capacity" type="number" min="0" defaultValue={court?.capacity ?? ''} />
       </Field>
       <CheckboxField name="isActive" label="Active" defaultChecked={court ? Boolean(court.is_active) : true} />
-      <Button type="submit">Save court</Button>
+      <SubmitButton>Save court</SubmitButton>
     </form>
   )
 

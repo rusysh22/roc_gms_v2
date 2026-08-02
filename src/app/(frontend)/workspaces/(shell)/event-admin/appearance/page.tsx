@@ -1,5 +1,5 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { FileUpload } from '@/components/ui/file-upload'
 import { DEFAULT_EVENT_THEME_PRESET, EVENT_THEME_PRESETS } from '@/lib/eventTheme'
@@ -142,7 +142,7 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
         </Card>
 
         <div>
-          <Button type="submit">Save appearance</Button>
+          <SubmitButton>Save appearance</SubmitButton>
         </div>
       </form>
     </>

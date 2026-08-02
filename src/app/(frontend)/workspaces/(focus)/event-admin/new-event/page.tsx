@@ -5,6 +5,7 @@ import { Check } from 'lucide-react'
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -598,9 +599,9 @@ const EventStep = ({
         />
       </Field>
       <div className="sm:col-span-2">
-        <Button type="submit" className="w-full sm:w-auto">
+        <SubmitButton className="w-full sm:w-auto">
           Create event &amp; continue
-        </Button>
+        </SubmitButton>
       </div>
     </form>
   </Card>
@@ -640,7 +641,7 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
             </Select>
           </Field>
           <div className="sm:col-span-2">
-            <Button type="submit">Add sport</Button>
+            <SubmitButton>Add sport</SubmitButton>
           </div>
         </form>
       </Card>
@@ -685,9 +686,9 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
                   Allow draw
                 </label>
                 <div className="sm:col-span-2">
-                  <Button type="submit" variant="secondary">
+                  <SubmitButton variant="secondary">
                     Add ruleset
-                  </Button>
+                  </SubmitButton>
                 </div>
               </form>
             </Card>
@@ -808,7 +809,7 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
               <Input name="maxRosterSize" type="number" min="0" />
             </Field>
             <div className="sm:col-span-2">
-              <Button type="submit">Add category</Button>
+              <SubmitButton>Add category</SubmitButton>
             </div>
           </form>
         )}
@@ -852,9 +853,9 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
                     <option value="published">Published</option>
                     <option value="archived">Archived</option>
                   </Select>
-                  <Button type="submit" size="sm" variant="secondary">
+                  <SubmitButton size="sm" variant="secondary">
                     Save
-                  </Button>
+                  </SubmitButton>
                 </form>
               </div>
             ))}
@@ -971,9 +972,9 @@ const ParticipantsStep = async ({
               helpText=".xlsx or .xls"
               className="w-full"
             />
-            <Button type="submit" size="sm">
+            <SubmitButton size="sm">
               Import
-            </Button>
+            </SubmitButton>
           </form>
         </div>
       </Card>
@@ -992,7 +993,7 @@ const ParticipantsStep = async ({
             <Field label="Contact email">
               <Input name="contactEmail" type="email" />
             </Field>
-            <Button type="submit">Add club</Button>
+            <SubmitButton>Add club</SubmitButton>
           </form>
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {clubs.docs.map((club) => (
@@ -1020,7 +1021,7 @@ const ParticipantsStep = async ({
             <Field label="Contact email">
               <Input name="contactEmail" type="email" />
             </Field>
-            <Button type="submit">Add team</Button>
+            <SubmitButton>Add team</SubmitButton>
           </form>
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {teams.docs.map((team) => {
@@ -1063,7 +1064,7 @@ const ParticipantsStep = async ({
             </Select>
           </Field>
           <div className="sm:col-span-2">
-            <Button type="submit">Add player</Button>
+            <SubmitButton>Add player</SubmitButton>
           </div>
         </form>
         <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
@@ -1242,9 +1243,9 @@ const EntriesStep = async ({
                       <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
                     ) : null}
                   </div>
-                  <Button type="submit" size="sm" variant="secondary">
+                  <SubmitButton size="sm" variant="secondary">
                     Add as entry
-                  </Button>
+                  </SubmitButton>
                 </form>
               )
             })}
@@ -1261,9 +1262,9 @@ const EntriesStep = async ({
             <form action={shuffleSeedsAction}>
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
-              <Button type="submit" variant="secondary" size="sm">
+              <SubmitButton variant="secondary" size="sm">
                 Shuffle Seeds
-              </Button>
+              </SubmitButton>
             </form>
             <form action={saveSeedOrderAction} className="flex flex-col gap-3">
               <input type="hidden" name="eventId" value={eventId} />
@@ -1303,7 +1304,7 @@ const EntriesStep = async ({
               </Table>
               </div>
               <div>
-                <Button type="submit">Save Order</Button>
+                <SubmitButton>Save Order</SubmitButton>
               </div>
             </form>
           </>
@@ -1378,15 +1379,14 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
                 {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
               </span>
             </div>
-            <Button
-              type="submit"
+            <SubmitButton
               size="sm"
               disabled={
                 confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))
               }
             >
               Generate Matches
-            </Button>
+            </SubmitButton>
           </form>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getActiveEvent } from '../../activeEvent'
@@ -140,9 +140,9 @@ export default async function MatchOfficerWorkspacePage() {
                 <form key={transition.to} action={transitionMatchStatusAction}>
                   <input type="hidden" name="matchNumber" value={nextMatch.match_number} />
                   <input type="hidden" name="targetStatus" value={transition.to} />
-                  <Button type="submit" size="sm">
+                  <SubmitButton size="sm">
                     {transition.label}
-                  </Button>
+                  </SubmitButton>
                 </form>
               ))}
             </div>

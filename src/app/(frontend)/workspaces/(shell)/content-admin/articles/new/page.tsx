@@ -1,5 +1,5 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
@@ -153,7 +153,7 @@ export default async function NewArticlePage({ searchParams }: { searchParams?: 
         </Card>
 
         <div>
-          <Button type="submit">Create article</Button>
+          <SubmitButton>Create article</SubmitButton>
         </div>
       </form>
     </>

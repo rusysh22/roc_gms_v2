@@ -40,11 +40,22 @@ export interface ButtonProps
   asChild?: boolean
 }
 
+// AUDIT_UI_UX_CSS FORM-08: of 110 Button usages, only 51 set `type` explicitly. A plain <button>
+// with no `type` defaults to `type="submit"` per the HTML spec, so any Button meant as a
+// cancel/remove/toggle/step action - not the form's actual submit trigger - silently submits the
+// enclosing form when clicked. Defaulting to `type="button"` here makes that the safe baseline;
+// the few Buttons that ARE a form's real submit trigger now opt in explicitly (see SubmitButton
+// in submit-button.tsx, which also covers FORM-07's pending-state requirement).
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, type = 'button', ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        type={asChild ? undefined : type}
+        {...props}
+      />
     )
   },
 )

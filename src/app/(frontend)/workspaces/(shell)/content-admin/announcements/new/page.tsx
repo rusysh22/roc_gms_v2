@@ -1,5 +1,5 @@
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -175,7 +175,7 @@ export default async function NewAnnouncementPage({ searchParams }: { searchPara
         </Card>
 
         <div>
-          <Button type="submit">Create announcement</Button>
+          <SubmitButton>Create announcement</SubmitButton>
         </div>
       </form>
     </>

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { SubmitButton } from '@/components/ui/submit-button'
 import { cn } from '@/lib/utils'
 import { addLiveScorePointAction } from '../../../../matches/matchActions'
 
@@ -144,13 +144,12 @@ export function LiveScoreControls({
           delta={1}
           returnTo={returnTo}
         >
-          <Button
-            type="submit"
+          <SubmitButton
             className="min-h-24 w-full rounded-panel text-xl font-extrabold md:text-2xl"
           >
             <Plus className="h-7 w-7" aria-hidden="true" />
             Add point to {selectedName}
-          </Button>
+          </SubmitButton>
         </PointForm>
       </div>
     </section>
