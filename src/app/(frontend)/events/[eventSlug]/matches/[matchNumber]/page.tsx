@@ -147,6 +147,16 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
                 <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at)}</dd>
               </div>
             </dl>
+            {/* AUDIT_UI_UX_CSS PUB-18: only shown once a real time exists - nothing to add to a
+                calendar for a match that hasn't been scheduled yet. */}
+            {match.scheduled_start_at ? (
+              <a
+                href={`/api/calendar/match/${match.match_number}`}
+                className="mt-3 inline-block text-sm font-bold text-brand-secondary underline underline-offset-2"
+              >
+                Add to calendar (.ics)
+              </a>
+            ) : null}
           </Card>
           <Card>
             <CardTitle>Venue</CardTitle>
