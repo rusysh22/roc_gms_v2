@@ -5,7 +5,6 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import { PublicChrome } from '@/components/public-chrome'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
-import './styles.css'
 import './tailwind.css'
 
 // Self-hosted via next/font/google (D021), exposed as the `--font-jakarta-sans` CSS variable

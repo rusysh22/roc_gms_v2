@@ -1,26 +1,23 @@
 /*
  * Tailwind CSS foundation for the (frontend) route group only.
  *
- * AUDIT_UI_UX_CSS CSS-01: `a { color: inherit }` used to live unlayered in styles.css, which meant
- * it always beat every Tailwind utility class regardless of source order or specificity (unlayered
- * rules outrank all @layer content, no exceptions) - confirmed at runtime: a `text-paper` CTA link
- * on a green button computed to ink/black text, not white (~3.76:1 contrast, fails WCAG AA
- * normal-text 4.5:1). It now lives in `@layer base` below, declared *before* the utilities import,
- * so the CSS layer order becomes theme -> base -> utilities (layers declared later win) and
- * `text-*`/`hover:text-*` utilities correctly override the link-color baseline again.
- *
- * Full Preflight is still intentionally NOT imported - `styles.css`'s remaining rules
- * (box-sizing, body margin) are a deliberately small hand-rolled baseline; swapping to Preflight
- * is a larger, separately-scoped migration (AUDIT_UI_UX_CSS CSS-02) that needs its own visual QA
- * pass across every route, not bundled into this targeted fix.
+ * AUDIT_UI_UX_CSS CSS-02: this app never imported Preflight, and the hand-rolled substitute in
+ * styles.css was just `box-sizing: border-box` + `body { margin: 0 }` - every other UA default
+ * (ul/ol bullets + 40px indent, h1-h6 browser font sizes, button/input native appearance, image
+ * intrinsic sizing ignoring its container, link underline/color) leaked through unless a component
+ * happened to override it locally. Confirmed several call sites already coded *as if* a reset were
+ * in place (e.g. contentComponents.tsx's rich-text wrapper explicitly re-adds `list-disc`/
+ * `list-decimal` for `<ul>`/`<ol>`, which only matters if lists are unstyled by default) - the
+ * missing reset was itself the bug, not a deliberate choice. Preflight now supplies that baseline
+ * in `@layer base`, before the utilities import, so the CSS layer order is theme -> base ->
+ * utilities and every `text-*`/`list-*`/etc. utility still wins over it. Audited every `<ul>`/`<ol>`,
+ * `<img>`, and heading in src/ first - all already carry explicit Tailwind classes for spacing,
+ * sizing, and list-style, so Preflight's stricter zero-margin/no-bullet/inherit-size baseline has
+ * nothing to silently break. Preflight's own `a { color: inherit; text-decoration: inherit }`
+ * (also in `@layer base`) now subsumes the standalone CSS-01 override this file used to carry.
  */
 @import 'tailwindcss/theme.css' layer(theme);
-
-@layer base {
-  a {
-    color: inherit;
-  }
-}
+@import 'tailwindcss/preflight.css' layer(base);
 
 @import 'tailwindcss/utilities.css' layer(utilities);
 
