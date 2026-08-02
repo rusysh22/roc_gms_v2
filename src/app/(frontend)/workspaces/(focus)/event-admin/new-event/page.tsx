@@ -55,12 +55,17 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>
 const get = (params: Record<string, string | string[] | undefined>, key: string) =>
   Array.isArray(params[key]) ? params[key][0] || '' : params[key] || ''
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 5: "Entries & Seeding" used to be one step covering two
+// different decisions - who's registered, and what order they're seeded in - "sering dikerjakan
+// oleh orang/waktu berbeda" per the doc. Split into Registration and Draw & Seeding so each has its
+// own screen, its own "done" criterion, and its own place in the step nav.
 const STEPS = [
   { key: 'event', label: 'Event' },
   { key: 'sports', label: 'Sports & Rulesets' },
   { key: 'categories', label: 'Categories' },
   { key: 'participants', label: 'Clubs / Teams / Players' },
-  { key: 'entries', label: 'Entries & Seeding' },
+  { key: 'registration', label: 'Registration' },
+  { key: 'draw', label: 'Draw & Seeding' },
   { key: 'generate', label: 'Generate Matches' },
   { key: 'bracket', label: 'Bracket' },
 ] as const
@@ -278,7 +283,11 @@ export default async function NewEventWizardPage({
       nonDraftCategories.length > 0 &&
       nonDraftCategories.every((category) => (confirmedCountByCategory.get(String(category.id)) || 0) >= 2)
     ) {
-      completedSteps.add('entries')
+      // Registration and Draw share this criterion: every entry gets a seed_number the moment
+      // it's added (see addEntriesAction), so there's no separate "has this category actually been
+      // seeded" signal to check independently of "does it have entries" yet.
+      completedSteps.add('registration')
+      completedSteps.add('draw')
     }
 
     const autoGenerateCategories = nonDraftCategories.filter((category) =>
@@ -348,14 +357,17 @@ export default async function NewEventWizardPage({
               importMoreIssues={get(params, 'wizardImportMoreIssues')}
             />
           ) : null}
-          {step === 'entries' && event ? (
-            <EntriesStep
+          {step === 'registration' && event ? (
+            <RegistrationStep
               payload={payload}
               eventId={eventId}
               categoryId={get(params, 'categoryId')}
               sourceSearch={get(params, 'sourceSearch')}
               sourceClub={get(params, 'sourceClub')}
             />
+          ) : null}
+          {step === 'draw' && event ? (
+            <DrawStep payload={payload} eventId={eventId} categoryId={get(params, 'categoryId')} />
           ) : null}
           {step === 'generate' && event ? <GenerateStep payload={payload} eventId={eventId} /> : null}
           {step === 'bracket' && event ? (
@@ -1322,8 +1334,8 @@ const ParticipantsStep = async ({
 
       <StepActions>
         <Button asChild>
-          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries`}>
-            Continue to Entries &amp; Seeding
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration`}>
+            Continue to Registration
           </Link>
         </Button>
       </StepActions>
@@ -1342,7 +1354,13 @@ const ParticipantModeToCollection: Record<string, 'teams' | 'clubs' | 'players'>
   tbd: 'players',
 }
 
-const EntriesStep = async ({
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 5: registration (who's competing) and draw/seeding (what
+// order they're placed in) used to be one combined step and one combined mental model, even though
+// the doc frames them as two decisions "sering dikerjakan oleh orang/waktu berbeda." Split into
+// RegistrationStep (this one) and DrawStep below - both share the same category-switcher pattern
+// and `ParticipantModeToCollection`/club-label helpers, but neither touches the other's concern:
+// this one never renders a seed number, DrawStep never renders an add/remove control.
+const RegistrationStep = async ({
   payload,
   eventId,
   categoryId,
@@ -1477,15 +1495,15 @@ const EntriesStep = async ({
     <>
       <Card className="flex flex-col gap-4">
         <div>
-          <CardTitle>5. Entries &amp; seeding</CardTitle>
+          <CardTitle>5. Registration</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
-            This is where participants get assigned into a specific sport &amp; category. Pick one
-            below, then add entries and seed them underneath.
+            Pick who&apos;s officially competing in this category. You&apos;ll set the draw order
+            next, once registration is settled - that&apos;s its own step now.
           </p>
         </div>
         <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
           <input type="hidden" name="eventId" value={eventId} />
-          <input type="hidden" name="step" value="entries" />
+          <input type="hidden" name="step" value="registration" />
           <Field label="Sport & category" className="min-w-[240px] flex-1">
             <SearchableSelect
               name="categoryId"
@@ -1532,7 +1550,7 @@ const EntriesStep = async ({
               action="/workspaces/event-admin/new-event"
             >
               <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="step" value="entries" />
+              <input type="hidden" name="step" value="registration" />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
               <Field label="Search by name" className="min-w-[180px] flex-1">
                 <Input name="sourceSearch" defaultValue={sourceSearch || ''} placeholder={`Search ${collectionLabel}...`} />
@@ -1555,7 +1573,7 @@ const EntriesStep = async ({
               {sourceSearch || sourceClub ? (
                 <Button asChild variant="ghost" size="sm">
                   <Link
-                    href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries&categoryId=${selectedCategoryId}`}
+                    href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration&categoryId=${selectedCategoryId}`}
                   >
                     Clear
                   </Link>
@@ -1614,9 +1632,173 @@ const EntriesStep = async ({
       </Card>
 
       <Card className="flex flex-col gap-4">
-        <CardTitle>Current entries ({entries.totalDocs})</CardTitle>
+        <CardTitle>Registered ({entries.totalDocs})</CardTitle>
         {entries.docs.length === 0 ? (
-          <EmptyState>No entries yet for this category.</EmptyState>
+          <EmptyState>No one is registered in this category yet.</EmptyState>
+        ) : (
+          <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
+            {entries.docs.map((entry) => {
+              const clubLabel = getEntryClubLabel(entry)
+              return (
+                <form
+                  key={entry.id}
+                  action={withdrawEntryAction.bind(null, String(entry.id))}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
+                >
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-bold text-ink">{entry.display_name}</strong>
+                    {clubLabel ? (
+                      <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
+                    ) : null}
+                  </div>
+                  <ConfirmSubmitButton
+                    confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
+                    className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                  >
+                    Remove
+                  </ConfirmSubmitButton>
+                </form>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
+      <StepActions>
+        <Button asChild>
+          <Link
+            href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=draw&categoryId=${selectedCategoryId}`}
+          >
+            Continue to Draw &amp; Seeding
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+const DrawStep = async ({
+  payload,
+  eventId,
+  categoryId,
+}: {
+  payload: Payload
+  eventId: string
+  categoryId: string
+}) => {
+  const categories = await payload.find({
+    collection: 'competition-categories',
+    depth: 1,
+    limit: 200,
+    where: { event_id: { equals: eventId } },
+    sort: 'name',
+  })
+
+  // Prefer a category that actually has entries to seed over one with none yet - seeding an empty
+  // category has nothing to show, so it's a worse default than one that's ready for a draw.
+  const categoryIds = categories.docs.map((cat) => String(cat.id))
+  const entryCountsResult = categoryId
+    ? null
+    : categoryIds.length
+      ? await payload.find({
+          collection: 'competition-entries',
+          depth: 0,
+          limit: 2000,
+          where: {
+            and: [{ category_id: { in: categoryIds } }, { status: { equals: 'confirmed' } }],
+          },
+        })
+      : null
+  const entryCountByCategory = new Map<string, number>()
+  for (const entry of entryCountsResult?.docs ?? []) {
+    const catId = String(getRelationshipId(entry.category_id as RelationshipDoc))
+    entryCountByCategory.set(catId, (entryCountByCategory.get(catId) || 0) + 1)
+  }
+  const nextCategoryWithEntries = categories.docs.find(
+    (cat) => cat.status !== 'draft' && (entryCountByCategory.get(String(cat.id)) || 0) >= 2,
+  )
+
+  const selectedCategoryId =
+    categoryId || String(nextCategoryWithEntries?.id ?? categories.docs[0]?.id ?? '')
+  const selectedCategory = categories.docs.find((c) => String(c.id) === selectedCategoryId)
+  const categoryOptions = categories.docs.map((category) => ({
+    id: String(category.id),
+    label: `${getRelationshipLabel(category.sport_id as RelationshipDoc)} — ${category.name}`,
+  }))
+
+  if (!selectedCategory) {
+    return (
+      <Card>
+        <EmptyState>Add a competition category first.</EmptyState>
+      </Card>
+    )
+  }
+
+  const collection = ParticipantModeToCollection[String(selectedCategory.participant_mode)] || 'players'
+  const entries = await payload.find({
+    collection: 'competition-entries',
+    depth: 2,
+    limit: 300,
+    where: {
+      and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'confirmed' } }],
+    },
+    sort: 'seed_number',
+  })
+
+  const getEntryClubLabel = (entry: Record<string, unknown>) => {
+    if (collection === 'clubs') {
+      return undefined
+    }
+    const nested =
+      entry.team_id && typeof entry.team_id === 'object' ? (entry.team_id as Record<string, unknown>)
+      : entry.player_id && typeof entry.player_id === 'object' ? (entry.player_id as Record<string, unknown>)
+      : undefined
+    return nested ? getRelationshipLabel(nested.club_id as RelationshipDoc, '') || undefined : undefined
+  }
+
+  return (
+    <>
+      <Card className="flex flex-col gap-4">
+        <div>
+          <CardTitle>6. Draw &amp; seeding</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            Set the order participants are seeded into the bracket or schedule. Adding or removing
+            who&apos;s registered happens in the previous step.
+          </p>
+        </div>
+        <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
+          <input type="hidden" name="eventId" value={eventId} />
+          <input type="hidden" name="step" value="draw" />
+          <Field label="Sport & category" className="min-w-[240px] flex-1">
+            <SearchableSelect
+              name="categoryId"
+              defaultValue={selectedCategoryId}
+              options={categoryOptions.map((category) => ({ value: category.id, label: category.label }))}
+            />
+          </Field>
+          <Button type="submit" variant="secondary">
+            Switch category
+          </Button>
+        </form>
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <CardTitle>
+          {getRelationshipLabel(selectedCategory as RelationshipDoc)} entries ({entries.totalDocs})
+        </CardTitle>
+        {entries.docs.length === 0 ? (
+          <EmptyState>
+            No one is registered in this category yet.{' '}
+            <Link
+              href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration&categoryId=${selectedCategoryId}`}
+              className="font-bold text-blue underline"
+            >
+              Go back to Registration
+            </Link>{' '}
+            to add participants first.
+          </EmptyState>
         ) : (
           <>
             <form action={shuffleSeedsAction}>
@@ -1630,68 +1812,43 @@ const EntriesStep = async ({
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={selectedCategoryId} />
               <div className="max-h-80 overflow-y-auto">
-              <Table>
-                <TableHeader className="sticky top-0 z-10">
-                  <TableRow>
-                    <TableHead>Participant</TableHead>
-                    <TableHead>Seed</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.docs.map((entry) => {
-                    const clubLabel = getEntryClubLabel(entry)
-                    return (
-                    <TableRow key={entry.id}>
-                      <TableCell className="font-bold">
-                        {entry.display_name}
-                        {clubLabel ? (
-                          <span className="block text-xs font-normal text-ink-soft">{clubLabel}</span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          name={`seed_${entry.id}`}
-                          type="number"
-                          min="1"
-                          className="w-20"
-                          defaultValue={entry.seed_number ?? ''}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {/* Can't nest a <form> inside this row - it's already inside the seed-order
-                            <form> above, and forms can't nest. The `form` attribute associates this
-                            button with the standalone per-row form rendered below instead (valid
-                            HTML: a control's `form` attribute can point at any <form> in the same
-                            document, not just an ancestor). */}
-                        <ConfirmSubmitButton
-                          form={`withdraw-entry-${entry.id}`}
-                          confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
-                          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-                        >
-                          Remove
-                        </ConfirmSubmitButton>
-                      </TableCell>
+                <Table>
+                  <TableHeader className="sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead>Participant</TableHead>
+                      <TableHead>Seed</TableHead>
                     </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.docs.map((entry) => {
+                      const clubLabel = getEntryClubLabel(entry)
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell className="font-bold">
+                            {entry.display_name}
+                            {clubLabel ? (
+                              <span className="block text-xs font-normal text-ink-soft">{clubLabel}</span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              name={`seed_${entry.id}`}
+                              type="number"
+                              min="1"
+                              className="w-20"
+                              defaultValue={entry.seed_number ?? ''}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
               </div>
               <div>
                 <SubmitButton>Save Order</SubmitButton>
               </div>
             </form>
-            {entries.docs.map((entry) => (
-              <form
-                key={entry.id}
-                id={`withdraw-entry-${entry.id}`}
-                action={withdrawEntryAction.bind(null, String(entry.id))}
-              >
-                <input type="hidden" name="eventId" value={eventId} />
-                <input type="hidden" name="categoryId" value={selectedCategoryId} />
-              </form>
-            ))}
           </>
         )}
       </Card>
@@ -1909,7 +2066,7 @@ const BracketStep = async ({
 
       <StepActions>
         <Button asChild variant="secondary">
-          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=entries`}>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration`}>
             Generate another category
           </Link>
         </Button>

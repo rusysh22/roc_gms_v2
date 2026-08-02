@@ -40,7 +40,7 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
   }
   if (!categoryId || sourceIds.length === 0) {
     redirect(
-      `${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_entry`,
+      `${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=invalid_entry`,
     )
   }
 
@@ -48,7 +48,7 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
     .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
     .catch(() => null)
   if (!category || String(category.event_id) !== String(eventId)) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=invalid_relationship`)
+    redirect(`${wizardPage}?eventId=${eventId}&step=registration&wizardError=invalid_relationship`)
   }
 
   const mode = String(category!.participant_mode || 'open')
@@ -114,7 +114,7 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
 
   revalidatePath(wizardPage)
   const suffix = addedCount === 0 ? '&wizardError=duplicate_entry' : `&wizardUpdated=1&wizardBulkAdded=${addedCount}`
-  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}${suffix}`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}${suffix}`)
 }
 
 export async function shuffleSeedsAction(formData: FormData): Promise<void> {
@@ -126,7 +126,7 @@ export async function shuffleSeedsAction(formData: FormData): Promise<void> {
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
   if (!categoryId) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=invalid_entry`)
+    redirect(`${wizardPage}?eventId=${eventId}&step=draw&wizardError=invalid_entry`)
   }
 
   const entries = await payload.find({
@@ -158,7 +158,7 @@ export async function shuffleSeedsAction(formData: FormData): Promise<void> {
   )
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardShuffled=1`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=draw&categoryId=${categoryId}&wizardShuffled=1`)
 }
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 7: there was no way to fix a mis-entered participant short
@@ -180,12 +180,12 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
   if (!entryId) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_entry`)
+    redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=invalid_entry`)
   }
 
   const before = await payload.findByID({ collection: 'competition-entries', id: entryId, depth: 0 }).catch(() => null)
   if (!before || String(before.event_id) !== String(eventId)) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_relationship`)
+    redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=invalid_relationship`)
   }
 
   const data = { status: 'withdrawn' as const }
@@ -201,7 +201,7 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
   })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardUpdated=1`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardUpdated=1`)
 }
 
 export async function saveSeedOrderAction(formData: FormData): Promise<void> {
@@ -213,7 +213,7 @@ export async function saveSeedOrderAction(formData: FormData): Promise<void> {
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
   if (!categoryId) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=entries&wizardError=invalid_entry`)
+    redirect(`${wizardPage}?eventId=${eventId}&step=draw&wizardError=invalid_entry`)
   }
 
   const updates: Array<{ id: string; seed: number }> = []
@@ -235,5 +235,5 @@ export async function saveSeedOrderAction(formData: FormData): Promise<void> {
   )
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardUpdated=1`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=draw&categoryId=${categoryId}&wizardUpdated=1`)
 }
