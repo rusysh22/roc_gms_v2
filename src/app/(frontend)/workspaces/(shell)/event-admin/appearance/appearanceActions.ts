@@ -27,6 +27,23 @@ export async function saveAppearanceAction(formData: FormData): Promise<void> {
 
   const data: Record<string, unknown> = { theme_config: { preset } }
 
+  const removeLogo = formData.get('removeLogo') === 'on'
+  const logoFile = formData.get('logoImage')
+  if (removeLogo) {
+    data.logo = null
+  } else if (logoFile instanceof File && logoFile.size > 0) {
+    if (!logoFile.type.startsWith('image/')) {
+      redirect(`${page}?appearanceError=invalid_image`)
+    }
+    const buffer = Buffer.from(await logoFile.arrayBuffer())
+    const media = await payload.create({
+      collection: 'media',
+      data: { alt: `${event.name} logo` },
+      file: { data: buffer, mimetype: logoFile.type, name: logoFile.name, size: logoFile.size },
+    })
+    data.logo = media.id
+  }
+
   const removeImage = formData.get('removeImage') === 'on'
   const file = formData.get('heroImage')
   if (removeImage) {
@@ -51,7 +68,7 @@ export async function saveAppearanceAction(formData: FormData): Promise<void> {
     action: 'event.appearance_update',
     entityType: 'events',
     entityId: event.id,
-    before: { theme_config: before.theme_config, banner_image: before.banner_image },
+    before: { theme_config: before.theme_config, banner_image: before.banner_image, logo: before.logo },
     after: data,
     actorUserId: user.id,
   })

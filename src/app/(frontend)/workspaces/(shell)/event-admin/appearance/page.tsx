@@ -23,6 +23,7 @@ const get = (params: Record<string, string | string[] | undefined>, key: string)
 // this page asks for `depth: 1` so the row it gets back also has these two populated, but still
 // needs its own wider type to read them off (the runtime object already has them either way).
 type AppearanceEventDoc = {
+  logo?: { url?: string; alt?: string } | string | number | null
   banner_image?: { url?: string; alt?: string } | string | number | null
   theme_config?: { preset?: string } | null
 }
@@ -56,6 +57,8 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
   const appearanceUpdated = get(params, 'appearanceUpdated')
 
   const fullEvent = event as unknown as AppearanceEventDoc
+  const logoImage =
+    fullEvent.logo && typeof fullEvent.logo === 'object' ? (fullEvent.logo as { url?: string; alt?: string }) : undefined
   const bannerImage =
     fullEvent.banner_image && typeof fullEvent.banner_image === 'object'
       ? (fullEvent.banner_image as { url?: string; alt?: string })
@@ -83,6 +86,29 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
       ) : null}
 
       <form action={saveAppearanceAction} className="flex flex-col gap-6">
+        {/* AUDIT_UI_UX_CSS ADM-04/ADM-05: the wizard's copy already promises "logo can be added
+            later," and the `logo` field/public rendering (events/[eventSlug]/page.tsx) already
+            exist - only this admin form was missing the field to actually set it. */}
+        <Card className="flex flex-col gap-4">
+          <div>
+            <CardTitle>Event logo</CardTitle>
+            <p className="mt-1 text-sm text-ink-soft">
+              Shown next to the event name on the public page and in shared links. Optional -
+              square or wide logos both work.
+            </p>
+          </div>
+          <FileUpload
+            id="event-logo-upload"
+            name="logoImage"
+            accept="image/*"
+            maxSizeBytes={4 * 1024 * 1024}
+            existingPreviewUrl={logoImage?.url}
+            existingLabel="Current logo"
+            showRemoveOption
+            removeFieldName="removeLogo"
+          />
+        </Card>
+
         <Card className="flex flex-col gap-4">
           <div>
             <CardTitle>Hero image</CardTitle>
@@ -107,9 +133,18 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
           <div>
             <CardTitle>Color theme</CardTitle>
             <p className="mt-1 text-sm text-ink-soft">
-              Pick one of these pre-tuned combinations for your public event page.
+              Pick one of these pre-tuned combinations for your public event page. Only the
+              hero CTA, links, and accent icons change - status colors (live/win/scheduled)
+              always stay the same everywhere, so a theme can never make a result look like an
+              error.
             </p>
           </div>
+          {/* AUDIT_UI_UX_CSS ADM-06: color swatches alone don't show what a preset actually does
+              to real components - an admin had to save and go look at the public page to find
+              out. Each option now renders a small live sample of the two things a theme actually
+              touches (the primary CTA button and a text link), styled with that preset's own
+              colors via inline style so all three can be compared side by side regardless of
+              which one is currently active. */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {Object.entries(EVENT_THEME_PRESETS).map(([key, preset]) => (
               <label key={key} className="cursor-pointer">
@@ -121,15 +156,24 @@ export default async function AppearancePage({ searchParams }: { searchParams?: 
                   className="peer sr-only"
                 />
                 <div className="flex flex-col gap-3 rounded-card border-2 border-line p-4 transition-colors peer-checked:border-green peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-green">
-                  <div className="flex gap-1.5">
-                    {Object.values(preset.colors).map((color) => (
-                      <span
-                        key={color}
-                        className="h-8 w-8 rounded-full border border-line"
-                        style={{ backgroundColor: color }}
-                        aria-hidden="true"
-                      />
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded-full px-3 py-1.5 text-xs font-semibold text-white"
+                      style={{ backgroundColor: preset.colors.primary }}
+                    >
+                      View event
+                    </span>
+                    <span
+                      className="text-xs font-semibold underline underline-offset-2"
+                      style={{ color: preset.colors.secondary }}
+                    >
+                      See schedule
+                    </span>
+                    <span
+                      className="h-4 w-4 rounded-full"
+                      style={{ backgroundColor: preset.colors.accent }}
+                      aria-hidden="true"
+                    />
                   </div>
                   <div>
                     <p className="text-sm font-bold text-ink">{preset.label}</p>
