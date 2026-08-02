@@ -1998,7 +1998,7 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
   return (
     <Card className="flex flex-col gap-4">
       <div>
-        <CardTitle>6. Generate matches</CardTitle>
+        <CardTitle>7. Generate matches</CardTitle>
         <p className="mt-1 text-sm text-ink-soft">
           Choose a category with at least two confirmed entries. Single Elimination and Round Robin
           categories generate a seeded first round automatically; other formats must be scheduled
@@ -2117,7 +2117,7 @@ const BracketStep = async ({
   return (
     <>
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-extrabold text-ink">7. Bracket / fixtures</h2>
+        <h2 className="text-sm font-extrabold text-ink">8. Bracket / fixtures</h2>
         <Card>
           <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
             <input type="hidden" name="eventId" value={eventId} />
