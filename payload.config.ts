@@ -46,6 +46,15 @@ if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
 export default buildConfig({
   admin: {
     user: Users.slug,
+    // AUDIT_UI_UX_CSS UI-13/section 11.13: Payload Admin still used the framework's own default
+    // "Payload" title/branding, reading as a third, unrelated product next to the public site and
+    // the custom workspace. This is meant to be an internal technical console, not an organizer
+    // destination - the browser tab now says so explicitly rather than implying it's part of the
+    // main app. A full custom login-screen notice/logo swap (Payload's
+    // admin.components.graphics.Logo / beforeLogin) is a larger, separately-scoped follow-up.
+    meta: {
+      titleSuffix: ' - InTourney Internal',
+    },
     importMap: {
       baseDir: path.resolve(dirname, 'src'),
     },
