@@ -25,6 +25,7 @@ import { Players } from './src/collections/Players'
 import { Rosters } from './src/collections/Rosters'
 import { Rulesets } from './src/collections/Rulesets'
 import { SiteConfigs } from './src/collections/SiteConfigs'
+import { Sponsors } from './src/collections/Sponsors'
 import { Sports } from './src/collections/Sports'
 import { Stages } from './src/collections/Stages'
 import { Standings } from './src/collections/Standings'
@@ -94,6 +95,7 @@ export default buildConfig({
     CompetitionEntries,
     Venues,
     Courts,
+    Sponsors,
   ],
   db: postgresAdapter({
     pool: {

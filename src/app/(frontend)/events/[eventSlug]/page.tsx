@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { ShareEventPanel } from '@/components/share-event-panel'
+import { SponsorStrip, type SponsorDoc } from '@/components/sponsor-strip'
 import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
 import { getPublicArticles, getScopedPublicAnnouncements } from '../../contentData'
 import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publicEditComponents'
@@ -167,7 +168,7 @@ export default async function EventHomePage({
   const logoImage = event.logo && typeof event.logo === 'object' ? event.logo : undefined
 
   const eventWhere = { event_id: { equals: event.id } }
-  const [liveNextResult, sportsResult, articles, standingsResult, upcomingMatchesResult] =
+  const [liveNextResult, sportsResult, articles, standingsResult, upcomingMatchesResult, sponsorsResult] =
     await Promise.all([
     payload.find({
       collection: 'matches',
@@ -214,6 +215,13 @@ export default async function EventHomePage({
       where: {
         and: [eventWhere, { is_public: { equals: true } }, { scheduled_start_at: { exists: true } }],
       },
+    }),
+    payload.find({
+      collection: 'sponsors',
+      depth: 1,
+      limit: 50,
+      sort: ['tier', 'display_order', 'name'],
+      where: eventWhere,
     }),
   ])
 
@@ -661,6 +669,14 @@ export default async function EventHomePage({
           )}
         </div>
       </section>
+
+      {sponsorsResult.docs.length > 0 ? (
+        <section className="px-4 pb-10" aria-label="Sponsors and partners">
+          <div className="mx-auto max-w-5xl">
+            <SponsorStrip sponsors={sponsorsResult.docs as SponsorDoc[]} />
+          </div>
+        </section>
+      ) : null}
 
       <section className="px-4 pb-10" aria-label="Share this event">
         <div className="mx-auto max-w-5xl">
