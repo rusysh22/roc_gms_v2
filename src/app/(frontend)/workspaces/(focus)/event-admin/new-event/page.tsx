@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
+import { GlossaryHint } from '@/components/ui/glossary-hint'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { SelectAllCheckbox } from '@/components/ui/select-all-checkbox'
 import { Select } from '@/components/ui/select'
@@ -778,7 +779,11 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
               <div>
                 <p className="text-sm font-extrabold text-ink">{sport.name}</p>
                 <p className="text-xs font-semibold text-ink-soft">
-                  Rulesets: {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
+                  <GlossaryHint
+                    term="Rulesets"
+                    definition="How score, winning, standings, and tie-breaks are calculated for this sport. Optional - categories work fine without one."
+                  />
+                  : {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
                 </p>
               </div>
               <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
@@ -971,7 +976,15 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
                 </optgroup>
               </Select>
             </Field>
-            <Field label="Ruleset (optional)" className="sm:col-span-2">
+            <Field
+              label={
+                <GlossaryHint
+                  term="Ruleset (optional)"
+                  definition="How score, winning, standings, and tie-breaks are calculated. Leave as None if you'll decide later or the sport doesn't need one."
+                />
+              }
+              className="sm:col-span-2"
+            >
               <Select name="rulesetId">
                 <option value="">None</option>
                 {sports.docs.map((sport) => {
@@ -1525,8 +1538,14 @@ const RegistrationStep = async ({
         <div>
           <CardTitle>5. Registration</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
-            Pick who&apos;s officially competing in this category. You&apos;ll set the draw order
-            next, once registration is settled - that&apos;s its own step now.
+            Pick who&apos;s officially competing in this category - each one becomes an{' '}
+            <GlossaryHint
+              term="entry"
+              definition="A player, pair, team, or club officially registered into this category. Adding someone to the directory in step 4 doesn't register them anywhere by itself."
+              className="inline-block align-baseline"
+            />
+            . You&apos;ll set the draw order next, once registration is settled - that&apos;s its
+            own step now.
           </p>
         </div>
         <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
@@ -1792,8 +1811,14 @@ const DrawStep = async ({
         <div>
           <CardTitle>6. Draw &amp; seeding</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
-            Set the order participants are seeded into the bracket or schedule. Adding or removing
-            who&apos;s registered happens in the previous step.
+            Set each entry&apos;s{' '}
+            <GlossaryHint
+              term="seed"
+              definition="The order participants are placed in the draw. Lower numbers are kept apart in early rounds so the strongest entries don't meet too soon."
+              className="align-baseline"
+            />
+            {' '}for the bracket or schedule. Adding or removing who&apos;s registered happens in
+            the previous step.
           </p>
         </div>
         <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
@@ -1844,6 +1869,10 @@ const DrawStep = async ({
                   <TableHeader className="sticky top-0 z-10">
                     <TableRow>
                       <TableHead>Participant</TableHead>
+                      {/* Seed's glossary hint lives in the card intro above, not here - a
+                          popover anchored inside this scrollable/sticky table header gets clipped
+                          by the table's own overflow-y-auto boundary (confirmed via screenshot: the
+                          definition text was cut off mid-sentence). */}
                       <TableHead>Seed</TableHead>
                     </TableRow>
                   </TableHeader>
