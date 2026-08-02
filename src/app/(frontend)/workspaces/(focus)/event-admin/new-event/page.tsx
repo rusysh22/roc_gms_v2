@@ -4,8 +4,9 @@ import { Check } from 'lucide-react'
 
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
 import { AlertBanner } from '@/components/ui/alert-banner'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
@@ -37,7 +38,12 @@ import {
   addTeamAction,
   importParticipantsAction,
 } from './participantActions'
-import { addEntryAction, saveSeedOrderAction, shuffleSeedsAction } from './entriesSeedActions'
+import {
+  addEntryAction,
+  saveSeedOrderAction,
+  shuffleSeedsAction,
+  withdrawEntryAction,
+} from './entriesSeedActions'
 import { generateMatchesAction } from './generateActions'
 
 export const dynamic = 'force-dynamic'
@@ -1183,7 +1189,12 @@ const EntriesStep = async ({
       collection: 'competition-entries',
       depth: 2,
       limit: 300,
-      where: { category_id: { equals: selectedCategoryId } },
+      // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 7: a withdrawn entry (see withdrawEntryAction) must
+      // drop out of this list - otherwise it'd keep showing as "entered" here while also blocking
+      // its participant from being re-added below via `enteredSourceIds`.
+      where: {
+        and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'confirmed' } }],
+      },
       sort: 'seed_number',
     }),
   ])
@@ -1316,6 +1327,7 @@ const EntriesStep = async ({
                   <TableRow>
                     <TableHead>Participant</TableHead>
                     <TableHead>Seed</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1338,6 +1350,20 @@ const EntriesStep = async ({
                           defaultValue={entry.seed_number ?? ''}
                         />
                       </TableCell>
+                      <TableCell>
+                        {/* Can't nest a <form> inside this row - it's already inside the seed-order
+                            <form> above, and forms can't nest. The `form` attribute associates this
+                            button with the standalone per-row form rendered below instead (valid
+                            HTML: a control's `form` attribute can point at any <form> in the same
+                            document, not just an ancestor). */}
+                        <ConfirmSubmitButton
+                          form={`withdraw-entry-${entry.id}`}
+                          confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
+                          className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                        >
+                          Remove
+                        </ConfirmSubmitButton>
+                      </TableCell>
                     </TableRow>
                     )
                   })}
@@ -1348,6 +1374,16 @@ const EntriesStep = async ({
                 <SubmitButton>Save Order</SubmitButton>
               </div>
             </form>
+            {entries.docs.map((entry) => (
+              <form
+                key={entry.id}
+                id={`withdraw-entry-${entry.id}`}
+                action={withdrawEntryAction.bind(null, String(entry.id))}
+              >
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="categoryId" value={selectedCategoryId} />
+              </form>
+            ))}
           </>
         )}
       </Card>

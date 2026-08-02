@@ -145,6 +145,49 @@ export async function shuffleSeedsAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardShuffled=1`)
 }
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 7: there was no way to fix a mis-entered participant short
+// of deleting it directly through Advanced Data Administration - a soft withdraw (not a hard
+// delete) keeps the audit trail and lets the same participant be re-added later without losing
+// history. Withdrawn entries drop out of EntriesStep's "current entries" list (and therefore out of
+// `enteredSourceIds`), so the participant becomes available to add again immediately.
+//
+// `entryId` is a *bound* argument (`withdrawEntryAction.bind(null, String(entry.id))`), not a form
+// field - Next.js's server-action wiring already claims the submit button's own `name` attribute to
+// encode which action to invoke, so a same-named form field on that button is silently dropped.
+// Binding is the supported way to carry a per-row id into a shared action.
+export async function withdrawEntryAction(entryId: string, formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  if (!entryId) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_entry`)
+  }
+
+  const before = await payload.findByID({ collection: 'competition-entries', id: entryId, depth: 0 }).catch(() => null)
+  if (!before || String(before.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardError=invalid_relationship`)
+  }
+
+  const data = { status: 'withdrawn' as const }
+  await payload.update({ collection: 'competition-entries', id: entryId, data })
+  await recordAuditLog({
+    payload,
+    action: 'competition_entry.withdraw',
+    entityType: 'competition-entries',
+    entityId: entryId,
+    before,
+    after: { ...before, ...data },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=entries&categoryId=${categoryId}&wizardUpdated=1`)
+}
+
 export async function saveSeedOrderAction(formData: FormData): Promise<void> {
   const { payload } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,

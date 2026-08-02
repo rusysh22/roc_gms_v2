@@ -1,24 +1,28 @@
 'use client'
 
-import type { MouseEvent, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react'
+
+export interface ConfirmSubmitButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode
+  confirmMessage: string
+}
 
 export const ConfirmSubmitButton = ({
   children,
   confirmMessage,
-  className,
-}: {
-  children: ReactNode
-  confirmMessage: string
-  className?: string
-}) => {
+  onClick,
+  ...props
+}: ConfirmSubmitButtonProps) => {
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (!window.confirm(confirmMessage)) {
       event.preventDefault()
+      return
     }
+    onClick?.(event)
   }
 
   return (
-    <button type="submit" className={className} onClick={handleClick}>
+    <button type="submit" onClick={handleClick} {...props}>
       {children}
     </button>
   )
