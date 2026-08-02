@@ -74,6 +74,16 @@ export const CompetitionEntries: CollectionConfig = {
       min: 1,
     },
     {
+      name: 'group_id',
+      type: 'relationship',
+      relationTo: 'groups',
+      index: true,
+      admin: {
+        description:
+          'Group-stage assignment for group_stage_to_knockout categories. Set by the wizard\'s Groups panel before any match exists - group membership otherwise has no home until a match references it.',
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       required: true,

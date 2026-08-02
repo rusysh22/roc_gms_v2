@@ -287,7 +287,11 @@ export default async function PublicSportCategoryPage({
   const ruleset = getRuleset(category.ruleset_id)
   const usesBracket = category.format_type === 'single_elimination'
   const usesStandings = standingFormatTypes.has(category.format_type)
-  const competitionLabel = usesBracket ? 'Bracket' : 'Standings'
+  // group_stage_to_knockout has both: group standings never go away (they're how qualifiers were
+  // decided) and a knockout bracket once qualifiers are promoted - neither/or picking one hides
+  // real information the plain usesBracket/usesStandings split assumes is mutually exclusive.
+  const showsStandingsAndBracket = category.format_type === 'group_stage_to_knockout'
+  const competitionLabel = showsStandingsAndBracket ? 'Standings & Bracket' : usesBracket ? 'Bracket' : 'Standings'
   const rulesetFacts = getRulesetFacts(ruleset)
   const [announcements, relatedArticles] = await Promise.all([
     getScopedPublicAnnouncements({
@@ -385,7 +389,7 @@ export default async function PublicSportCategoryPage({
                   </p>
                   <h2 className="text-2xl font-extrabold">{competitionLabel}</h2>
                 </div>
-                {usesBracket && bracket ? (
+                {(usesBracket || showsStandingsAndBracket) && bracket ? (
                   <StatusBadge tone={bracket.status === 'published' ? 'green' : 'neutral'}>
                     {formatStatus(bracket.status)}
                   </StatusBadge>
@@ -401,6 +405,19 @@ export default async function PublicSportCategoryPage({
                 : <Card className="text-sm text-ink-soft">
                     This bracket is not available yet. It will appear once the category is seeded.
                   </Card>
+              : showsStandingsAndBracket ?
+                <div className="flex flex-col gap-6">
+                  <CategoryStandings standings={standings} />
+                  {bracket?.bracket_data?.rounds?.length ? (
+                    <div>
+                      <h3 className="mb-3 text-lg font-extrabold">Knockout Bracket</h3>
+                      <BracketTree
+                        rounds={bracket.bracket_data.rounds}
+                        champion={bracket.bracket_data.champion}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               : usesStandings ?
                 <CategoryStandings standings={standings} />
               : <Card className="text-sm text-ink-soft">
