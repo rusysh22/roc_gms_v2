@@ -8,19 +8,24 @@ import { cn } from '@/lib/utils'
 // need one, so this follows the exact stock red-50/200/700 already used by the Live Score page's
 // own error banner (the one place in the app that needed it before this component existed).
 // "info" reuses the blue token, which the design system already reserves for
-// secondary/informational meaning (see prd/redesign/README.md section 4).
-export type AlertTone = 'success' | 'error' | 'info'
+// secondary/informational meaning (see prd/redesign/README.md section 4). "warning" reuses gold,
+// matching StatusBadge's existing gold-for-attention-needed convention (e.g. category readiness's
+// "Needs entries"/"Needs matches" badges) - for a heads-up that isn't blocking/an error but also
+// isn't neutral "info" (e.g. NOVICE_ADMIN_FLOW_UX_REDESIGN item 6's "no court configured yet").
+export type AlertTone = 'success' | 'error' | 'info' | 'warning'
 
 const toneClasses: Record<AlertTone, string> = {
   success: 'border-green/30 bg-mist text-green',
   error: 'border-red-200 bg-red-50 text-red-700',
   info: 'border-blue/30 bg-mist text-blue',
+  warning: 'border-gold/30 bg-mist text-gold',
 }
 
 const toneIcon: Record<AlertTone, React.ElementType> = {
   success: CheckCircle2,
   error: AlertTriangle,
   info: Info,
+  warning: AlertTriangle,
 }
 
 export interface AlertBannerProps extends React.HTMLAttributes<HTMLDivElement> {

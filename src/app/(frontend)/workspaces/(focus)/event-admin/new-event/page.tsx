@@ -1990,9 +1990,27 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
     const key = String(entry.category_id)
     confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
   }
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 6: "Venue availability sebelum generation" - matches
+  // used to generate with zero signal about whether there's anywhere to actually play them, so the
+  // gap only surfaced later in the Scheduler workspace. A court with no sport_id set is usable by
+  // any sport (shared/multi-purpose court); one with a sport_id only covers that sport.
+  const courts =
+    categoryIds.length > 0
+      ? await payload.find({
+          collection: 'courts',
+          depth: 0,
+          limit: 500,
+          where: { and: [{ event_id: { equals: eventId } }, { is_active: { equals: true } }] },
+        })
+      : { docs: [] as { sport_id?: unknown }[] }
+  const anyCourtIsSportAgnostic = courts.docs.some((court) => !court.sport_id)
+  const sportIdsWithCourts = new Set(courts.docs.map((court) => String(court.sport_id)).filter(Boolean))
+
   const categoriesWithCounts = categories.docs.map((category) => ({
     category,
     confirmedCount: confirmedCountByCategory.get(String(category.id)) || 0,
+    hasCourt: anyCourtIsSportAgnostic || sportIdsWithCourts.has(String(category.sport_id)),
   }))
 
   return (
@@ -2005,8 +2023,18 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
           manually in the Scheduler workspace.
         </p>
       </div>
+      {courts.docs.length === 0 ? (
+        <AlertBanner tone="warning">
+          No venues or courts are set up for this event yet. Matches can still generate, but
+          nothing will have anywhere to be scheduled until you{' '}
+          <Link href="/workspaces/event-admin/facilities" className="font-bold underline">
+            add at least one court
+          </Link>
+          .
+        </AlertBanner>
+      ) : null}
       <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-        {categoriesWithCounts.map(({ category, confirmedCount }) => (
+        {categoriesWithCounts.map(({ category, confirmedCount, hasCourt }) => (
           <form
             action={generateMatchesAction}
             key={category.id}
@@ -2019,6 +2047,11 @@ const GenerateStep = async ({ payload, eventId }: { payload: Payload; eventId: s
               <span className="text-xs font-semibold text-ink-soft">
                 {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
               </span>
+              {!hasCourt && courts.docs.length > 0 ? (
+                <span className="block text-xs font-semibold text-gold">
+                  No court covers this sport yet
+                </span>
+              ) : null}
             </div>
             <SubmitButton
               size="sm"
