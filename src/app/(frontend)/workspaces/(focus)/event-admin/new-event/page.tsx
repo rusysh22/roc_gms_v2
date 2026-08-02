@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import type { Where } from 'payload'
-import { Check } from 'lucide-react'
+import { Building2, Check, User, UserRound, Users } from 'lucide-react'
 
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
 import { AlertBanner } from '@/components/ui/alert-banner'
@@ -823,6 +823,40 @@ const categoryStatusTone = (status: string): 'green' | 'blue' | 'gold' | 'neutra
   return 'neutral'
 }
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1: this used to be a plain <select> defaulting to "Team"
+// with no explanation - an admin who didn't recognize the field just kept the default, which is
+// wrong for anything other than a team-based category. Four visual cards replace it, none
+// pre-selected, each answering "who's bertanding on this category" in plain language instead of
+// jargon (doc section 8.2's exact terms: Peserta kategori/Pemain perorangan/Pasangan/Tim/Klub).
+// Open/TBD stay reachable but demoted behind a "Not sure yet" disclosure (doc section 8.2: "Jangan
+// tampilkan Open dan TBD sebagai participant type utama").
+const PARTICIPANT_MODE_CHOICES = [
+  {
+    value: 'individual',
+    label: 'Individual player',
+    helper: 'One person is one entry - e.g. badminton singles, chess.',
+    Icon: User,
+  },
+  {
+    value: 'pair',
+    label: 'Pair',
+    helper: 'Two players compete together as one entry - e.g. mixed doubles.',
+    Icon: UserRound,
+  },
+  {
+    value: 'team',
+    label: 'Team',
+    helper: 'A group of players compete as one unit - e.g. futsal, basketball.',
+    Icon: Users,
+  },
+  {
+    value: 'club',
+    label: 'Club / delegation',
+    helper: 'The organization itself is the entry, not a team or player inside it.',
+    Icon: Building2,
+  },
+] as const
+
 const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
   const [sports, categories, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -865,16 +899,49 @@ const CategoriesStep = async ({ payload, eventId }: { payload: Payload; eventId:
                 </Field>
               </div>
             </details>
-            <Field label="Participant mode">
-              <Select name="participantMode" defaultValue="team">
-                <option value="individual">Individual</option>
-                <option value="pair">Pair</option>
-                <option value="team">Team</option>
-                <option value="club">Club</option>
-                <option value="open">Open</option>
-                <option value="tbd">TBD</option>
-              </Select>
-            </Field>
+            <fieldset className="sm:col-span-2">
+              <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+                Who&apos;s competing in this category?
+              </legend>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {PARTICIPANT_MODE_CHOICES.map(({ value, label, helper, Icon }) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+                  >
+                    <input type="radio" name="participantMode" value={value} required className="sr-only" />
+                    <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+                    <span className="text-sm font-bold text-ink">{label}</span>
+                    <span className="text-xs text-ink-soft">{helper}</span>
+                  </label>
+                ))}
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+                  Not sure yet
+                </summary>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <input
+                      type="radio"
+                      name="participantMode"
+                      value="open"
+                      className="h-4 w-4 border-line text-green focus:ring-green/40"
+                    />
+                    Open (any participant type)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <input
+                      type="radio"
+                      name="participantMode"
+                      value="tbd"
+                      className="h-4 w-4 border-line text-green focus:ring-green/40"
+                    />
+                    To be decided later
+                  </label>
+                </div>
+              </details>
+            </fieldset>
             <Field label="Format">
               <Select name="formatType" defaultValue="single_elimination">
                 <optgroup label="Auto-generates matches in step 6">
