@@ -5,6 +5,11 @@ import type { CSSProperties } from 'react'
 // blue=secondary/informational, gold=live/accent), so no component needs to know a theme exists.
 export type EventThemePresetKey = 'classic' | 'sunset' | 'ocean'
 
+// AUDIT_UI_UX_CSS CSS-09: every preset's green (primary) and gold (accent) slot failed WCAG AA's
+// 4.5:1 normal-text contrast against white/paper (green ~3.44-4.38:1, gold ~1.82-2.74:1) - each
+// was darkened just enough to clear 4.5:1 with a small margin, same fix and same margin as the
+// base tokens in tailwind.css (CSS-08). Blue passed in every preset already (6.55-11.5:1) and is
+// untouched.
 export const EVENT_THEME_PRESETS: Record<
   EventThemePresetKey,
   { label: string; description: string; colors: { green: string; blue: string; gold: string } }
@@ -12,17 +17,17 @@ export const EVENT_THEME_PRESETS: Record<
   classic: {
     label: 'Classic',
     description: 'The default InTourney green, blue, and gold.',
-    colors: { green: '#128a56', blue: '#1b57c4', gold: '#de9f1e' },
+    colors: { green: '#118653', blue: '#1b57c4', gold: '#976c14' },
   },
   sunset: {
     label: 'Sunset',
     description: 'Warm coral, plum, and amber.',
-    colors: { green: '#e2622a', blue: '#6d3fae', gold: '#f2b705' },
+    colors: { green: '#c05324', blue: '#6d3fae', gold: '#916e03' },
   },
   ocean: {
     label: 'Ocean',
     description: 'Cool teal, navy, and coral.',
-    colors: { green: '#0f9b8e', blue: '#1e3a5f', gold: '#ff6f59' },
+    colors: { green: '#0d8277', blue: '#1e3a5f', gold: '#bf5343' },
   },
 }
 

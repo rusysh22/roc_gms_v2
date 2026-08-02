@@ -31,14 +31,22 @@
 @theme {
   --font-sans: var(--font-jakarta-sans), 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
 
-  /* prd/redesign/README.md section 4 - color tokens (D023) */
+  /* prd/redesign/README.md section 4 - color tokens (D023).
+   *
+   * AUDIT_UI_UX_CSS CSS-08: --color-green and --color-gold as text/border color on white/paper
+   * previously measured 4.38:1 and 2.31:1 - both fail WCAG AA's 4.5:1 normal-text minimum (gold
+   * badly so). Both were darkened just enough to clear 4.5:1 with a small margin (~4.6-4.7:1) so
+   * anti-aliasing/rendering differences don't tip them back under; --color-blue already passed
+   * (6.55:1) and is untouched. Event theme presets (src/lib/eventTheme.ts) received the matching
+   * fix for the same reason (CSS-09) - every preset's green/gold slot failed the same way.
+   */
   --color-paper: #ffffff;
   --color-mist: #f1f7f4;
   --color-ink: #0c231f;
   --color-ink-soft: #41564f;
-  --color-green: #128a56;
+  --color-green: #118653;
   --color-blue: #1b57c4;
-  --color-gold: #de9f1e;
+  --color-gold: #976c14;
   --color-line: #dbe6e1;
 
   /* prd/redesign/README.md section 4.1 - shape language (D020) */
