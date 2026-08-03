@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
-import { canManageEventStructure } from '@/access/roles'
+import { canManageParticipants } from '@/access/roles'
 
 export const CompetitionEntries: CollectionConfig = {
   slug: 'competition-entries',
@@ -11,10 +11,10 @@ export const CompetitionEntries: CollectionConfig = {
     useAsTitle: 'display_name',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
+    create: canManageParticipants,
+    delete: canManageParticipants,
     read: publicReadScopedToEvent(),
-    update: canManageEventStructure,
+    update: canManageParticipants,
   },
   fields: [
     {

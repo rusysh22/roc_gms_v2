@@ -7,6 +7,8 @@ export type UserRole =
   | 'scheduler'
   | 'match_officer'
   | 'content_admin'
+  | 'registration'
+  | 'draw'
 
 type AccessUser = {
   roles?: UserRole[] | null
@@ -61,6 +63,18 @@ export const canManageContent: Access = ({ req }) => {
 
 export const canManageEventStructure: Access = ({ req }) => {
   return hasRole(req.user as AccessUser | null | undefined, ['super_admin', 'event_admin'])
+}
+
+/** NOVICE_ADMIN_FLOW_UX_REDESIGN.md P2 item 4 "collaborative roles": a `draw` role owns the
+ * competitor database and seeding (Clubs/Teams/Players/Rosters/CompetitionEntries) without the
+ * rest of event_admin's power (venues, appearance, sponsors, category/bracket generation). */
+export const canManageParticipants: Access = ({ req }) => {
+  return hasRole(req.user as AccessUser | null | undefined, ['super_admin', 'event_admin', 'draw'])
+}
+
+/** Same split for the `registration` role: owns the public registration approval queue only. */
+export const canManageRegistrationQueue: Access = ({ req }) => {
+  return hasRole(req.user as AccessUser | null | undefined, ['super_admin', 'event_admin', 'registration'])
 }
 
 export const canManageSchedule: Access = ({ req }) => {
@@ -215,6 +229,8 @@ export const canReadEventBackoffice: Access = ({ req }) => {
     'scheduler',
     'match_officer',
     'content_admin',
+    'registration',
+    'draw',
   ])
 }
 

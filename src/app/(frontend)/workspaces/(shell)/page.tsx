@@ -10,6 +10,8 @@ const ALL_WORKSPACE_ROLES = [
   'scheduler',
   'match_officer',
   'content_admin',
+  'registration',
+  'draw',
 ] as const
 
 /** Entry point used by the public navigation. Authentication is enforced here,
@@ -37,6 +39,8 @@ export default async function WorkspaceEntryPage() {
   if (roles.includes('scheduler')) redirect('/workspaces/scheduler')
   if (roles.includes('match_officer')) redirect('/workspaces/match-officer')
   if (roles.includes('content_admin')) redirect('/workspaces/content-admin')
+  if (roles.includes('draw')) redirect('/workspaces/event-admin/entries')
+  if (roles.includes('registration')) redirect('/workspaces/event-admin/registrations')
 
   return <WorkspaceUnauthorized workspaceName="Operational Workspaces" allowedRoles={[...ALL_WORKSPACE_ROLES]} />
 }

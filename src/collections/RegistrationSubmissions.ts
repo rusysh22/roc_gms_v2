@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageEventStructure } from '@/access/roles'
+import { canManageRegistrationQueue } from '@/access/roles'
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P2 item 2: "Registration portal dan approval queue". A
 // submission is deliberately NOT a CompetitionEntry/Club/Team/Player directly - it's unvetted
@@ -10,8 +10,8 @@ import { canManageEventStructure } from '@/access/roles'
 // creates/reuses the actual Club/Team/Player/CompetitionEntry records and links back here via the
 // created_*_id fields; rejecting one just records why, with nothing else touched.
 //
-// Access is staff-only at the collection boundary, same as every other participant collection
-// (canManageEventStructure) - the public registration form's server action still succeeds because
+// Access is staff-only at the collection boundary (canManageRegistrationQueue: super_admin/
+// event_admin/registration) - the public registration form's server action still succeeds because
 // Payload's Local API defaults `overrideAccess` to true for trusted server-side code. This is the
 // first collection in the app a public visitor can cause a row to be written to; the actual abuse
 // mitigation (rate limit, honeypot, registration-window check) lives in the server action, not
@@ -24,10 +24,10 @@ export const RegistrationSubmissions: CollectionConfig = {
     useAsTitle: 'display_name',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
-    read: canManageEventStructure,
-    update: canManageEventStructure,
+    create: canManageRegistrationQueue,
+    delete: canManageRegistrationQueue,
+    read: canManageRegistrationQueue,
+    update: canManageRegistrationQueue,
   },
   fields: [
     {

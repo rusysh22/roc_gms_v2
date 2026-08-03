@@ -31,7 +31,7 @@ const get = (params: Record<string, string | string[] | undefined>, key: string)
 
 export default async function EntriesPage({ searchParams }: { searchParams?: SearchParams }) {
   const access = await requireWorkspaceAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.draw,
     returnTo: basePage,
     workspaceName: 'Competition Entries',
   })

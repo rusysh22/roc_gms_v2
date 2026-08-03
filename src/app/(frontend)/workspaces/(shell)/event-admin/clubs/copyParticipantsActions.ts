@@ -34,7 +34,7 @@ const normalizeName = (value: string) => value.trim().toLowerCase()
 //   event like slugs are), so copying it verbatim across events would collide constantly.
 export async function copyParticipantsFromEventAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.draw,
     returnTo: page,
   })
   const targetEvent = await getActiveEvent(payload)

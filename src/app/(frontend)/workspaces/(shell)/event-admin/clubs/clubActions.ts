@@ -13,7 +13,7 @@ const slugify = (value: string) => value.toLowerCase().normalize('NFKD').replace
 const emailIsValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 export async function saveClubAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page })
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
   const event = await getActiveEvent(payload)
   const id = text(formData, 'id'); const name = text(formData, 'name'); const requestedSlug = text(formData, 'slug'); const email = text(formData, 'contactEmail')
   const slug = slugify(requestedSlug || name)

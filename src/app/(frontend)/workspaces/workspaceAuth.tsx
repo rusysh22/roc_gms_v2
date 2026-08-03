@@ -34,7 +34,13 @@ export const WORKSPACE_ROLES = {
   scheduler: ['super_admin', 'event_admin', 'scheduler'],
   matchOfficer: ['super_admin', 'event_admin', 'match_officer'],
   contentAdmin: ['super_admin', 'event_admin', 'content_admin'],
-  brackets: ['super_admin', 'event_admin', 'scheduler'],
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P2 item 4 "collaborative roles": `draw` owns the competitor
+  // database and seeding (Clubs/Participants/Entries), `registration` owns the public approval
+  // queue - both narrower than the full event_admin surface. Bracket recalculation/repair is
+  // included under `draw` since it's the natural follow-up to reseeding an already-generated bracket.
+  draw: ['super_admin', 'event_admin', 'draw'],
+  registrationDesk: ['super_admin', 'event_admin', 'registration'],
+  brackets: ['super_admin', 'event_admin', 'scheduler', 'draw'],
   standings: ['super_admin', 'event_admin', 'scheduler'],
   analytics: ['super_admin', 'event_admin', 'scheduler'],
 } satisfies Record<string, UserRole[]>

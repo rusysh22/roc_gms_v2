@@ -62,7 +62,7 @@ const ChoiceField = ({
 
 export default async function ParticipantsPage({ searchParams }: { searchParams?: Params }) {
   const access = await requireWorkspaceAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.draw,
     returnTo: basePage,
     workspaceName: 'Participants Management',
   })

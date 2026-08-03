@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageEventStructure, canReadEventBackoffice } from '@/access/roles'
+import { canManageParticipants, canReadEventBackoffice } from '@/access/roles'
 
 export const Players: CollectionConfig = {
   slug: 'players',
@@ -10,10 +10,10 @@ export const Players: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
+    create: canManageParticipants,
+    delete: canManageParticipants,
     read: canReadEventBackoffice,
-    update: canManageEventStructure,
+    update: canManageParticipants,
   },
   fields: [
     {

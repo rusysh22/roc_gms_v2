@@ -69,7 +69,7 @@ type RosterRow = { name: string; email?: string | null; phone?: string | null }
 // Participants workspace, same as bulk CSV import already leaves for club/team name collisions.
 export async function approveRegistrationSubmissionAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.registrationDesk,
     returnTo: basePage,
   })
 
@@ -220,7 +220,7 @@ export async function approveRegistrationSubmissionAction(formData: FormData): P
 
 export async function rejectRegistrationSubmissionAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.registrationDesk,
     returnTo: basePage,
   })
 

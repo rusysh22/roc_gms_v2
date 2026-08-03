@@ -12,7 +12,7 @@ const validTypes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd']
 const validStatuses = new Set(['pending', 'confirmed', 'waitlisted', 'withdrawn', 'disqualified'])
 
 export async function saveCompetitionEntryAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page })
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
   const event = await getActiveEvent(payload)
   const id = text(formData, 'id'); const displayName = text(formData, 'displayName'); const categoryId = text(formData, 'categoryId'); const entryType = text(formData, 'entryType'); const status = text(formData, 'status'); const sourceId = text(formData, 'sourceId')
   if (!event || !displayName || !categoryId || !validTypes.has(entryType) || !validStatuses.has(status)) redirect(`${page}?entryError=invalid_input`)

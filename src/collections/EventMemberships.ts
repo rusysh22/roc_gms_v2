@@ -49,6 +49,8 @@ export const EventMemberships: CollectionConfig = {
         { label: 'Scheduler', value: 'scheduler' },
         { label: 'Match Officer', value: 'match_officer' },
         { label: 'Content Admin', value: 'content_admin' },
+        { label: 'Registration', value: 'registration' },
+        { label: 'Draw', value: 'draw' },
       ],
     },
   ],

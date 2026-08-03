@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
-import { canManageEventStructure, canReadEventBackoffice } from '@/access/roles'
+import { canManageParticipants, canReadEventBackoffice } from '@/access/roles'
 
 export const Rosters: CollectionConfig = {
   slug: 'rosters',
@@ -10,10 +10,10 @@ export const Rosters: CollectionConfig = {
     useAsTitle: 'role',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
+    create: canManageParticipants,
+    delete: canManageParticipants,
     read: canReadEventBackoffice,
-    update: canManageEventStructure,
+    update: canManageParticipants,
   },
   fields: [
     {

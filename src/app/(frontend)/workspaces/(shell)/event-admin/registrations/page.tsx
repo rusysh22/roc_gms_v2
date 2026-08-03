@@ -45,7 +45,7 @@ type WorkspaceSubmission = {
 
 export default async function RegistrationsPage({ searchParams }: { searchParams?: SearchParams }) {
   const access = await requireWorkspaceAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    allowedRoles: WORKSPACE_ROLES.registrationDesk,
     returnTo: '/workspaces/event-admin/registrations',
     workspaceName: 'Registration Approval Queue',
   })

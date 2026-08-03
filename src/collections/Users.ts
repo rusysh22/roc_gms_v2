@@ -60,6 +60,14 @@ export const Users: CollectionConfig = {
           label: 'Content Admin',
           value: 'content_admin',
         },
+        {
+          label: 'Registration',
+          value: 'registration',
+        },
+        {
+          label: 'Draw',
+          value: 'draw',
+        },
       ],
     },
   ],

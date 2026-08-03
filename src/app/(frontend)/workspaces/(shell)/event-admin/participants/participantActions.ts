@@ -21,7 +21,7 @@ const belongsToEvent = async (payload: Awaited<ReturnType<typeof assertWorkspace
 }
 
 export async function savePlayerAction(form: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page }); const event = await activeEvent(payload)
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page }); const event = await activeEvent(payload)
   const id = text(form, 'id'); const name = text(form, 'name'); const clubId = text(form, 'clubId'); const email = text(form, 'email'); const gender = text(form, 'gender')
   if (!event || !name || !emailValid(email) || (gender && !['male', 'female', 'other', 'prefer_not_to_say'].includes(gender))) redirect(`${page}?participantError=invalid_player`)
   try { await belongsToEvent(payload, 'clubs', clubId, event.id) } catch { redirect(`${page}?participantError=invalid_relationship`) }
@@ -31,7 +31,7 @@ export async function savePlayerAction(form: FormData): Promise<void> {
 }
 
 export async function saveTeamAction(form: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page }); const event = await activeEvent(payload)
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page }); const event = await activeEvent(payload)
   const id = text(form, 'id'); const name = text(form, 'name'); const slug = (text(form, 'slug') || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); const clubId = text(form, 'clubId'); const captainId = text(form, 'captainId'); const email = text(form, 'email')
   if (!event || !name || !slug || !emailValid(email)) redirect(`${page}?participantError=invalid_team`)
   try { await Promise.all([belongsToEvent(payload, 'clubs', clubId, event.id), belongsToEvent(payload, 'players', captainId, event.id)]) } catch { redirect(`${page}?participantError=invalid_relationship`) }
@@ -42,7 +42,7 @@ export async function saveTeamAction(form: FormData): Promise<void> {
 }
 
 export async function saveRosterAction(form: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.eventAdmin, returnTo: page }); const event = await activeEvent(payload)
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page }); const event = await activeEvent(payload)
   const id = text(form, 'id'); const teamId = text(form, 'teamId'); const playerId = text(form, 'playerId'); const categoryId = text(form, 'categoryId'); const role = text(form, 'role'); const status = text(form, 'status')
   if (!event || !teamId || !playerId || !roles.has(role) || !statuses.has(status)) redirect(`${page}?participantError=invalid_roster`)
   try { await Promise.all([belongsToEvent(payload, 'teams', teamId, event.id), belongsToEvent(payload, 'players', playerId, event.id), belongsToEvent(payload, 'competition-categories', categoryId, event.id)]) } catch { redirect(`${page}?participantError=invalid_relationship`) }
