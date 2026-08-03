@@ -202,6 +202,7 @@ export const Matches: CollectionConfig = {
         { label: 'Manual', value: 'manual' },
         { label: 'Round Robin', value: 'round_robin' },
         { label: 'Single Elimination', value: 'single_elimination' },
+        { label: 'Double Elimination', value: 'double_elimination' },
       ],
     },
     {
@@ -248,6 +249,29 @@ export const Matches: CollectionConfig = {
         },
         {
           name: 'next_match_slot',
+          type: 'select',
+          options: [
+            { label: 'Participant A', value: 'a' },
+            { label: 'Participant B', value: 'b' },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'next_loser_match_id',
+          type: 'relationship',
+          relationTo: 'matches',
+          index: true,
+          admin: {
+            description:
+              'Double elimination only: the loser of this match is written into next_loser_match_slot of next_loser_match_id (the losers-bracket routing edge - ADMIN_EVENT_CREATION F-14).',
+          },
+        },
+        {
+          name: 'next_loser_match_slot',
           type: 'select',
           options: [
             { label: 'Participant A', value: 'a' },

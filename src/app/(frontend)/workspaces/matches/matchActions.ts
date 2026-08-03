@@ -7,6 +7,7 @@ import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
+import { attemptDoubleEliminationAdvancement, recalculateDoubleEliminationBracket } from '@/lib/doubleElimination'
 import { postMatchAnnouncement } from '@/lib/matchNotifications'
 import {
   countSetWinsForSide,
@@ -233,6 +234,60 @@ const recalculateResultCachesBestEffort = async ({
     } catch (error) {
       payload.logger.error(
         `Failed to recalculate bracket after ${action} on match ${matchNumber}: ${error}`,
+      )
+    }
+    return
+  }
+
+  if (stage.stage_type === 'double_elimination') {
+    if (match.status === 'result_published' && match.winner_entry_id) {
+      try {
+        const advancement = await attemptDoubleEliminationAdvancement(payload, match.id)
+
+        await recordAuditLog({
+          payload,
+          action: 'winner_advancement.double_elimination',
+          entityType: 'matches',
+          entityId: match.id,
+          before: null,
+          after: {
+            reason: action,
+            match_number: matchNumber,
+            outcome: advancement.outcome,
+            details: advancement.details,
+          },
+          actorUserId,
+        })
+      } catch (error) {
+        payload.logger.error(
+          `Failed to attempt double-elimination advancement after ${action} on match ${matchNumber}: ${error}`,
+        )
+      }
+    }
+
+    try {
+      const result = await recalculateDoubleEliminationBracket(payload, {
+        stageId: match.stage_id,
+      })
+
+      await recordAuditLog({
+        payload,
+        action: 'bracket.cache_recalculate',
+        entityType: 'matches',
+        entityId: match.id,
+        before: null,
+        after: {
+          reason: action,
+          match_number: matchNumber,
+          bracket_id: result.bracketId,
+          match_count: result.matchCount,
+          round_count: result.roundCount,
+        },
+        actorUserId,
+      })
+    } catch (error) {
+      payload.logger.error(
+        `Failed to recalculate double-elimination bracket after ${action} on match ${matchNumber}: ${error}`,
       )
     }
   }

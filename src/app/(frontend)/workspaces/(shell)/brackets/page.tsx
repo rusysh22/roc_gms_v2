@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
@@ -31,18 +32,31 @@ type WorkspaceBracket = {
   id: string | number
   name: string
   status: string
-  bracket_data?: SingleEliminationBracketData | null
+  bracket_data?: SingleEliminationBracketData | DoubleEliminationBracketData | null
   category_id?: string | number | { name?: string } | null
   stage_id?: string | number | { name?: string } | null
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
-const getChampion = (bracketData?: SingleEliminationBracketData | null) =>
+const getChampion = (bracketData?: WorkspaceBracket['bracket_data']) =>
   bracketData?.champion || {
     status: 'pending',
     reason: 'Champion metadata has not been generated yet.',
   }
+
+const getBracketMatchCount = (bracketData?: WorkspaceBracket['bracket_data']) => {
+  if (!bracketData) return 0
+  if (bracketData.format === 'double_elimination') {
+    return (
+      [...bracketData.winners_rounds, ...bracketData.losers_rounds].reduce(
+        (sum, round) => sum + round.matches.length,
+        0,
+      ) + (bracketData.grand_final ? 1 : 0) + (bracketData.grand_final_reset ? 1 : 0)
+    )
+  }
+  return bracketData.rounds.reduce((sum, round) => sum + round.matches.length, 0)
+}
 
 export default async function BracketsWorkspacePage({
   searchParams,
@@ -89,7 +103,7 @@ export default async function BracketsWorkspacePage({
       depth: 1,
       limit: 50,
       sort: ['category_id', 'order'],
-      where: { and: [eventWhere, { stage_type: { equals: 'single_elimination' } }] },
+      where: { and: [eventWhere, { stage_type: { in: ['single_elimination', 'double_elimination'] } }] },
     }),
     payload.find({ collection: 'brackets', depth: 1, limit: 50, sort: ['category_id', 'stage_id'], where: eventWhere }),
   ])
@@ -101,8 +115,8 @@ export default async function BracketsWorkspacePage({
     <>
       <PageHero
         eyebrow="Brackets Workspace"
-        title="Single elimination bracket foundation"
-        summary="Generate cached bracket layout from single-elimination stage matches. The match records remain the source of truth for status, score, and winners."
+        title="Bracket foundation"
+        summary="Generate cached bracket layout from single- or double-elimination stage matches. The match records remain the source of truth for status, score, and winners."
         actions={
           <>
             <Button asChild>
@@ -128,7 +142,7 @@ export default async function BracketsWorkspacePage({
 
       <StatGrid>
         <StatBlock label="Bracket caches" value={brackets.length} />
-        <StatBlock label="Single elimination stages" value={stages.length} />
+        <StatBlock label="Elimination stages" value={stages.length} />
         <StatBlock
           label="Champions decided"
           value={brackets.filter((bracket) => getChampion(bracket.bracket_data).status === 'decided').length}
@@ -136,11 +150,7 @@ export default async function BracketsWorkspacePage({
         />
         <StatBlock
           label="Cached matches"
-          value={brackets.reduce(
-            (sum, bracket) =>
-              sum + (bracket.bracket_data?.rounds.reduce((roundSum, round) => roundSum + round.matches.length, 0) || 0),
-            0,
-          )}
+          value={brackets.reduce((sum, bracket) => sum + getBracketMatchCount(bracket.bracket_data), 0)}
         />
       </StatGrid>
 
@@ -167,7 +177,7 @@ export default async function BracketsWorkspacePage({
               <SubmitButton>Recalculate Bracket</SubmitButton>
             </form>
           ) : (
-            <EmptyState>No single-elimination stage exists yet. Seed the demo event before generating a bracket.</EmptyState>
+            <EmptyState>No elimination-bracket stage exists yet. Seed the demo event before generating a bracket.</EmptyState>
           )}
         </Card>
 

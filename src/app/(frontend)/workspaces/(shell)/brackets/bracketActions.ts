@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { ensureSingleEliminationBracketStructure } from '@/lib/bracketRepair'
+import { recalculateDoubleEliminationBracket } from '@/lib/doubleElimination'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
 
 export const recalculateBracketStageAction = async (formData: FormData) => {
@@ -17,6 +18,14 @@ export const recalculateBracketStageAction = async (formData: FormData) => {
     allowedRoles: WORKSPACE_ROLES.brackets,
     returnTo: '/workspaces/brackets',
   })
+
+  const stage = await payload.findByID({ collection: 'stages', id: stageId, depth: 0 })
+
+  if (stage.stage_type === 'double_elimination') {
+    const result = await recalculateDoubleEliminationBracket(payload, { stageId })
+    redirect(`/workspaces/brackets?bracketUpdated=1&matches=${result.matchCount}&repaired=0`)
+  }
+
   const repair = await ensureSingleEliminationBracketStructure(payload, stageId)
   const result = await recalculateSingleEliminationBracket(payload, { stageId })
 

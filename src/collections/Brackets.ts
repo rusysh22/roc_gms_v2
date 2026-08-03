@@ -59,7 +59,10 @@ export const Brackets: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'single_elimination',
-      options: [{ label: 'Single Elimination', value: 'single_elimination' }],
+      options: [
+        { label: 'Single Elimination', value: 'single_elimination' },
+        { label: 'Double Elimination', value: 'double_elimination' },
+      ],
     },
     {
       name: 'seed_config',

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { buildSingleEliminationBracketLayout } from '@/lib/brackets'
+import { buildDoubleEliminationBracketLayout, isExactPowerOfTwo } from '@/lib/doubleElimination'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
@@ -122,6 +123,8 @@ const errorMessages: Record<string, string> = {
   no_qualifiers: 'No qualified entries were found for this group stage.',
   unsupported_format:
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
+  double_elimination_requires_power_of_two:
+    'Double elimination auto-generation needs an exact power-of-two number of confirmed entries (4, 8, 16, 32...). Add or remove entries to reach one, or build the bracket manually in the Scheduler workspace.',
   invalid_publish_option: 'Choose one of the three publish options.',
 }
 
@@ -1321,12 +1324,12 @@ const CategoriesStep = async ({
                 <optgroup label="Auto-generates matches in step 6">
                   <option value="single_elimination">Single Elimination</option>
                   <option value="round_robin">Round Robin</option>
+                  <option value="double_elimination">Double Elimination (needs a power-of-two entry count)</option>
                 </optgroup>
                 <optgroup label="Has its own guided setup (step 6)">
                   <option value="group_stage_to_knockout">Group Stage to Knockout</option>
                 </optgroup>
                 <optgroup label="Manual scheduling only (Scheduler workspace)">
-                  <option value="double_elimination">Double Elimination</option>
                   <option value="league">League</option>
                   <option value="friendly">Friendly</option>
                   <option value="time_trial">Time Trial</option>
@@ -2484,6 +2487,16 @@ const GenerateStep = async ({
       const matchCount = (confirmedCount * (confirmedCount - 1)) / 2
       return `${matchCount} match${matchCount === 1 ? '' : 'es'} (round robin, everyone plays once)`
     }
+    if (formatType === 'double_elimination') {
+      if (!isExactPowerOfTwo(confirmedCount)) {
+        return `Needs an exact power-of-two entry count (4, 8, 16...) - currently ${confirmedCount}`
+      }
+      // Every entrant but the eventual champion loses exactly twice (the champion loses at most
+      // once) - the standard double-elimination match-count identity: 2N-2 without a grand final
+      // reset, 2N-1 if the losers-bracket finalist forces one.
+      const withoutReset = 2 * confirmedCount - 2
+      return `${withoutReset}-${withoutReset + 1} matches (double elimination, winners + losers bracket + grand final)`
+    }
     return null
   }
 
@@ -2739,6 +2752,8 @@ const BracketStep = async ({
         </Card>
       ) : stage.stage_type === 'single_elimination' ? (
         <SingleEliminationBracketView payload={payload} stageId={String(stage.id)} />
+      ) : stage.stage_type === 'double_elimination' ? (
+        <DoubleEliminationBracketView payload={payload} stageId={String(stage.id)} />
       ) : (
         <RoundRobinFixtureList payload={payload} stageId={String(stage.id)} />
       )}
@@ -2837,6 +2852,50 @@ const SingleEliminationBracketView = async ({ payload, stageId }: { payload: Pay
     <Card>
       <BracketTree rounds={layout.bracketData.rounds} champion={layout.bracketData.champion} />
     </Card>
+  )
+}
+
+// Renders as three stacked brackets (winners / losers / grand final) rather than integrating the
+// @g-loot/react-tournament-brackets package's dedicated DoubleEliminationBracket component - that
+// component expects a cross-linked matches.upper/matches.lower shape (including
+// nextLooserMatchId) that would need its own transform layer, whereas reusing BracketTree three
+// times gets a working, readable view from code that's already shipped and tested.
+const DoubleEliminationBracketView = async ({ payload, stageId }: { payload: Payload; stageId: string }) => {
+  const layout = await buildDoubleEliminationBracketLayout(payload, stageId)
+  const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = layout.bracketData
+  const grandFinalRounds =
+    grandFinal ?
+      [
+        {
+          name: 'Grand Final',
+          order: 0,
+          matches: [
+            grandFinal,
+            ...(grandFinalReset && grandFinalReset.status !== 'cancelled' ? [grandFinalReset] : []),
+          ],
+        },
+      ]
+    : []
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <h3 className="mb-3 text-sm font-extrabold text-ink">Winners bracket</h3>
+        <BracketTree rounds={layout.bracketData.winners_rounds} champion={null} />
+      </Card>
+      {layout.bracketData.losers_rounds.length > 0 ? (
+        <Card>
+          <h3 className="mb-3 text-sm font-extrabold text-ink">Losers bracket</h3>
+          <BracketTree rounds={layout.bracketData.losers_rounds} champion={null} />
+        </Card>
+      ) : null}
+      {grandFinalRounds.length > 0 ? (
+        <Card>
+          <h3 className="mb-3 text-sm font-extrabold text-ink">Grand final</h3>
+          <BracketTree rounds={grandFinalRounds} champion={layout.bracketData.champion} />
+        </Card>
+      ) : null}
+    </div>
   )
 }
 

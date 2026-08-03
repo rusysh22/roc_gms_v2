@@ -74,6 +74,11 @@ export const getPublishResultConfirmMessage = (stageType: string | undefined): s
   if (stageType === 'single_elimination') {
     consequences.push("advance the winner into next round's slot")
   }
+  if (stageType === 'double_elimination') {
+    consequences.push(
+      "advance the winner forward and route the loser into the losers bracket (or decide the champion, for the grand final)",
+    )
+  }
 
   const consequenceText =
     consequences.length > 0 ? ` This will ${consequences.join(' and ')}.` : ''

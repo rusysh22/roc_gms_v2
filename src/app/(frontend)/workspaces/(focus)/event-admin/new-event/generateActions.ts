@@ -5,6 +5,11 @@ import { redirect } from 'next/navigation'
 
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import {
+  createDoubleEliminationBracketMatches,
+  isExactPowerOfTwo,
+  recalculateDoubleEliminationBracket,
+} from '@/lib/doubleElimination'
+import {
   createSingleEliminationBracketMatches,
   generateRoundRobinPairings,
   getMatchPairKey,
@@ -67,6 +72,19 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
   if (schedulableEntries.length < 2) {
     redirect(`${wizardPage}?eventId=${eventId}&step=generate&wizardError=not_enough_entries`)
   }
+  if (formatType === 'double_elimination' && !isExactPowerOfTwo(schedulableEntries.length)) {
+    // ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-14 scope decision (see
+    // src/lib/doubleElimination.ts's header comment): the generator only supports an exact
+    // power-of-two entry count. Surface that up front instead of a confusing mid-generation
+    // failure.
+    redirect(`${wizardPage}?eventId=${eventId}&step=generate&wizardError=double_elimination_requires_power_of_two`)
+  }
+
+  const stageTypeLabel: Record<string, string> = {
+    single_elimination: 'Single Elimination',
+    round_robin: 'Round Robin',
+    double_elimination: 'Double Elimination',
+  }
 
   const existingStage = await payload.find({
     collection: 'stages',
@@ -83,10 +101,10 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
       data: {
         event_id: Number(eventId),
         category_id: Number(categoryId),
-        name: `${category!.name} - ${formatType === 'single_elimination' ? 'Single Elimination' : 'Round Robin'}`,
-        // Guaranteed 'single_elimination' | 'round_robin' by the supportedFormats.has(formatType)
+        name: `${category!.name} - ${stageTypeLabel[formatType] || 'Round Robin'}`,
+        // Guaranteed one of supportedFormats' members by the supportedFormats.has(formatType)
         // check above - narrower than the field's plain `string` type here.
-        stage_type: formatType as 'single_elimination' | 'round_robin',
+        stage_type: formatType as 'single_elimination' | 'round_robin' | 'double_elimination',
         order: 1,
         status: 'ready',
       },
@@ -131,6 +149,22 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
     failedCount = result.failedCount
 
     await recalculateSingleEliminationBracket(payload, { stageId: stage.id })
+  } else if (formatType === 'double_elimination') {
+    const result = await createDoubleEliminationBracketMatches({
+      payload,
+      eventId,
+      eventSlug: event.slug,
+      sportId: category!.sport_id,
+      categoryId,
+      categorySlug: category!.slug,
+      stageId: stage.id,
+      entries: schedulableEntries,
+      nextMatchNumber,
+    })
+    createdCount = result.createdCount
+    failedCount = result.failedCount
+
+    await recalculateDoubleEliminationBracket(payload, { stageId: stage.id })
   } else {
     const pairings = generateRoundRobinPairings(schedulableEntries)
 

@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 
 import config from '@payload-config'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Card } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -17,7 +18,7 @@ type PublicBracket = {
   name: string
   format: string
   status: string
-  bracket_data?: SingleEliminationBracketData | null
+  bracket_data?: SingleEliminationBracketData | DoubleEliminationBracketData | null
   event_id?: string | number | { name?: string } | null
   category_id?: string | number | { name?: string } | null
   stage_id?: string | number | { name?: string } | null
@@ -87,7 +88,11 @@ export default async function PublicBracketsPage({
                   </StatusBadge>
                 </div>
 
-                {!bracket.bracket_data || bracket.bracket_data.rounds.length === 0 ? (
+                {!bracket.bracket_data ? (
+                  <Card className="text-sm text-ink-soft">This bracket has no matches yet.</Card>
+                ) : bracket.bracket_data.format === 'double_elimination' ? (
+                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} />
+                ) : bracket.bracket_data.rounds.length === 0 ? (
                   <Card className="text-sm text-ink-soft">This bracket has no matches yet.</Card>
                 ) : (
                   <BracketTree
@@ -101,5 +106,47 @@ export default async function PublicBracketsPage({
         </div>
       </section>
     </main>
+  )
+}
+
+// Same "three stacked BracketTree sections" approach as the workspace wizard's bracket step
+// (src/app/(frontend)/workspaces/(focus)/event-admin/new-event/page.tsx's
+// DoubleEliminationBracketView) - kept consistent rather than building a second, differently
+// shaped renderer for the public page.
+const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: DoubleEliminationBracketData }) => {
+  const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = bracketData
+  const grandFinalRounds =
+    grandFinal ?
+      [
+        {
+          name: 'Grand Final',
+          order: 0,
+          matches: [
+            grandFinal,
+            ...(grandFinalReset && grandFinalReset.status !== 'cancelled' ? [grandFinalReset] : []),
+          ],
+        },
+      ]
+    : []
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="mb-2 text-sm font-extrabold text-ink">Winners bracket</h3>
+        <BracketTree rounds={bracketData.winners_rounds} champion={null} />
+      </div>
+      {bracketData.losers_rounds.length > 0 ? (
+        <div>
+          <h3 className="mb-2 text-sm font-extrabold text-ink">Losers bracket</h3>
+          <BracketTree rounds={bracketData.losers_rounds} champion={null} />
+        </div>
+      ) : null}
+      {grandFinalRounds.length > 0 ? (
+        <div>
+          <h3 className="mb-2 text-sm font-extrabold text-ink">Grand final</h3>
+          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} />
+        </div>
+      ) : null}
+    </div>
   )
 }

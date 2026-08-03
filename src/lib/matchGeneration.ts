@@ -213,15 +213,17 @@ export const buildSingleEliminationBracketPlan = (
 
 // Round names/prefixes counting back from the Final, applied to every round including the first -
 // so an 8-bracket's opening round is correctly labelled "Quarterfinal" (not a generic "First
-// Round" regardless of bracket size).
-const roundNameForRemaining = (roundsRemaining: number) => {
+// Round" regardless of bracket size). Exported so src/lib/doubleElimination.ts's winners-bracket
+// half (structurally identical to single-elimination) can reuse the exact same naming instead of
+// re-deriving it.
+export const roundNameForRemaining = (roundsRemaining: number) => {
   if (roundsRemaining <= 0) return 'Final'
   if (roundsRemaining === 1) return 'Semifinal'
   if (roundsRemaining === 2) return 'Quarterfinal'
   if (roundsRemaining === 3) return 'Round of 16'
   return `Round of ${2 ** (roundsRemaining + 1)}`
 }
-const roundPrefixForRemaining = (roundsRemaining: number) => {
+export const roundPrefixForRemaining = (roundsRemaining: number) => {
   if (roundsRemaining <= 0) return 'final'
   if (roundsRemaining === 1) return 'sf'
   if (roundsRemaining === 2) return 'qf'

@@ -2,7 +2,7 @@ import type { Payload } from 'payload'
 
 type Id = string | number
 
-type RelationshipDoc = {
+export type RelationshipDoc = {
   id?: Id
   name?: string
   display_name?: string
@@ -15,7 +15,7 @@ type BracketStage = RelationshipDoc & {
   category_id?: RelationshipDoc | Id | null
 }
 
-type BracketMatch = {
+export type BracketMatch = {
   id: Id
   match_number: string
   round_name?: string | null
@@ -30,7 +30,7 @@ type BracketMatch = {
   winner_entry_id?: RelationshipDoc | Id | null
 }
 
-type BracketMatchSet = {
+export type BracketMatchSet = {
   set_number: number
   participant_a_score?: number | null
   participant_b_score?: number | null
@@ -120,7 +120,7 @@ export const getRelationshipId = (
   return undefined
 }
 
-const getRelationshipLabel = (
+export const getRelationshipLabel = (
   value: RelationshipDoc | Id | null | undefined,
   fallback = 'TBD',
 ) => {
@@ -167,7 +167,7 @@ const getRoundOrder = (roundName: string) => {
   return 100
 }
 
-const buildSetScore = (sets: BracketMatchSet[]) => {
+export const buildSetScore = (sets: BracketMatchSet[]) => {
   if (sets.length === 0) {
     return undefined
   }
@@ -177,7 +177,7 @@ const buildSetScore = (sets: BracketMatchSet[]) => {
     .join(', ')
 }
 
-const buildParticipant = (
+export const buildParticipant = (
   value: RelationshipDoc | Id | null | undefined,
   winnerId: Id | undefined,
   clubLabelByEntryId: Map<string, string>,
@@ -198,7 +198,7 @@ const buildParticipant = (
 // individual (via player_id) entries get a secondary club caption - looked up in one batched query
 // per bracket render rather than raising the whole matches query's depth (which would also
 // needlessly deep-populate event_id/category_id/stage_id on every match row).
-const collectEntryClubLabels = async (
+export const collectEntryClubLabels = async (
   payload: Payload,
   entryIds: Id[],
 ): Promise<Map<string, string>> => {
