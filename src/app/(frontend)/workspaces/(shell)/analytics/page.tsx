@@ -1,3 +1,6 @@
+import Link from 'next/link'
+
+import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getActiveEvent } from '../../activeEvent'
@@ -125,6 +128,11 @@ export default async function AnalyticsPage() {
         eyebrow="Reports"
         title="Operational Analytics"
         summary="Schedule adherence, workload, and completion metrics for this event. Computed from current match data, not a historical trend."
+        actions={
+          <Button asChild variant="secondary">
+            <Link href="/workspaces/analytics/readiness">Readiness Analytics</Link>
+          </Button>
+        }
       />
 
       {matches.length === 0 ? (
