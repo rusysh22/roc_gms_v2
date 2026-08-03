@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import QRCode from 'qrcode'
 
 import { getAbsolutePublicUrl } from '@/lib/shareMetadata'
@@ -39,13 +40,22 @@ export async function ShareEventPanel({
             Scan the QR code or share the link so participants and spectators can find{' '}
             {eventName} again.
           </p>
-          <a
-            href={qrDataUri}
-            download={`${eventName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}-qr.svg`}
-            className="mt-1 inline-block text-xs font-bold text-brand-secondary underline underline-offset-2"
-          >
-            Download QR (SVG)
-          </a>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            <a
+              href={qrDataUri}
+              download={`${eventName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}-qr.svg`}
+              className="inline-block text-xs font-bold text-brand-secondary underline underline-offset-2"
+            >
+              Download QR (SVG)
+            </a>
+            <Link
+              href={`${eventPath}/poster`}
+              target="_blank"
+              className="inline-block text-xs font-bold text-brand-secondary underline underline-offset-2"
+            >
+              Printable poster
+            </Link>
+          </div>
         </div>
       </div>
       <ShareButtons title={eventName} description={`Check out ${eventName} on InTourney`} url={url} />

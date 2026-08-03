@@ -17,7 +17,9 @@ const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler']
 // AUDIT_UI_UX_CSS PUB-17/P2 item 4: the venue display/slideshow route is meant for a TV or
 // projector at arm's length, not a normal visitor - the floating nav and footer would eat screen
 // space and add clutter nobody in that context can interact with anyway.
-const CHROME_EXCLUDED_SUFFIXES = ['/display']
+// PUB-08's printable poster is excluded for the same reason: printed nav/footer chrome would waste
+// the page and look unfinished on a poster meant to go up at a venue entrance.
+const CHROME_EXCLUDED_SUFFIXES = ['/display', '/poster']
 const EVENT_SLUG_PATTERN = /^\/events\/([^/]+)/
 
 // Nav items are event-scoped (see src/app/(frontend)/events/[eventSlug]/) - public visitors have
