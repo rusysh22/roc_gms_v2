@@ -384,6 +384,9 @@ export default async function EventHomePage({
               <Button asChild variant="secondary">
                 <Link href={`${eventPath}/schedule?tab=standings`}>See Standings</Link>
               </Button>
+              <Button asChild variant="secondary">
+                <Link href={`${eventPath}/register`}>Register</Link>
+              </Button>
             </div>
           </div>
 

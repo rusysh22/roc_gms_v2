@@ -22,6 +22,7 @@ import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
 import { Media } from './src/collections/Media'
 import { Players } from './src/collections/Players'
+import { RegistrationSubmissions } from './src/collections/RegistrationSubmissions'
 import { Rosters } from './src/collections/Rosters'
 import { Rulesets } from './src/collections/Rulesets'
 import { SiteConfigs } from './src/collections/SiteConfigs'
@@ -93,6 +94,7 @@ export default buildConfig({
     Teams,
     Rosters,
     CompetitionEntries,
+    RegistrationSubmissions,
     Venues,
     Courts,
     Sponsors,

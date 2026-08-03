@@ -24,6 +24,8 @@ export type PublicEventDoc = {
   hero_tagline?: string | null
   event_start_at: string
   event_end_at: string
+  registration_open_at?: string | null
+  registration_close_at?: string | null
   visibility?: string | null
   status?: string | null
   location?: string | null

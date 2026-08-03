@@ -114,6 +114,12 @@ const GROUPS: SidebarGroup[] = [
         href: '/workspaces/event-admin/entries',
         roles: ['super_admin', 'event_admin'],
       },
+      {
+        label: 'Approval Queue',
+        icon: CheckCircle2,
+        href: '/workspaces/event-admin/registrations',
+        roles: ['super_admin', 'event_admin'],
+      },
     ],
   },
   {
