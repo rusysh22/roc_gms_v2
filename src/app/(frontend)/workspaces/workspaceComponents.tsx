@@ -15,6 +15,7 @@ export type RelationshipDoc = {
 }
 
 export type EntryDoc = RelationshipDoc & {
+  entry_type?: string | null
   club_id?: RelationshipDoc | string | number | null
   team_id?: RelationshipDoc | string | number | null
   player_id?: RelationshipDoc | string | number | null

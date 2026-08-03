@@ -45,6 +45,10 @@ const getTimeRange = (match: WorkspaceMatch) => {
   return { start, end: end > start ? end : start }
 }
 
+// ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-11: half-open interval - a match ending
+// exactly when the next one starts (08:00-09:00, then 09:00-10:00) is a valid back-to-back
+// changeover, not an overlap. A dedicated changeover-buffer rule belongs per sport/court, not as
+// a side effect of the overlap comparison operator.
 const timeRangesOverlap = (a: WorkspaceMatch, b: WorkspaceMatch) => {
   const rangeA = getTimeRange(a)
   const rangeB = getTimeRange(b)
@@ -53,7 +57,7 @@ const timeRangesOverlap = (a: WorkspaceMatch, b: WorkspaceMatch) => {
     return false
   }
 
-  return rangeA.start <= rangeB.end && rangeB.start <= rangeA.end
+  return rangeA.start < rangeB.end && rangeB.start < rangeA.end
 }
 
 const getLocationKey = (match: WorkspaceMatch) => {
@@ -70,6 +74,11 @@ const getLocationKey = (match: WorkspaceMatch) => {
   return null
 }
 
+// ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-10: club_id is an organizational attribute,
+// not a universal participant identity - two different athletes/teams from the same club competing
+// in different sports at the same time is not a conflict. Only entry_type=club entries (the club
+// itself is the competitor, e.g. a club-vs-club team sport) use club_id as identity; individual
+// entries key on player_id, pair/team entries key on team_id.
 const getEntryIdentities = (entry: EntryDoc | RelationshipDoc | string | number | null | undefined) => {
   const identities = new Map<string, string>()
   const entryId = getRelationshipId(entry)
@@ -82,23 +91,26 @@ const getEntryIdentities = (entry: EntryDoc | RelationshipDoc | string | number 
   identities.set(`entry:${entryId}`, entryLabel)
 
   if (entry && typeof entry === 'object') {
-    const club = (entry as EntryDoc).club_id
-    const team = (entry as EntryDoc).team_id
-    const player = (entry as EntryDoc).player_id
+    const entryType = (entry as EntryDoc).entry_type
 
-    const clubId = getRelationshipId(club)
-    if (clubId) {
-      identities.set(`club:${clubId}`, getRelationshipLabel(club, entryLabel))
-    }
-
-    const teamId = getRelationshipId(team)
-    if (teamId) {
-      identities.set(`team:${teamId}`, getRelationshipLabel(team, entryLabel))
-    }
-
-    const playerId = getRelationshipId(player)
-    if (playerId) {
-      identities.set(`player:${playerId}`, getRelationshipLabel(player, entryLabel))
+    if (entryType === 'club') {
+      const club = (entry as EntryDoc).club_id
+      const clubId = getRelationshipId(club)
+      if (clubId) {
+        identities.set(`club:${clubId}`, getRelationshipLabel(club, entryLabel))
+      }
+    } else if (entryType === 'pair' || entryType === 'team') {
+      const team = (entry as EntryDoc).team_id
+      const teamId = getRelationshipId(team)
+      if (teamId) {
+        identities.set(`team:${teamId}`, getRelationshipLabel(team, entryLabel))
+      }
+    } else if (entryType === 'individual') {
+      const player = (entry as EntryDoc).player_id
+      const playerId = getRelationshipId(player)
+      if (playerId) {
+        identities.set(`player:${playerId}`, getRelationshipLabel(player, entryLabel))
+      }
     }
   }
 
