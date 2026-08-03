@@ -32,6 +32,7 @@ export type WorkspaceMatch = {
   generation_source?: string | null
   is_public?: boolean | null
   documentation_status?: string | null
+  event_id?: RelationshipDoc | string | number | null
   sport_id?: RelationshipDoc | string | number | null
   category_id?: RelationshipDoc | string | number | null
   participant_a_entry_id?: EntryDoc | string | number | null

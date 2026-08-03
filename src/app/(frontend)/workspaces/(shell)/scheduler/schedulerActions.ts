@@ -4,10 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { postMatchAnnouncement } from '@/lib/matchNotifications'
 import { getActiveEvent } from '../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
 import { detectScheduleConflicts } from './conflicts'
-import type { WorkspaceMatch } from '../../workspaceComponents'
+import { formatDateTime, getRelationshipId, type WorkspaceMatch } from '../../workspaceComponents'
 
 const text = (data: FormData, key: string) => {
   const value = data.get(key)
@@ -98,5 +99,18 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   // postponed-recovery path) threw Forbidden unconditionally, for every role.
   await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId), ...(isRecoveringFromPostponed ? { status: 'scheduled' as const } : {}) }, user })
   await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { status: isRecoveringFromPostponed ? 'scheduled' : match.status, scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
+  const eventId = getRelationshipId(match.event_id)
+  if (eventId) {
+    await postMatchAnnouncement({
+      payload,
+      eventId,
+      categoryId: getRelationshipId(match.category_id),
+      matchId: match.id,
+      matchNumber,
+      title: `Schedule change: ${matchNumber}`,
+      summary: `${matchNumber} has a new time: ${formatDateTime(start)}–${formatDateTime(end)}. Reason: ${reason}`,
+      urgency: 'schedule_change',
+    })
+  }
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleRescheduled=1`)
 }

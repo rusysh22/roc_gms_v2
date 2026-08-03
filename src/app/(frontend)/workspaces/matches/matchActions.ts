@@ -7,6 +7,7 @@ import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
+import { postMatchAnnouncement } from '@/lib/matchNotifications'
 import {
   countSetWinsForSide,
   isBestOfAlreadyDecided,
@@ -17,6 +18,18 @@ import { recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import { MATCH_TRANSITIONS, isValidTransition } from './matchLifecycle'
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.6: only status changes a spectator would actually care
+// about post to the public "Match Updates" feed - ongoing/paused/finished/under_review are
+// internal operating states with no public-facing meaning of their own (finished still says
+// "Provisional" until result_published; under_review shouldn't alarm anyone).
+const PUBLIC_STATUS_NOTICES: Record<string, { urgency: 'warning' | 'urgent' | 'result'; displayMode: 'banner' | 'urgent_alert' | 'feed'; label: string }> = {
+  postponed: { urgency: 'warning', displayMode: 'banner', label: 'postponed' },
+  cancelled: { urgency: 'warning', displayMode: 'banner', label: 'cancelled' },
+  disputed: { urgency: 'urgent', displayMode: 'urgent_alert', label: 'marked disputed' },
+  result_published: { urgency: 'result', displayMode: 'feed', label: 'result published' },
+  walkover: { urgency: 'result', displayMode: 'feed', label: 'decided by walkover' },
+}
 
 type MinimalMatch = {
   id: string | number
@@ -327,6 +340,21 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     action: 'match.status_transition',
     actorUserId,
   })
+
+  const notice = PUBLIC_STATUS_NOTICES[targetStatus]
+  if (notice && match.event_id) {
+    await postMatchAnnouncement({
+      payload,
+      eventId: match.event_id,
+      categoryId: match.category_id,
+      matchId: match.id,
+      matchNumber,
+      title: `${matchNumber} ${notice.label}`,
+      summary: `${matchNumber} was ${notice.label}.`,
+      urgency: notice.urgency,
+      displayMode: notice.displayMode,
+    })
+  }
 
   revalidateMatch(matchNumber)
   redirect(`${returnTo}?matchUpdated=1`)
