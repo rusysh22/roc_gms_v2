@@ -36,6 +36,7 @@ export const WORKSPACE_ROLES = {
   contentAdmin: ['super_admin', 'event_admin', 'content_admin'],
   brackets: ['super_admin', 'event_admin', 'scheduler'],
   standings: ['super_admin', 'event_admin', 'scheduler'],
+  analytics: ['super_admin', 'event_admin', 'scheduler'],
 } satisfies Record<string, UserRole[]>
 
 export const hasWorkspaceRole = (

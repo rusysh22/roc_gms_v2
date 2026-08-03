@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
+  Activity,
   BarChart3,
   Calendar,
   CheckCircle2,
@@ -157,6 +158,12 @@ const GROUPS: SidebarGroup[] = [
         label: 'Brackets',
         icon: Trophy,
         href: '/workspaces/brackets',
+        roles: ['super_admin', 'event_admin', 'scheduler'],
+      },
+      {
+        label: 'Analytics',
+        icon: Activity,
+        href: '/workspaces/analytics',
         roles: ['super_admin', 'event_admin', 'scheduler'],
       },
     ],

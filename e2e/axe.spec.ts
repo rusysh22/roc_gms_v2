@@ -113,3 +113,14 @@ test('matches review queue page has no serious a11y violations', async ({ page }
   await page.goto('/workspaces/matches')
   await assertNoSeriousViolations(page, 'matches-list')
 })
+
+test('operational analytics page has no serious a11y violations', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(ADMIN_EMAIL)
+  await page.getByLabel('Password').fill(ADMIN_PASSWORD)
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15000 })
+
+  await page.goto('/workspaces/analytics')
+  await assertNoSeriousViolations(page, 'analytics')
+})
