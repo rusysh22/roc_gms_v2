@@ -828,45 +828,51 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
 // `UPDATE ... SET score = score + delta` statement executed by Postgres itself - there is no
 // separate read-then-write in application code for a race to land between, and Postgres serializes
 // concurrent UPDATEs to the same row automatically.
-export async function addLiveScorePointAction(formData: FormData): Promise<void> {
-  const matchNumber = toStringField(formData.get('matchNumber'))
-  const matchSetId = toStringField(formData.get('matchSetId'))
-  const side = toStringField(formData.get('side'))
-  const deltaRaw = toStringField(formData.get('delta'))
-  const returnTo = getSafeReturnTo(
-    formData,
-    matchNumber ? `/workspaces/matches/${matchNumber}/live-score` : '/workspaces/match-officer',
-  )
+export type ApplyLiveScorePointResult =
+  | { ok: true; participant_a_score: number; participant_b_score: number }
+  | { ok: false; error: 'invalid_request' | 'not_found' | 'invalid_match_state' }
 
-  if (!matchNumber || !matchSetId || (side !== 'a' && side !== 'b') || (deltaRaw !== '1' && deltaRaw !== '-1')) {
-    redirect(`${returnTo}?matchError=invalid_request`)
-  }
-
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.matchOfficer,
-    returnTo,
-  })
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.2 "offline scoring": extracted from the old
+// addLiveScorePointAction so the same validated, audited, atomic delta-update logic can be called
+// both from a normal form submission AND from the JSON API route the offline queue in
+// live-score/useOfflineScoreSync.ts replays queued taps against once connectivity returns -
+// returning a typed result instead of always redirecting, since a fetch()-based caller needs a
+// real response body, not a Next.js navigation.
+export async function applyLiveScorePoint({
+  payload,
+  matchNumber,
+  matchSetId,
+  side,
+  delta,
+  actorUserId,
+}: {
+  payload: Payload
+  matchNumber: string
+  matchSetId: string
+  side: 'a' | 'b'
+  delta: 1 | -1
+  actorUserId: string | number
+}): Promise<ApplyLiveScorePointResult> {
   const { match } = await findMatchByNumber(payload, matchNumber)
 
   if (!match) {
-    redirect(`${returnTo}?matchError=not_found`)
+    return { ok: false, error: 'not_found' }
   }
 
   // AUDIT_E2E MAT-05: same lifecycle guard as updateMatchSetScoreAction - point taps only make
   // sense while a match is actually being played.
   if (!ACTIVE_SCORE_ENTRY_STATUSES.has(match.status)) {
-    redirect(`${returnTo}?matchError=invalid_match_state`)
+    return { ok: false, error: 'invalid_match_state' }
   }
 
   const existingSet = await payload
     .findByID({ collection: 'match-sets', id: matchSetId, depth: 0 })
     .catch(() => null)
   if (!existingSet || String(existingSet.match_id || '') !== String(match.id)) {
-    redirect(`${returnTo}?matchError=invalid_request`)
+    return { ok: false, error: 'invalid_request' }
   }
 
   const ruleset = await loadRulesetForMatch(payload, match.category_id)
-  const delta = deltaRaw === '1' ? 1 : -1
   const column = side === 'a' ? 'participant_a_score' : 'participant_b_score'
   const maxScore = ruleset?.max_score
 
@@ -883,7 +889,6 @@ export async function addLiveScorePointAction(formData: FormData): Promise<void>
   `)
 
   const updatedRow = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0]
-  const actorUserId = user.id
 
   await recordAuditLog({
     payload,
@@ -907,5 +912,10 @@ export async function addLiveScorePointAction(formData: FormData): Promise<void>
   })
 
   revalidateMatch(matchNumber)
-  redirect(`${returnTo}?matchUpdated=1`)
+
+  return {
+    ok: true,
+    participant_a_score: Number(updatedRow?.participant_a_score ?? existingSet.participant_a_score ?? 0),
+    participant_b_score: Number(updatedRow?.participant_b_score ?? existingSet.participant_b_score ?? 0),
+  }
 }

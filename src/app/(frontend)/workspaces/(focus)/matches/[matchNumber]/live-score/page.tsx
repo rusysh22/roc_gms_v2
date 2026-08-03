@@ -154,7 +154,6 @@ export default async function LiveScorePage({
       participantBName={participantBName}
       participantAScore={currentSet.participant_a_score ?? 0}
       participantBScore={currentSet.participant_b_score ?? 0}
-      returnTo={returnTo}
     />
   ) : (
     <div className="grid flex-1 place-items-center text-center">
@@ -304,6 +303,11 @@ export default async function LiveScorePage({
 
           <section className="rounded-panel border border-line bg-paper p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Sets</p>
+            {/* Server-rendered as of last page load - LiveScoreControls now applies taps via a
+                client-side queue (see useOfflineScoreSync.ts) instead of a full-page redirect per
+                tap, so this list's current-set row can lag behind the big score display above
+                until the next reload/add-set/publish. Deliberate tradeoff for offline resilience;
+                the big display is the live source of truth while scoring. */}
             <div className="mt-3 grid gap-2">
               {matchSets.map((set) => (
                 <div
