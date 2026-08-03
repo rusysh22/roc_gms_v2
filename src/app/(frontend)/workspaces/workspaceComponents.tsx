@@ -27,6 +27,7 @@ export type WorkspaceMatch = {
   round_name?: string | null
   scheduled_start_at?: string | null
   scheduled_end_at?: string | null
+  actual_start_at?: string | null
   status: string
   score_summary?: string | null
   generation_source?: string | null

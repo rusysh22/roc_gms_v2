@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, Clock, Eye, Play } from 'lu
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { computeDelayImpacts } from '@/lib/delayPropagation'
 import { getActiveEvent } from '../../activeEvent'
 import { NoActiveEventNotice, PageHero, getRelationshipLabel, type WorkspaceMatch } from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
@@ -69,6 +70,8 @@ export default async function CommandCenterPage() {
     (m) => m.status === 'postponed' && (!m.scheduled_start_at || new Date(m.scheduled_start_at).getTime() < now),
   )
   const conflicts = detectScheduleConflicts(allMatches).filter((warning) => warning.severity === 'alert')
+  const delayImpacts = computeDelayImpacts(allMatches)
+  const downstreamAffected = delayImpacts.reduce((sum, impact) => sum + impact.downstream.length, 0)
 
   // "Ongoing / paused" is shown for visibility but isn't a backlog item on its own (a match
   // correctly running isn't something that "needs attention"), so it's deliberately left out of
@@ -79,7 +82,8 @@ export default async function CommandCenterPage() {
     finishedNotOfficial.length +
     underReview.length +
     postponedNoTime.length +
-    conflicts.length
+    conflicts.length +
+    downstreamAffected
 
   return (
     <>
@@ -157,6 +161,24 @@ export default async function CommandCenterPage() {
               <p className="text-sm text-ink-soft">{conflicts.length} conflict(s) need resolving.</p>
               <Link href="/workspaces/scheduler" className="text-sm font-bold text-brand-secondary hover:underline">
                 Resolve in Scheduler &rarr;
+              </Link>
+            </Card>
+          ) : null}
+          {downstreamAffected > 0 ? (
+            <Card className="flex flex-col gap-2 border-danger/30">
+              <div className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-danger" aria-hidden="true" />
+                <CardTitle>Delay impact</CardTitle>
+              </div>
+              <p className="text-sm text-ink-soft">
+                {downstreamAffected} match{downstreamAffected === 1 ? '' : 'es'} may need to shift because of a late
+                match on the same court.
+              </p>
+              <Link
+                href="/workspaces/scheduler/delay-impact"
+                className="text-sm font-bold text-brand-secondary hover:underline"
+              >
+                Review suggested reschedules &rarr;
               </Link>
             </Card>
           ) : null}
