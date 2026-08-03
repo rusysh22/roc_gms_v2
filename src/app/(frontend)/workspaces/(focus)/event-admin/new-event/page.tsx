@@ -116,6 +116,9 @@ const errorMessages: Record<string, string> = {
   missing_qualify_count: 'Set how many entries qualify per group before finalizing.',
   groups_not_finished: 'Every group match needs a published result before finalizing the group stage.',
   group_stage_not_finalized: 'Finalize the group stage before promoting to knockout.',
+  already_promoted: 'This group stage has already been promoted to knockout. Undo Phase first if you need to redo it.',
+  not_promoted: 'This group stage has not been promoted to knockout yet.',
+  knockout_already_started: 'Knockout matches have already started - this phase can no longer be undone.',
   no_qualifiers: 'No qualified entries were found for this group stage.',
   unsupported_format:
     'This category format is not supported by auto-generation yet. Use the Scheduler workspace to create matches manually.',
@@ -406,6 +409,12 @@ export default async function NewEventWizardPage({
             <AlertBanner tone="error">{errorMessages[wizardError]}</AlertBanner>
           ) : null}
           {wizardUpdated ? <AlertBanner tone="success">Saved.</AlertBanner> : null}
+          {get(params, 'wizardUndone') ? (
+            <AlertBanner tone="success">
+              Phase undone. The knockout matches were removed and the group stage is unlocked for
+              revision.
+            </AlertBanner>
+          ) : null}
           {get(params, 'wizardPromoteWarning') ? (
             <AlertBanner tone="warning">
               {get(params, 'wizardPromoteWarning')} qualifier(s) were withdrawn/disqualified after
@@ -1313,9 +1322,11 @@ const CategoriesStep = async ({
                   <option value="single_elimination">Single Elimination</option>
                   <option value="round_robin">Round Robin</option>
                 </optgroup>
+                <optgroup label="Has its own guided setup (step 6)">
+                  <option value="group_stage_to_knockout">Group Stage to Knockout</option>
+                </optgroup>
                 <optgroup label="Manual scheduling only (Scheduler workspace)">
                   <option value="double_elimination">Double Elimination</option>
-                  <option value="group_stage_to_knockout">Group Stage to Knockout</option>
                   <option value="league">League</option>
                   <option value="friendly">Friendly</option>
                   <option value="time_trial">Time Trial</option>

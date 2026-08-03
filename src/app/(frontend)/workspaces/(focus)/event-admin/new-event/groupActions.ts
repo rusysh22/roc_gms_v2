@@ -13,12 +13,26 @@ import {
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
 import { recalculateStandingsForScope } from '@/lib/standings'
+import { UNSTARTED_TARGET_STATUSES } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
 
 const RESULT_STATUSES = new Set(['result_published', 'walkover'])
 const MIN_GROUPS = 2
 const MAX_GROUPS = 12
+
+const findKnockoutStage = async (
+  payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload'],
+  categoryId: string,
+) => {
+  const result = await payload.find({
+    collection: 'stages',
+    depth: 0,
+    limit: 1,
+    where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 2 } }] },
+  })
+  return result.docs[0] || null
+}
 
 const redirectToGenerate = (eventId: string, categoryId: string, suffix: string): never => {
   redirect(`${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}${suffix}`)
@@ -485,6 +499,24 @@ export async function promoteToKnockoutAction(formData: FormData): Promise<void>
     redirectToGenerate(eventId, categoryId, '&wizardError=group_stage_not_finalized')
   }
 
+  // Section 15.5's "Start Phase" can only run once - re-invoking it once the knockout stage
+  // already has matches would silently skip every already-generated slot (createSingleElimination
+  // BracketMatches dedups by stage/round/slot, not by which entry occupies it) rather than fail
+  // loudly, leaving the bracket stale. The GroupKnockoutPanel UI already hides the promote form in
+  // this state; this is the server-side guard for direct submits. Undo Phase is the only way back.
+  const existingKnockoutStage = await findKnockoutStage(payload, categoryId)
+  if (existingKnockoutStage) {
+    const existingKnockoutMatchCount = await payload.find({
+      collection: 'matches',
+      depth: 0,
+      limit: 1,
+      where: { stage_id: { equals: existingKnockoutStage.id } },
+    })
+    if (existingKnockoutMatchCount.totalDocs > 0) {
+      redirectToGenerate(eventId, categoryId, '&wizardError=already_promoted')
+    }
+  }
+
   // The seed rank for each qualifier comes from the (possibly admin-reordered) form, not
   // recomputed here - QualifierSeedOrder always renders every qualifier with a `rank_<entryId>`
   // hidden input reflecting its current on-screen order, so this is the single source of truth.
@@ -529,12 +561,7 @@ export async function promoteToKnockoutAction(formData: FormData): Promise<void>
   }
 
   const knockoutStage =
-    (await payload.find({
-      collection: 'stages',
-      depth: 0,
-      limit: 1,
-      where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 2 } }] },
-    }).then((result) => result.docs[0])) ||
+    existingKnockoutStage ||
     (await payload.create({
       collection: 'stages',
       data: {
@@ -595,4 +622,70 @@ export async function promoteToKnockoutAction(formData: FormData): Promise<void>
   redirect(
     `${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardGenerated=${createdCount}${warningParam}${failedParam}`,
   )
+}
+
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.5 "Undo Phase": the counterpart to promoteToKnockoutAction
+// ("Start Phase"). Reverses a promotion that hasn't actually started playing yet - deletes the
+// generated knockout matches/sets and reopens the group stage for revision (status back to
+// 'ready', which is what src/access/roles.ts's isGroupPhaseLocked checks). Refuses to run once
+// any knockout match has progressed past UNSTARTED_TARGET_STATUSES, matching the exact guard
+// winnerAdvancement.ts already uses for "don't silently corrupt a match that's already running."
+export async function undoPromoteToKnockoutAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+
+  const knockoutStage = await findKnockoutStage(payload, categoryId)
+  if (!knockoutStage) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=not_promoted')
+  }
+
+  const knockoutMatches = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 500,
+    where: { stage_id: { equals: knockoutStage!.id } },
+  })
+  if (knockoutMatches.totalDocs === 0) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=not_promoted')
+  }
+  const started = knockoutMatches.docs.filter((match) => !UNSTARTED_TARGET_STATUSES.has(String(match.status)))
+  if (started.length > 0) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=knockout_already_started')
+  }
+
+  for (const match of knockoutMatches.docs) {
+    await payload.delete({ collection: 'match-sets', where: { match_id: { equals: match.id } } }).catch(() => null)
+  }
+  await payload.delete({
+    collection: 'matches',
+    where: { id: { in: knockoutMatches.docs.map((match) => match.id) } },
+  })
+  // brackets.stage_id is required+unique (one bracket per stage) - the stage row can't be deleted
+  // while a bracket still points at it.
+  await payload.delete({ collection: 'brackets', where: { stage_id: { equals: knockoutStage!.id } } }).catch(() => null)
+  await payload.delete({ collection: 'stages', id: knockoutStage!.id })
+
+  const groupStage = await findGroupStage(payload, categoryId)
+  const beforeGroupStatus = groupStage?.status
+  if (groupStage) {
+    await payload.update({ collection: 'stages', id: groupStage.id, data: { status: 'ready' } })
+  }
+
+  await recordAuditLog({
+    payload,
+    action: 'group_stage.undo_promote_to_knockout',
+    entityType: 'stages',
+    entityId: knockoutStage!.id,
+    before: { knockoutMatchCount: knockoutMatches.totalDocs, groupStageStatus: beforeGroupStatus },
+    after: { knockoutMatchCount: 0, groupStageStatus: 'ready' },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirectToGenerate(eventId, categoryId, '&wizardUndone=1')
 }

@@ -1,4 +1,4 @@
-import type { Access, CollectionBeforeChangeHook, FieldAccess } from 'payload'
+import type { Access, CollectionBeforeChangeHook, FieldAccess, Payload } from 'payload'
 import { Forbidden } from 'payload'
 
 export type UserRole =
@@ -91,6 +91,35 @@ const SCHEDULE_FIELDS = ['scheduled_start_at', 'scheduled_end_at', 'venue_id', '
 const RESULT_FIELDS = ['winner_entry_id', 'score_summary'] as const
 const LOCKED_RESULT_STATUSES = new Set(['finished', 'result_published', 'walkover', 'disputed'])
 
+/** NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.5: once a group_stage is finalized (status 'completed')
+ * and its qualifiers have already been promoted into a knockout stage, a group-stage match's
+ * result must not be revisable - doing so would silently rewrite the persisted standings/
+ * qualified_status underneath participants already placed into knockout bracket slots. Undo
+ * Phase (groupActions.ts's undoPromoteToKnockoutAction) is the only supported way back in, and
+ * it refuses to run once any of those knockout matches has itself started. */
+const isGroupPhaseLocked = async (payload: Payload, stageId: string | number): Promise<boolean> => {
+  const stage = await payload.findByID({ collection: 'stages', id: stageId, depth: 0 }).catch(() => null)
+  if (!stage || stage.order !== 1 || stage.status !== 'completed') {
+    return false
+  }
+  const knockoutStage = await payload.find({
+    collection: 'stages',
+    depth: 0,
+    limit: 1,
+    where: { and: [{ category_id: { equals: stage.category_id } }, { order: { equals: 2 } }] },
+  })
+  if (!knockoutStage.docs[0]) {
+    return false
+  }
+  const knockoutMatches = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 1,
+    where: { stage_id: { equals: knockoutStage.docs[0].id } },
+  })
+  return knockoutMatches.totalDocs > 0
+}
+
 const getFieldValueId = (value: unknown) =>
   value && typeof value === 'object' && 'id' in (value as Record<string, unknown>)
     ? (value as { id: unknown }).id
@@ -108,7 +137,7 @@ const fieldChanged = (
  * published result and a match_officer genuinely cannot reschedule a match - previously only the
  * custom Server Actions checked this, so the same mutation via Payload Admin/REST/GraphQL bypassed
  * it entirely. */
-export const enforceMatchMutationCapabilities: CollectionBeforeChangeHook = ({
+export const enforceMatchMutationCapabilities: CollectionBeforeChangeHook = async ({
   data,
   req,
   operation,
@@ -116,6 +145,19 @@ export const enforceMatchMutationCapabilities: CollectionBeforeChangeHook = ({
 }) => {
   if (operation !== 'update' || !originalDoc) {
     return data
+  }
+
+  const changesResult =
+    RESULT_FIELDS.some((field) => fieldChanged(data, originalDoc, field)) ||
+    ('status' in data && data.status !== originalDoc.status)
+
+  // Checked before the super_admin/event_admin bypass below - the phase lock applies to every
+  // role, since event_admin is exactly who would otherwise revise a finalized group match.
+  if (changesResult && originalDoc.stage_id) {
+    const locked = await isGroupPhaseLocked(req.payload, getFieldValueId(originalDoc.stage_id) as string | number)
+    if (locked) {
+      throw new Forbidden(req.t)
+    }
   }
 
   const user = req.user as AccessUser | null | undefined
@@ -129,9 +171,6 @@ export const enforceMatchMutationCapabilities: CollectionBeforeChangeHook = ({
   }
 
   const wasLocked = LOCKED_RESULT_STATUSES.has(String(originalDoc.status))
-  const changesResult =
-    RESULT_FIELDS.some((field) => fieldChanged(data, originalDoc, field)) ||
-    ('status' in data && data.status !== originalDoc.status)
   if (wasLocked && changesResult && !hasCapability(user, 'reviseFinishedScore')) {
     throw new Forbidden(req.t)
   }

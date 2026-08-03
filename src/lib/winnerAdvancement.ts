@@ -17,7 +17,7 @@ type AdvancementStage = RelationshipDoc & {
 // participant slot on one of these is safe. Anything past this list (ongoing, finished,
 // result_published, ...) means the next match has its own progress that a silent overwrite could
 // corrupt, so a winner revision must stop and ask for manual resolution instead (AUDIT_E2E BRK-03).
-const UNSTARTED_TARGET_STATUSES = new Set([
+export const UNSTARTED_TARGET_STATUSES = new Set([
   'draft',
   'ready_for_scheduling',
   'scheduled',

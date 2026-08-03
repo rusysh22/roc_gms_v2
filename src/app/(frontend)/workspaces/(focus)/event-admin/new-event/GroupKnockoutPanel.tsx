@@ -18,7 +18,9 @@ import {
   type GroupStandingForSeeding,
 } from '@/lib/matchGeneration'
 import { calculateStandingsForScope } from '@/lib/standings'
+import { UNSTARTED_TARGET_STATUSES } from '@/lib/winnerAdvancement'
 import { formatStatus, getRelationshipId, getRelationshipLabel, type RelationshipDoc } from '../../../workspaceComponents'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import {
   autoSplitGroupsAction,
   createGroupsAction,
@@ -26,6 +28,7 @@ import {
   generateGroupMatchesAction,
   saveGroupAssignmentsAction,
   setGroupQualifyCountAction,
+  undoPromoteToKnockoutAction,
 } from './groupActions'
 import { QualifierSeedOrder } from './QualifierSeedOrder'
 
@@ -351,9 +354,13 @@ export const GroupKnockoutPanel = async ({
   })
   const knockoutStage = knockoutStageResult.docs[0]
   const knockoutMatchesResult = knockoutStage
-    ? await payload.find({ collection: 'matches', depth: 0, limit: 1, where: { stage_id: { equals: knockoutStage.id } } })
-    : { totalDocs: 0 }
+    ? await payload.find({ collection: 'matches', depth: 0, limit: 500, where: { stage_id: { equals: knockoutStage.id } } })
+    : { totalDocs: 0, docs: [] as Array<{ status: string }> }
   const alreadyPromoted = Boolean(knockoutStage) && knockoutMatchesResult.totalDocs > 0
+  // Section 15.5's lock: Undo Phase can only reverse a promotion that hasn't started playing yet -
+  // once any knockout match has progressed, deleting it would destroy real results, so the button
+  // is replaced with an explanatory banner instead.
+  const knockoutStarted = knockoutMatchesResult.docs.some((match) => !UNSTARTED_TARGET_STATUSES.has(String(match.status)))
 
   let promoteCard: ReactNode
 
@@ -368,13 +375,31 @@ export const GroupKnockoutPanel = async ({
     promoteCard = (
       <Card className="flex flex-col gap-3">
         <CardTitle>Promote to knockout</CardTitle>
-        <AlertBanner tone="success">Knockout bracket generated.</AlertBanner>
-        <div>
+        <AlertBanner tone="success">Knockout bracket generated. Group results are locked while this phase is active.</AlertBanner>
+        <div className="flex flex-wrap items-center gap-3">
           <Button asChild>
             <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=bracket&categoryId=${categoryId}`}>
               View bracket
             </Link>
           </Button>
+          {knockoutStarted ? (
+            <p className="text-xs text-ink-soft">
+              Knockout matches have already started - this phase can no longer be undone.
+            </p>
+          ) : (
+            <form id="undo-promote-to-knockout-form" action={undoPromoteToKnockoutAction}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="categoryId" value={categoryId} />
+              <ConfirmSubmitButton
+                formId="undo-promote-to-knockout-form"
+                variant="secondary"
+                tone="destructive"
+                confirmMessage="Undo this phase? The generated knockout matches will be deleted and group results will unlock for revision."
+              >
+                Undo Phase
+              </ConfirmSubmitButton>
+            </form>
+          )}
         </div>
       </Card>
     )
