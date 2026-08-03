@@ -318,6 +318,16 @@ export const Matches: CollectionConfig = {
       index: true,
     },
     {
+      name: 'is_featured',
+      type: 'checkbox',
+      defaultValue: false,
+      index: true,
+      admin: {
+        description:
+          'Broadcast priority - the cross-sport schedule optimizer tries to place this match on a featured court first.',
+      },
+    },
+    {
       name: 'documentation_status',
       type: 'select',
       required: true,

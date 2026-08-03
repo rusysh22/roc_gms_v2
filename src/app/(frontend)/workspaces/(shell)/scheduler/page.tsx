@@ -260,6 +260,12 @@ export default async function SchedulerWorkspacePage({
             <Button asChild variant="secondary">
               <a href="/workspaces/scheduler/export">Export (.xlsx)</a>
             </Button>
+            <Button asChild variant="secondary">
+              <Link href="/workspaces/scheduler/optimize">Schedule Optimizer</Link>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link href="/workspaces/scheduler/delay-impact">Delay Impact</Link>
+            </Button>
           </>
         }
       />

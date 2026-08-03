@@ -51,6 +51,15 @@ export const Courts: CollectionConfig = {
       type: 'checkbox',
       defaultValue: true,
     },
+    {
+      name: 'is_featured',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        description:
+          'Broadcast/feature court - the cross-sport schedule optimizer prioritizes is_featured matches onto featured courts first.',
+      },
+    },
   ],
   timestamps: true,
 }

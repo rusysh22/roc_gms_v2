@@ -165,6 +165,29 @@ export const Rulesets: CollectionConfig = {
       ],
     },
     {
+      type: 'row',
+      fields: [
+        {
+          name: 'default_duration_minutes',
+          type: 'number',
+          min: 1,
+          admin: {
+            description:
+              'Cross-sport schedule optimizer: how long to reserve a court for a match in this ruleset. Leave empty to use the optimizer\'s default.',
+          },
+        },
+        {
+          name: 'min_rest_minutes',
+          type: 'number',
+          min: 0,
+          admin: {
+            description:
+              'Cross-sport schedule optimizer: minimum minutes required between two matches for the same participant, even across different sports/categories. When two categories disagree, the larger value wins. Leave empty to use the optimizer\'s default.',
+          },
+        },
+      ],
+    },
+    {
       name: 'tie_breakers',
       type: 'select',
       hasMany: true,
