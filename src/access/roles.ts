@@ -88,7 +88,7 @@ export const canDeleteMatch: Access = ({ req }) => {
 }
 
 const SCHEDULE_FIELDS = ['scheduled_start_at', 'scheduled_end_at', 'venue_id', 'court_id'] as const
-const RESULT_FIELDS = ['winner_entry_id', 'score_summary'] as const
+const RESULT_FIELDS = ['winner_entry_id', 'score_summary', 'result_value', 'result_qualifier'] as const
 const LOCKED_RESULT_STATUSES = new Set(['finished', 'result_published', 'walkover', 'disputed'])
 
 /** NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.5: once a group_stage is finalized (status 'completed')

@@ -15,7 +15,7 @@ import {
   loadRulesetForMatch,
   validateSetScore,
 } from '@/lib/ruleValidation'
-import { recalculateStandingsForScope } from '@/lib/standings'
+import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import { MATCH_TRANSITIONS, isValidTransition } from './matchLifecycle'
@@ -44,6 +44,8 @@ type MinimalMatch = {
   participant_a_entry_id?: string | number | null
   participant_b_entry_id?: string | number | null
   winner_entry_id?: string | number | null
+  result_value?: number | null
+  result_qualifier?: string | null
 }
 
 type MinimalStage = {
@@ -106,6 +108,7 @@ const revalidateMatch = (matchNumber: string) => {
 const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
 const standingResultStatuses = new Set(['finished', 'result_published'])
 const ACTIVE_SCORE_ENTRY_STATUSES = new Set(['ongoing', 'paused', 'under_review'])
+const rankingStageTypes = new Set(['time_trial', 'score_ranking'])
 
 const recalculateResultCachesBestEffort = async ({
   payload,
@@ -288,6 +291,40 @@ const recalculateResultCachesBestEffort = async ({
     } catch (error) {
       payload.logger.error(
         `Failed to recalculate double-elimination bracket after ${action} on match ${matchNumber}: ${error}`,
+      )
+    }
+    return
+  }
+
+  if (rankingStageTypes.has(stage.stage_type || '')) {
+    if (match.status !== 'result_published') {
+      return
+    }
+
+    try {
+      const result = await recalculateRankingStandingsForScope(payload, {
+        eventId: match.event_id || undefined,
+        categoryId: match.category_id,
+        stageId: match.stage_id,
+      })
+
+      await recordAuditLog({
+        payload,
+        action: 'standing.cache_recalculate',
+        entityType: 'matches',
+        entityId: match.id,
+        before: null,
+        after: {
+          reason: action,
+          match_number: matchNumber,
+          row_count: result.rows.length,
+          finished_match_count: result.finishedMatchCount,
+        },
+        actorUserId,
+      })
+    } catch (error) {
+      payload.logger.error(
+        `Failed to recalculate ranking standings after ${action} on match ${matchNumber}: ${error}`,
       )
     }
   }
@@ -620,6 +657,119 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     action: 'match_set.create',
     actorUserId,
   })
+
+  revalidateMatch(matchNumber)
+  redirect(`${returnTo}?matchUpdated=1`)
+}
+
+// ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-13: time_trial/score_ranking matches are
+// solo attempts (see createRankingAttemptMatches), not a live head-to-head game - the ongoing/
+// paused/finished/under_review lifecycle in matchLifecycle.ts doesn't fit them. This action
+// deliberately bypasses MATCH_TRANSITIONS/isValidTransition and records the result directly:
+// exactly one of a numeric resultValue or a DNS/DNF/DSQ resultQualifier moves the match straight
+// to result_published (mirroring updateMatchSetScoreAction's revision-reason gate for correcting
+// an already-published result).
+export async function recordRankingResultAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const resultValueRaw = toStringField(formData.get('resultValue'))
+  const resultQualifierRaw = toStringField(formData.get('resultQualifier'))
+  const revisionReason = toStringField(formData.get('revisionReason'))
+  const returnTo = getSafeReturnTo(formData, `/workspaces/matches/${matchNumber || ''}`)
+
+  if (!matchNumber) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const hasQualifier = ['dns', 'dnf', 'dsq'].includes(resultQualifierRaw)
+  const hasValue = resultValueRaw !== ''
+  if (hasQualifier === hasValue) {
+    redirect(`${returnTo}?matchError=invalid_ranking_result`)
+  }
+
+  const resultValue = hasValue ? Number(resultValueRaw) : null
+  if (resultValue !== null && (!Number.isFinite(resultValue) || resultValue < 0)) {
+    redirect(`${returnTo}?matchError=invalid_score`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
+
+  if (!match) {
+    redirect(`${returnTo}?matchError=not_found`)
+  }
+  if (!match.participant_a_entry_id) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const lockedResult = match.status === 'result_published'
+  const canReviseResult = user.roles?.some((role) => ['super_admin', 'event_admin'].includes(role))
+  if (lockedResult && (!canReviseResult || !revisionReason)) {
+    redirect(`${returnTo}?matchError=${canReviseResult ? 'revision_reason_required' : 'revision_requires_approval'}`)
+  }
+
+  const beforeSnapshot = {
+    result_value: match.result_value ?? null,
+    result_qualifier: match.result_qualifier ?? null,
+    status: match.status,
+  }
+  const updateData: Record<string, unknown> = {
+    result_value: resultValue,
+    result_qualifier: hasQualifier ? resultQualifierRaw : null,
+    status: 'result_published',
+    // The solo entrant is recorded as winner_entry_id purely so any generic code reading that
+    // field (audit trail, PUBLIC_STATUS_NOTICES) has something sensible - ranking itself is
+    // computed from result_value via calculateRankingStandingsForScope, not from this field.
+    winner_entry_id: Number(match.participant_a_entry_id),
+  }
+  if (!match.actual_end_at) {
+    updateData.actual_end_at = new Date().toISOString()
+  }
+
+  await payload.update({
+    collection: 'matches',
+    id: match.id,
+    data: updateData,
+    user,
+  })
+
+  const actorUserId = user.id
+  const auditAction = lockedResult ? 'match.ranking_result_revision' : 'match.ranking_result_record'
+
+  await recordAuditLog({
+    payload,
+    action: auditAction,
+    entityType: 'matches',
+    entityId: match.id,
+    before: beforeSnapshot,
+    after: { ...updateData, revision_reason: lockedResult ? revisionReason : null },
+    actorUserId,
+  })
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match: { ...match, ...updateData, status: 'result_published' },
+    matchNumber,
+    action: auditAction,
+    actorUserId,
+  })
+
+  const notice = PUBLIC_STATUS_NOTICES.result_published
+  if (notice && match.event_id && !lockedResult) {
+    await postMatchAnnouncement({
+      payload,
+      eventId: match.event_id,
+      categoryId: match.category_id,
+      matchId: match.id,
+      matchNumber,
+      title: `${matchNumber} ${notice.label}`,
+      summary: `${matchNumber} was ${notice.label}.`,
+      urgency: notice.urgency,
+      displayMode: notice.displayMode,
+    })
+  }
 
   revalidateMatch(matchNumber)
   redirect(`${returnTo}?matchUpdated=1`)

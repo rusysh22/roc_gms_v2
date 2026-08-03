@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 import { BracketTree } from '../../../../brackets/bracketTree'
 import {
   AuditLogPanel,
+  formatStatus,
   getRelationshipId,
   getRelationshipLabel,
   toOptions,
@@ -1325,6 +1326,8 @@ const CategoriesStep = async ({
                   <option value="single_elimination">Single Elimination</option>
                   <option value="round_robin">Round Robin</option>
                   <option value="double_elimination">Double Elimination (needs a power-of-two entry count)</option>
+                  <option value="time_trial">Time Trial (one attempt per entry, ranked by result)</option>
+                  <option value="score_ranking">Score Ranking (one attempt per entry, ranked by result)</option>
                 </optgroup>
                 <optgroup label="Has its own guided setup (step 6)">
                   <option value="group_stage_to_knockout">Group Stage to Knockout</option>
@@ -1332,8 +1335,6 @@ const CategoriesStep = async ({
                 <optgroup label="Manual scheduling only (Scheduler workspace)">
                   <option value="league">League</option>
                   <option value="friendly">Friendly</option>
-                  <option value="time_trial">Time Trial</option>
-                  <option value="score_ranking">Score Ranking</option>
                 </optgroup>
               </Select>
             </Field>
@@ -2497,6 +2498,9 @@ const GenerateStep = async ({
       const withoutReset = 2 * confirmedCount - 2
       return `${withoutReset}-${withoutReset + 1} matches (double elimination, winners + losers bracket + grand final)`
     }
+    if (formatType === 'time_trial' || formatType === 'score_ranking') {
+      return `${confirmedCount} attempt${confirmedCount === 1 ? '' : 's'} (one per entry, ranked by result once recorded)`
+    }
     return null
   }
 
@@ -2754,6 +2758,8 @@ const BracketStep = async ({
         <SingleEliminationBracketView payload={payload} stageId={String(stage.id)} />
       ) : stage.stage_type === 'double_elimination' ? (
         <DoubleEliminationBracketView payload={payload} stageId={String(stage.id)} />
+      ) : stage.stage_type === 'time_trial' || stage.stage_type === 'score_ranking' ? (
+        <RankingAttemptsList payload={payload} stageId={String(stage.id)} />
       ) : (
         <RoundRobinFixtureList payload={payload} stageId={String(stage.id)} />
       )}
@@ -2896,6 +2902,52 @@ const DoubleEliminationBracketView = async ({ payload, stageId }: { payload: Pay
         </Card>
       ) : null}
     </div>
+  )
+}
+
+const RankingAttemptsList = async ({ payload, stageId }: { payload: Payload; stageId: string }) => {
+  const matches = await payload.find({
+    collection: 'matches',
+    depth: 1,
+    limit: 200,
+    sort: ['match_number'],
+    where: { stage_id: { equals: stageId } },
+  })
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <CardTitle>Attempts ({matches.totalDocs})</CardTitle>
+      <p className="text-sm text-ink-soft">
+        Each confirmed entry gets one attempt record. Record results from the Matches workspace -
+        this step is just a readiness overview, not where you enter values.
+      </p>
+      {matches.docs.length === 0 ? (
+        <EmptyState>No attempt records generated yet.</EmptyState>
+      ) : (
+        <div className="flex max-h-[32rem] flex-col gap-2 overflow-y-auto pr-1">
+          {matches.docs.map((match) => (
+            <div
+              key={match.id}
+              className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-4 py-3"
+            >
+              <div className="min-w-0">
+                <strong className="block truncate text-sm font-bold text-ink">
+                  {getRelationshipLabel(match.participant_a_entry_id as RelationshipDoc)}
+                </strong>
+                <span className="text-xs font-semibold text-ink-soft">{match.match_number}</span>
+              </div>
+              <span className="shrink-0 text-xs font-bold text-ink-soft">
+                {match.result_qualifier
+                  ? String(match.result_qualifier).toUpperCase()
+                  : typeof match.result_value === 'number'
+                    ? match.result_value
+                    : formatStatus(match.status)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   )
 }
 

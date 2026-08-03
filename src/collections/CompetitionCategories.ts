@@ -123,6 +123,14 @@ export const CompetitionCategories: CollectionConfig = {
           'How many top-ranked entries per group currently qualify to advance (standings mark them "qualified"). Leave empty to skip auto-qualification (AUDIT_E2E STD-06).',
       },
     },
+    {
+      name: 'result_unit',
+      type: 'text',
+      admin: {
+        description:
+          'Time Trial / Score Ranking only: unit shown next to each entry\'s recorded result (e.g. "seconds", "points", "meters").',
+      },
+    },
   ],
   timestamps: true,
 }

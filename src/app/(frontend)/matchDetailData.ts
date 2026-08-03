@@ -16,6 +16,7 @@ export type StageDoc = RelationshipDoc & {
 export type CategoryDoc = RelationshipDoc & {
   participant_mode?: string
   format_type?: string
+  result_unit?: string | null
 }
 
 export type MatchDetail = {
@@ -42,6 +43,8 @@ export type MatchDetail = {
   participant_b_entry_id?: EntryDoc | string | number | null
   winner_entry_id?: EntryDoc | string | number | null
   officer_ids?: (RelationshipDoc | string | number)[] | null
+  result_value?: number | null
+  result_qualifier?: string | null
 }
 
 export type MatchSetDetail = {

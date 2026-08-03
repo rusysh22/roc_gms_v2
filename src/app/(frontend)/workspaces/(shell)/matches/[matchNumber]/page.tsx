@@ -31,6 +31,7 @@ import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import {
   addMatchSetAction,
   assignMatchOfficersAction,
+  recordRankingResultAction,
   transitionMatchStatusAction,
   updateMatchSetScoreAction,
 } from '../../../matches/matchActions'
@@ -104,6 +105,9 @@ export default async function AdminMatchDetailPage({
     match.stage_id && typeof match.stage_id === 'object'
       ? (match.stage_id as { stage_type?: string }).stage_type
       : undefined
+  const isRankingMatch = stageType === 'time_trial' || stageType === 'score_ranking'
+  const resultUnit =
+    match.category_id && typeof match.category_id === 'object' ? match.category_id.result_unit : undefined
   const publishConfirmMessage = getPublishResultConfirmMessage(stageType)
   const eligibleOfficersResult = canAssignOfficers
     ? await access.payload.find({
@@ -407,6 +411,49 @@ export default async function AdminMatchDetailPage({
           </Card>
         ) : null}
 
+        {isRankingMatch ? (
+          <Card className="flex flex-col gap-4 md:col-span-2">
+            <CardTitle>Ranking Result</CardTitle>
+            <p className="text-sm text-ink-soft">
+              This is a solo attempt (time trial / score ranking), not a head-to-head match -
+              record {getRelationshipLabel(match.participant_a_entry_id)}&apos;s result directly.
+              Standings recompute automatically once this is saved.
+            </p>
+            {match.status === 'result_published' ? (
+              <p className="text-sm font-bold text-green">
+                Recorded result: {match.result_qualifier ? match.result_qualifier.toUpperCase() : `${match.result_value ?? '-'}${resultUnit ? ` ${resultUnit}` : ''}`}
+              </p>
+            ) : null}
+            <form action={recordRankingResultAction} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="matchNumber" value={match.match_number} />
+              <Field label={`Result value${resultUnit ? ` (${resultUnit})` : ''}`}>
+                <Input
+                  type="number"
+                  name="resultValue"
+                  min={0}
+                  step="any"
+                  defaultValue={match.result_value ?? ''}
+                />
+              </Field>
+              <Field label="Or DNS / DNF / DSQ">
+                <Select name="resultQualifier" defaultValue={match.result_qualifier || ''}>
+                  <option value="">Not applicable - use result value</option>
+                  <option value="dns">Did Not Start (DNS)</option>
+                  <option value="dnf">Did Not Finish (DNF)</option>
+                  <option value="dsq">Disqualified (DSQ)</option>
+                </Select>
+              </Field>
+              {match.status === 'result_published' ? (
+                <Field label="Revision reason (required to change a recorded result)" className="sm:col-span-2">
+                  <Textarea name="revisionReason" rows={2} required />
+                </Field>
+              ) : null}
+              <div className="sm:col-span-2">
+                <SubmitButton>Save Result</SubmitButton>
+              </div>
+            </form>
+          </Card>
+        ) : (
         <Card className="flex flex-col gap-3 md:col-span-2">
           <CardTitle>Match Actions</CardTitle>
           {allowedTransitions.length === 0 ? (
@@ -449,7 +496,10 @@ export default async function AdminMatchDetailPage({
             </div>
           )}
         </Card>
+        )}
 
+        {!isRankingMatch ? (
+        <>
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Score Input</CardTitle>
           {matchSets.length === 0 ? (
@@ -509,6 +559,8 @@ export default async function AdminMatchDetailPage({
           <p className="text-sm text-ink-soft">{match.score_summary || 'Score summary not recorded yet.'}</p>
           <MatchSetsTable sets={matchSets} />
         </Card>
+        </>
+        ) : null}
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Documentation</CardTitle>

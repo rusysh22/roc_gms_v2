@@ -448,11 +448,14 @@ export const calculateStandingsForScope = async (
 // send strings routinely - normalize to a real number right before writing.
 const toRelationId = (value: Id): number => Number(value)
 
-export const recalculateStandingsForScope = async (
+// Shared by recalculateStandingsForScope (win/loss/points) and recalculateRankingStandingsForScope
+// (time_trial/score_ranking) - both compute a `StandingRow[]` in the same shape, so upserting them
+// into the `standings` collection and pruning stale rows only needs writing once.
+const persistStandingRows = async (
   payload: Payload,
   input: RecalculateStandingsInput,
-): Promise<RecalculateStandingsResult> => {
-  const result = await calculateStandingsForScope(payload, input)
+  rows: StandingRow[],
+) => {
   const existing = await payload.find({
     collection: 'standings',
     depth: 0,
@@ -465,9 +468,9 @@ export const recalculateStandingsForScope = async (
       ],
     },
   })
-  const wantedKeys = new Set(result.rows.map((row) => row.standing_key))
+  const wantedKeys = new Set(rows.map((row) => row.standing_key))
 
-  for (const row of result.rows) {
+  for (const row of rows) {
     const existingRow = existing.docs.find((doc) => doc.standing_key === row.standing_key)
     const data = {
       standing_key: row.standing_key,
@@ -514,6 +517,121 @@ export const recalculateStandingsForScope = async (
       })
     }
   }
+}
 
+export const recalculateStandingsForScope = async (
+  payload: Payload,
+  input: RecalculateStandingsInput,
+): Promise<RecalculateStandingsResult> => {
+  const result = await calculateStandingsForScope(payload, input)
+  await persistStandingRows(payload, input, result.rows)
+  return result
+}
+
+type RankingMatch = {
+  id: Id
+  status: string
+  participant_a_entry_id?: RelationshipDoc | Id | null
+  result_value?: number | null
+  result_qualifier?: 'dns' | 'dnf' | 'dsq' | null
+}
+
+// ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-13: time_trial/score_ranking categories
+// don't have a winner/loser per match - every confirmed entry gets one solo "attempt" match (see
+// createRankingAttemptMatches) carrying a single result_value, and standings are a ranking of
+// those values, not a win/loss/points table. Reuses the same StandingRow shape and the same
+// `standings` collection as calculateStandingsForScope so the existing persistence and public
+// standings plumbing works unmodified - `score_for` holds the result value, `tieNote` holds the
+// DNS/DNF/DSQ label for entries with no comparable result.
+export const calculateRankingStandingsForScope = async (
+  payload: Payload,
+  input: RecalculateStandingsInput,
+): Promise<RecalculateStandingsResult> => {
+  const category = (await payload.findByID({
+    collection: 'competition-categories',
+    id: input.categoryId,
+    depth: 0,
+  })) as RelationshipDoc & { event_id?: RelationshipDoc | Id | null; format_type?: string | null }
+  const eventId = input.eventId ?? getRelationshipId(category.event_id)
+  if (!eventId) {
+    return { rows: [], finishedMatchCount: 0 }
+  }
+  // Lower is better for time_trial (fastest wins); higher is better for score_ranking (most
+  // points/distance/etc wins).
+  const ascending = category.format_type === 'time_trial'
+
+  const confirmedEntries = await payload.find({
+    collection: 'competition-entries',
+    depth: 0,
+    limit: 500,
+    where: { and: [{ category_id: { equals: input.categoryId } }, { status: { equals: 'confirmed' } }] },
+  })
+  const rowsByEntryId = new Map<string, StandingRow>()
+  for (const entry of confirmedEntries.docs) {
+    rowsByEntryId.set(
+      String(entry.id),
+      createEmptyRow(entry.id, String(entry.display_name || 'TBD'), eventId, input.categoryId, input.stageId, undefined),
+    )
+  }
+
+  const decidedMatchesResult = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 500,
+    where: {
+      and: [
+        { category_id: { equals: input.categoryId } },
+        { stage_id: { equals: input.stageId } },
+        { status: { in: Array.from(RESULT_STATUSES) } },
+      ],
+    },
+  })
+  const decidedMatches = decidedMatchesResult.docs as RankingMatch[]
+
+  for (const match of decidedMatches) {
+    const entryId = getRelationshipId(match.participant_a_entry_id)
+    if (!entryId) continue
+    const row = rowsByEntryId.get(String(entryId))
+    if (!row) continue
+
+    row.played = 1
+    if (match.result_qualifier) {
+      row.tieNote = match.result_qualifier.toUpperCase()
+    } else if (typeof match.result_value === 'number') {
+      row.score_for = match.result_value
+      // `won` has no head-to-head meaning for a ranking result - reused purely as this row's
+      // "has a comparable result" flag so hasResult() below doesn't need a new StandingRow field.
+      row.won = 1
+    }
+  }
+
+  const hasResult = (row: StandingRow) => row.won === 1
+  const rows = Array.from(rowsByEntryId.values()).sort((left, right) => {
+    if (hasResult(left) !== hasResult(right)) {
+      return hasResult(left) ? -1 : 1
+    }
+    if (hasResult(left) && left.score_for !== right.score_for) {
+      return ascending ? left.score_for - right.score_for : right.score_for - left.score_for
+    }
+    return left.entry_label.localeCompare(right.entry_label, 'en')
+  })
+
+  const groupQualifyCount = category.group_qualify_count ?? undefined
+  rows.forEach((row, index) => {
+    row.rank = index + 1
+    if (groupQualifyCount) {
+      row.qualified_status = hasResult(row) && index < groupQualifyCount ? 'qualified' : 'pending'
+    }
+  })
+
+  return { rows, finishedMatchCount: decidedMatches.length }
+}
+
+export const recalculateRankingStandingsForScope = async (
+  payload: Payload,
+  input: RecalculateStandingsInput,
+): Promise<RecalculateStandingsResult> => {
+  const result = await calculateRankingStandingsForScope(payload, input)
+  await persistStandingRows(payload, input, result.rows)
   return result
 }

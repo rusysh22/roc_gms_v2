@@ -203,6 +203,8 @@ export const Matches: CollectionConfig = {
         { label: 'Round Robin', value: 'round_robin' },
         { label: 'Single Elimination', value: 'single_elimination' },
         { label: 'Double Elimination', value: 'double_elimination' },
+        { label: 'Time Trial', value: 'time_trial' },
+        { label: 'Score Ranking', value: 'score_ranking' },
       ],
     },
     {
@@ -283,6 +285,31 @@ export const Matches: CollectionConfig = {
     {
       name: 'score_summary',
       type: 'text',
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'result_value',
+          type: 'number',
+          admin: {
+            description:
+              'Time Trial / Score Ranking only: the measured result for participant_a_entry_id (a solo "attempt", not a head-to-head match - see ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-13). Ranked ascending for time_trial, descending for score_ranking. Leave empty if result_qualifier is set.',
+          },
+        },
+        {
+          name: 'result_qualifier',
+          type: 'select',
+          admin: {
+            description: 'Time Trial / Score Ranking only: set instead of result_value when the entry did not produce a comparable result.',
+          },
+          options: [
+            { label: 'Did Not Start (DNS)', value: 'dns' },
+            { label: 'Did Not Finish (DNF)', value: 'dnf' },
+            { label: 'Disqualified (DSQ)', value: 'dsq' },
+          ],
+        },
+      ],
     },
     {
       name: 'is_public',

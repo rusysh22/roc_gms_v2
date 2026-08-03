@@ -2,6 +2,7 @@ import { getPayload } from 'payload'
 
 import config from '@payload-config'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import type { RelationshipDoc } from '../workspaces/workspaceComponents'
 
 export type SportDoc = RelationshipDoc & {
@@ -36,6 +37,7 @@ export type CategoryDoc = RelationshipDoc & {
   max_roster_size?: number | null
   format_type: string
   status: string
+  result_unit?: string | null
   event_id?: RelationshipDoc | string | number | null
   sport_id?: SportDoc | string | number | null
   ruleset_id?: RulesetDoc | string | number | null
@@ -77,6 +79,7 @@ export type StandingRow = {
   set_against: number
   set_difference: number
   qualified_status: string
+  tie_note?: string | null
   stage_id?: RelationshipDoc | string | number | null
   group_id?: RelationshipDoc | string | number | null
   entry_id?: RelationshipDoc | string | number | null
@@ -87,7 +90,7 @@ export type PublicBracket = {
   name: string
   format: string
   status: string
-  bracket_data?: SingleEliminationBracketData | null
+  bracket_data?: SingleEliminationBracketData | DoubleEliminationBracketData | null
   stage_id?: RelationshipDoc | string | number | null
 }
 
@@ -105,7 +108,11 @@ export const standingFormatTypes = new Set([
   'group_stage_to_knockout',
   'round_robin',
   'league',
+  'time_trial',
+  'score_ranking',
 ])
+
+export const rankingFormatTypes = new Set(['time_trial', 'score_ranking'])
 
 export const getSportCategories = async (eventId: string | number) => {
   const payload = await getPayload({ config })

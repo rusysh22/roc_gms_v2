@@ -10,6 +10,7 @@ import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/u
 import { AnnouncementFeed, ArticleCard } from '../../../../../contentComponents'
 import { getRelatedPublicArticles, getScopedPublicAnnouncements } from '../../../../../contentData'
 import { BracketTree } from '../../../../../brackets/bracketTree'
+import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import {
   formatDateLabel,
   formatDateTime,
@@ -20,6 +21,7 @@ import {
 } from '../../../../../workspaces/workspaceComponents'
 import {
   getCategoryDetail,
+  rankingFormatTypes,
   standingFormatTypes,
   type PublicMatch,
   type RulesetDoc,
@@ -91,11 +93,29 @@ const getStandingScopeKey = (standing: StandingRow) =>
     getRelationshipLabel(standing.group_id, 'No group'),
   ].join(' / ')
 
-const CategoryStandings = ({ standings }: { standings: StandingRow[] }) => {
+const formatRankingResult = (row: StandingRow, resultUnit?: string | null) => {
+  if (row.tie_note) {
+    return row.tie_note
+  }
+  if (row.played === 0) {
+    return 'Not recorded yet'
+  }
+  return resultUnit ? `${row.score_for} ${resultUnit}` : String(row.score_for)
+}
+
+const CategoryStandings = ({
+  standings,
+  isRanking,
+  resultUnit,
+}: {
+  standings: StandingRow[]
+  isRanking?: boolean
+  resultUnit?: string | null
+}) => {
   if (standings.length === 0) {
     return (
       <Card className="text-sm text-ink-soft">
-        Standings will appear here once group, round-robin, or league results are ready.
+        Standings will appear here once {isRanking ? 'results are recorded' : 'group, round-robin, or league results are ready'}.
       </Card>
     )
   }
@@ -115,63 +135,155 @@ const CategoryStandings = ({ standings }: { standings: StandingRow[] }) => {
           <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">
             {scopeKey}
           </p>
-          <Card className="hidden overflow-x-auto p-0 md:block">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Entry</th>
-                  <th className="px-3 py-3 text-right">P</th>
-                  <th className="px-3 py-3 text-right">W</th>
-                  <th className="px-3 py-3 text-right">D</th>
-                  <th className="px-3 py-3 text-right">L</th>
-                  <th className="px-3 py-3 text-right">Pts</th>
-                  <th className="px-3 py-3 text-right">SD</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+          {isRanking ? (
+            <>
+              <Card className="hidden overflow-x-auto p-0 md:block">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-soft">
+                      <th className="px-4 py-3">Rank</th>
+                      <th className="px-4 py-3">Entry</th>
+                      <th className="px-3 py-3 text-right">Result</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.id} className="border-b border-line last:border-0">
+                        <td className="px-4 py-3 font-bold tabular-nums">{row.rank}</td>
+                        <td className="px-4 py-3 font-semibold">{getRelationshipLabel(row.entry_id)}</td>
+                        <td className="px-3 py-3 text-right font-bold tabular-nums">{formatRankingResult(row, resultUnit)}</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
+                            {formatStatus(row.qualified_status)}
+                          </StatusBadge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+              <div className="flex flex-col gap-3 md:hidden">
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-3 font-bold tabular-nums">{row.rank}</td>
-                    <td className="px-4 py-3 font-semibold">{getRelationshipLabel(row.entry_id)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{row.played}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{row.won}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{row.drawn}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{row.lost}</td>
-                    <td className="px-3 py-3 text-right font-bold tabular-nums">{row.points}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{row.score_difference}</td>
-                    <td className="px-4 py-3">
+                  <Card key={row.id}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-ink">
+                          #{row.rank} {getRelationshipLabel(row.entry_id)}
+                        </p>
+                        <p className="mt-1 text-xs text-ink-soft">{formatRankingResult(row, resultUnit)}</p>
+                      </div>
                       <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
                         {formatStatus(row.qualified_status)}
                       </StatusBadge>
-                    </td>
-                  </tr>
+                    </div>
+                  </Card>
                 ))}
-              </tbody>
-            </table>
-          </Card>
-          <div className="flex flex-col gap-3 md:hidden">
-            {rows.map((row) => (
-              <Card key={row.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink">
-                      #{row.rank} {getRelationshipLabel(row.entry_id)}
-                    </p>
-                    <p className="mt-1 text-xs text-ink-soft">
-                      {row.played} played / {row.won}-{row.drawn}-{row.lost} / {row.points} pts
-                    </p>
-                  </div>
-                  <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
-                    {formatStatus(row.qualified_status)}
-                  </StatusBadge>
-                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Card className="hidden overflow-x-auto p-0 md:block">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-xs font-bold uppercase tracking-wide text-ink-soft">
+                      <th className="px-4 py-3">Rank</th>
+                      <th className="px-4 py-3">Entry</th>
+                      <th className="px-3 py-3 text-right">P</th>
+                      <th className="px-3 py-3 text-right">W</th>
+                      <th className="px-3 py-3 text-right">D</th>
+                      <th className="px-3 py-3 text-right">L</th>
+                      <th className="px-3 py-3 text-right">Pts</th>
+                      <th className="px-3 py-3 text-right">SD</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.id} className="border-b border-line last:border-0">
+                        <td className="px-4 py-3 font-bold tabular-nums">{row.rank}</td>
+                        <td className="px-4 py-3 font-semibold">{getRelationshipLabel(row.entry_id)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.played}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.won}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.drawn}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.lost}</td>
+                        <td className="px-3 py-3 text-right font-bold tabular-nums">{row.points}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{row.score_difference}</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
+                            {formatStatus(row.qualified_status)}
+                          </StatusBadge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </Card>
-            ))}
-          </div>
+              <div className="flex flex-col gap-3 md:hidden">
+                {rows.map((row) => (
+                  <Card key={row.id}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-ink">
+                          #{row.rank} {getRelationshipLabel(row.entry_id)}
+                        </p>
+                        <p className="mt-1 text-xs text-ink-soft">
+                          {row.played} played / {row.won}-{row.drawn}-{row.lost} / {row.points} pts
+                        </p>
+                      </div>
+                      <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
+                        {formatStatus(row.qualified_status)}
+                      </StatusBadge>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ))}
+    </div>
+  )
+}
+
+// Mirrors DoubleEliminationBracketSections in events/[eventSlug]/brackets/page.tsx and
+// DoubleEliminationBracketView in the wizard - same "three stacked BracketTree sections" approach
+// kept consistent across all three double-elimination bracket renderers rather than building a
+// shared component for what's currently three call sites.
+const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: DoubleEliminationBracketData }) => {
+  const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = bracketData
+  const grandFinalRounds =
+    grandFinal ?
+      [
+        {
+          name: 'Grand Final',
+          order: 0,
+          matches: [
+            grandFinal,
+            ...(grandFinalReset && grandFinalReset.status !== 'cancelled' ? [grandFinalReset] : []),
+          ],
+        },
+      ]
+    : []
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h3 className="mb-2 text-sm font-extrabold text-ink">Winners bracket</h3>
+        <BracketTree rounds={bracketData.winners_rounds} champion={null} />
+      </div>
+      {bracketData.losers_rounds.length > 0 ? (
+        <div>
+          <h3 className="mb-2 text-sm font-extrabold text-ink">Losers bracket</h3>
+          <BracketTree rounds={bracketData.losers_rounds} champion={null} />
+        </div>
+      ) : null}
+      {grandFinalRounds.length > 0 ? (
+        <div>
+          <h3 className="mb-2 text-sm font-extrabold text-ink">Grand final</h3>
+          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -285,8 +397,9 @@ export default async function PublicSportCategoryPage({
   const { sport, category, stages, matches, standings, bracket } = data
   const activeTab = getActiveTab(tab)
   const ruleset = getRuleset(category.ruleset_id)
-  const usesBracket = category.format_type === 'single_elimination'
+  const usesBracket = category.format_type === 'single_elimination' || category.format_type === 'double_elimination'
   const usesStandings = standingFormatTypes.has(category.format_type)
+  const isRankingFormat = rankingFormatTypes.has(category.format_type)
   // group_stage_to_knockout has both: group standings never go away (they're how qualifiers were
   // decided) and a knockout bracket once qualifiers are promoted - neither/or picking one hides
   // real information the plain usesBracket/usesStandings split assumes is mutually exclusive.
@@ -397,7 +510,9 @@ export default async function PublicSportCategoryPage({
               </div>
 
               {usesBracket ?
-                bracket?.bracket_data?.rounds?.length ?
+                bracket?.bracket_data?.format === 'double_elimination' ?
+                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} />
+                : bracket?.bracket_data && 'rounds' in bracket.bracket_data && bracket.bracket_data.rounds.length > 0 ?
                   <BracketTree
                     rounds={bracket.bracket_data.rounds}
                     champion={bracket.bracket_data.champion}
@@ -408,7 +523,7 @@ export default async function PublicSportCategoryPage({
               : showsStandingsAndBracket ?
                 <div className="flex flex-col gap-6">
                   <CategoryStandings standings={standings} />
-                  {bracket?.bracket_data?.rounds?.length ? (
+                  {bracket?.bracket_data && 'rounds' in bracket.bracket_data && bracket.bracket_data.rounds.length > 0 ? (
                     <div>
                       <h3 className="mb-3 text-lg font-extrabold">Knockout Bracket</h3>
                       <BracketTree
@@ -419,7 +534,7 @@ export default async function PublicSportCategoryPage({
                   ) : null}
                 </div>
               : usesStandings ?
-                <CategoryStandings standings={standings} />
+                <CategoryStandings standings={standings} isRanking={isRankingFormat} resultUnit={category.result_unit} />
               : <Card className="text-sm text-ink-soft">
                   This category format does not use a bracket or standings table yet. Follow the
                   schedule for match-by-match updates.

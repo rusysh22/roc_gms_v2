@@ -10,13 +10,14 @@ import {
   recalculateDoubleEliminationBracket,
 } from '@/lib/doubleElimination'
 import {
+  createRankingAttemptMatches,
   createSingleEliminationBracketMatches,
   generateRoundRobinPairings,
   getMatchPairKey,
   getSchedulableEntries,
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
-import { recalculateStandingsForScope } from '@/lib/standings'
+import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
@@ -84,6 +85,8 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
     single_elimination: 'Single Elimination',
     round_robin: 'Round Robin',
     double_elimination: 'Double Elimination',
+    time_trial: 'Time Trial',
+    score_ranking: 'Score Ranking',
   }
 
   const existingStage = await payload.find({
@@ -104,7 +107,12 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
         name: `${category!.name} - ${stageTypeLabel[formatType] || 'Round Robin'}`,
         // Guaranteed one of supportedFormats' members by the supportedFormats.has(formatType)
         // check above - narrower than the field's plain `string` type here.
-        stage_type: formatType as 'single_elimination' | 'round_robin' | 'double_elimination',
+        stage_type: formatType as
+          | 'single_elimination'
+          | 'round_robin'
+          | 'double_elimination'
+          | 'time_trial'
+          | 'score_ranking',
         order: 1,
         status: 'ready',
       },
@@ -165,6 +173,25 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
     failedCount = result.failedCount
 
     await recalculateDoubleEliminationBracket(payload, { stageId: stage.id })
+  } else if (formatType === 'time_trial' || formatType === 'score_ranking') {
+    const result = await createRankingAttemptMatches({
+      payload,
+      eventId,
+      sportId: category!.sport_id,
+      categoryId,
+      stageId: stage.id,
+      formatType,
+      entries: schedulableEntries,
+      nextMatchNumber,
+    })
+    createdCount = result.createdCount
+    failedCount = result.failedCount
+
+    await recalculateRankingStandingsForScope(payload, {
+      eventId,
+      categoryId,
+      stageId: stage.id,
+    })
   } else {
     const pairings = generateRoundRobinPairings(schedulableEntries)
 

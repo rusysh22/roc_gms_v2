@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import type { Payload, RequiredDataFromCollectionSlug } from 'payload'
 
 export type MatchGenerationEntry = {
   id: string | number
@@ -415,6 +415,85 @@ export const computeCrossGroupQualifierOrder = (
 // Given a seed-ordered qualifier list, checks whether the standard bracket seed-slot placement
 // (the same placement createSingleEliminationBracketMatches will actually use) pits two entries
 // from the same group against each other in the opening round.
+export type CreateRankingAttemptMatchesInput = {
+  payload: Payload
+  eventId: string | number
+  sportId: string | number | { id: string | number }
+  categoryId: string | number
+  stageId: string | number
+  formatType: 'time_trial' | 'score_ranking'
+  entries: MatchGenerationEntry[]
+  nextMatchNumber: (prefix: string) => string
+}
+
+export type CreateRankingAttemptMatchesResult = {
+  createdCount: number
+  failedCount: number
+}
+
+// ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-13: time_trial and score_ranking aren't
+// head-to-head - each confirmed entry gets exactly one "attempt" record (participant_a_entry_id
+// only, participant_b_entry_id left empty; both fields are already optional on Matches). The
+// result itself (a lap time, a points total, ...) lives in the new result_value/result_qualifier
+// fields and is ranked by src/lib/standings.ts's calculateRankingStandingsForScope - this
+// generator only creates the empty attempt records for the confirmed roster, it does not record
+// any result.
+export const createRankingAttemptMatches = async ({
+  payload,
+  eventId,
+  sportId,
+  categoryId,
+  stageId,
+  formatType,
+  entries,
+  nextMatchNumber,
+}: CreateRankingAttemptMatchesInput): Promise<CreateRankingAttemptMatchesResult> => {
+  const sportIdValue = Number(typeof sportId === 'object' ? sportId.id : sportId)
+  const schedulableEntries = getSchedulableEntries(entries)
+  const roundName = formatType === 'time_trial' ? 'Time Trial' : 'Ranking Round'
+  const prefix = formatType === 'time_trial' ? 'tt' : 'sr'
+
+  let createdCount = 0
+  let failedCount = 0
+
+  for (const entry of schedulableEntries) {
+    const generationKey = `${stageId}:${formatType}:entry:${entry.id}`
+    const existing = await payload.find({
+      collection: 'matches',
+      depth: 0,
+      limit: 1,
+      where: { generation_key: { equals: generationKey } },
+    })
+    if (existing.docs[0]) {
+      continue
+    }
+
+    const data: RequiredDataFromCollectionSlug<'matches'> = {
+      event_id: Number(eventId),
+      sport_id: sportIdValue,
+      category_id: Number(categoryId),
+      stage_id: Number(stageId),
+      round_name: roundName,
+      match_number: nextMatchNumber(prefix),
+      participant_a_entry_id: Number(entry.id),
+      status: 'ready_for_scheduling',
+      generation_source: formatType,
+      generation_key: generationKey,
+      is_public: true,
+      documentation_status: 'not_started',
+    }
+
+    try {
+      await payload.create({ collection: 'matches', data })
+      createdCount += 1
+    } catch {
+      failedCount += 1
+    }
+  }
+
+  return { createdCount, failedCount }
+}
+
 export const findSameGroupFirstRoundPairings = (
   orderedQualifiers: CrossGroupQualifier[],
 ): Array<[CrossGroupQualifier, CrossGroupQualifier]> => {
