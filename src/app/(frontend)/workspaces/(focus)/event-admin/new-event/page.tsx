@@ -92,6 +92,15 @@ const STEPS = [
   { key: 'history', label: 'History' },
 ] as const
 
+// AUDIT_UI_UX_CSS reconciliation: every step's in-page heading used to hardcode its own number as
+// a plain literal ("5. Registration", "9. Publish"...). When item 5 split the old single
+// "Entries & Seeding" step into Registration + Draw & Seeding, every literal after that point in
+// the array went stale (Bracket's own heading was never updated past "9.", Participants' number
+// was dropped entirely) while the progress bar above it kept counting correctly - the same page
+// showed two different numbers for the same step. Deriving the number from STEPS here means a
+// future reorder can't silently desync a hardcoded literal from the array again.
+const stepNumber = (key: (typeof STEPS)[number]['key']) => STEPS.findIndex((step) => step.key === key) + 1
+
 const errorMessages: Record<string, string> = {
   invalid_event: 'Fill in the event name, start, and end fields.',
   invalid_date_range: 'Event end time must be after the start time (they cannot be the same).',
@@ -129,7 +138,7 @@ const errorMessages: Record<string, string> = {
   invalid_publish_option: 'Choose one of the three publish options.',
 }
 
-// Wizard progress, redesigned as: a plain-language status line ("Step 3 of 7") that works on its
+// Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
 // own on narrow screens, a slim animated bar under it for an at-a-glance sense of how much is
 // left, and - lg and up, where there's room - the full connected-circle stepper with every step
 // name spelled out. All three describe the same state.
@@ -870,7 +879,7 @@ const PARTICIPANT_SOURCE_CHOICES = [
 const SetupStep = () => (
   <Card className="flex flex-col gap-6">
     <div>
-      <CardTitle>0. Setup Assistant</CardTitle>
+      <CardTitle>{stepNumber('setup')}. Setup Assistant</CardTitle>
       <p className="mt-1 text-sm text-ink-soft">
         Answer a couple of quick questions and we&apos;ll pre-fill the format and participant type
         choices in later steps. Everything here stays fully editable - skip it if you&apos;d
@@ -971,7 +980,7 @@ const EventStep = ({
 }) => (
   <Card className="flex flex-col gap-4">
     <div>
-      <CardTitle>1. Event details</CardTitle>
+      <CardTitle>{stepNumber('event')}. Event details</CardTitle>
       <p className="mt-1 text-sm text-ink-soft">
         The basics for your event. You can add sports, categories, and participants next.
       </p>
@@ -1056,7 +1065,7 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
   return (
     <>
       <Card className="flex flex-col gap-4">
-        <CardTitle>2. Add a sport</CardTitle>
+        <CardTitle>{stepNumber('sports')}. Add a sport</CardTitle>
         <form action={addSportAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="eventId" value={eventId} />
           <Field label="Sport name">
@@ -1241,7 +1250,7 @@ const CategoriesStep = async ({
   return (
     <>
       <Card className="flex flex-col gap-4">
-        <CardTitle>3. Add a competition category</CardTitle>
+        <CardTitle>{stepNumber('categories')}. Add a competition category</CardTitle>
         {sports.docs.length === 0 ? (
           <EmptyState>Add at least one sport first.</EmptyState>
         ) : (
@@ -1322,14 +1331,14 @@ const CategoriesStep = async ({
                   same "suggestion, not lock" spirit as the ruleset preset above - still a plain
                   editable <select>. */}
               <Select name="formatType" defaultValue={setupTournamentType || 'single_elimination'}>
-                <optgroup label="Auto-generates matches in step 6">
+                <optgroup label={`Auto-generates matches in step ${stepNumber('generate')}`}>
                   <option value="single_elimination">Single Elimination</option>
                   <option value="round_robin">Round Robin</option>
                   <option value="double_elimination">Double Elimination (needs a power-of-two entry count)</option>
                   <option value="time_trial">Time Trial (one attempt per entry, ranked by result)</option>
                   <option value="score_ranking">Score Ranking (one attempt per entry, ranked by result)</option>
                 </optgroup>
-                <optgroup label="Has its own guided setup (step 6)">
+                <optgroup label={`Has its own guided setup (step ${stepNumber('generate')})`}>
                   <option value="group_stage_to_knockout">Group Stage to Knockout</option>
                 </optgroup>
                 <optgroup label="Manual scheduling only (Scheduler workspace)">
@@ -1543,10 +1552,11 @@ const ParticipantsStep = async ({
 
   return (
     <>
+      <h2 className="text-sm font-extrabold text-ink">{stepNumber('participants')}. Clubs / Teams / Players</h2>
       <AlertBanner tone="info">
         Clubs, teams, and players added here are shared across the whole event. You&apos;ll pick
-        exactly which of them compete in each sport &amp; category in the next step (Entries &amp;
-        Seeding). Only add a club if a category needs an organization as the entry itself (e.g. an
+        exactly which of them compete in each sport &amp; category in the next step (Registration).
+        Only add a club if a category needs an organization as the entry itself (e.g. an
         inter-school or inter-company competition) - individual, pair, and team categories don&apos;t
         need one.
       </AlertBanner>
@@ -2044,12 +2054,12 @@ const RegistrationStep = async ({
     <>
       <Card className="flex flex-col gap-4">
         <div>
-          <CardTitle>5. Registration</CardTitle>
+          <CardTitle>{stepNumber('registration')}. Registration</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Pick who&apos;s officially competing in this category - each one becomes an{' '}
             <GlossaryHint
               term="entry"
-              definition="A player, pair, team, or club officially registered into this category. Adding someone to the directory in step 4 doesn't register them anywhere by itself."
+              definition={`A player, pair, team, or club officially registered into this category. Adding someone to the directory in step ${stepNumber('participants')} doesn't register them anywhere by itself.`}
               className="inline-block align-baseline"
             />
             . You&apos;ll set the draw order next, once registration is settled - that&apos;s its
@@ -2090,7 +2100,7 @@ const RegistrationStep = async ({
               href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}
               className="font-bold text-blue underline"
             >
-              Go back to step 4
+              Go back to step {stepNumber('participants')}
             </Link>{' '}
             to add some, then come back here.
           </EmptyState>
@@ -2321,7 +2331,7 @@ const DrawStep = async ({
     <>
       <Card className="flex flex-col gap-4">
         <div>
-          <CardTitle>6. Draw &amp; seeding</CardTitle>
+          <CardTitle>{stepNumber('draw')}. Draw &amp; seeding</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Set each entry&apos;s{' '}
             <GlossaryHint
@@ -2522,7 +2532,7 @@ const GenerateStep = async ({
     <>
       <Card className="flex flex-col gap-4">
         <div>
-          <CardTitle>7. Generate matches</CardTitle>
+          <CardTitle>{stepNumber('generate')}. Generate matches</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Choose a category with at least two confirmed entries. Single Elimination and Round
             Robin categories generate a seeded first round automatically; Group Stage to Knockout
@@ -2714,7 +2724,7 @@ const BracketStep = async ({
   return (
     <>
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-extrabold text-ink">8. Bracket / fixtures</h2>
+        <h2 className="text-sm font-extrabold text-ink">{stepNumber('bracket')}. Bracket / fixtures</h2>
         <Card>
           <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
             <input type="hidden" name="eventId" value={eventId} />
@@ -2786,7 +2796,7 @@ const BracketStep = async ({
           the Event Details workspace page. Three explicit choices instead of one implicit no-op. */}
       <Card className="flex flex-col gap-4">
         <div>
-          <CardTitle>9. Publish</CardTitle>
+          <CardTitle>Publish</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Choose what visitors can see right now. You can change this anytime from Event Details.
           </p>
@@ -3034,7 +3044,7 @@ const HistoryStep = async ({ payload, eventId }: { payload: Payload; eventId: st
   return (
     <Card className="flex flex-col gap-4">
       <div>
-        <CardTitle>Change history</CardTitle>
+        <CardTitle>{stepNumber('history')}. Change history</CardTitle>
         <p className="mt-1 text-sm text-ink-soft">
           Every recorded change for this event across sports, categories, participants, entries,
           venues, and matches — most recent first.
