@@ -6,6 +6,7 @@ import {
   canManageMatches,
   canReadPublicMatch,
   enforceMatchMutationCapabilities,
+  enforceMatchSportScope,
 } from '@/access/roles'
 
 export const Matches: CollectionConfig = {
@@ -32,7 +33,9 @@ export const Matches: CollectionConfig = {
     update: canManageMatches,
   },
   hooks: {
-    beforeChange: [enforceMatchMutationCapabilities],
+    // Sport scope first (cheaper rejection, and independent of the update-only capability
+    // checks below) - both run on every entry point via beforeChange.
+    beforeChange: [enforceMatchSportScope, enforceMatchMutationCapabilities],
   },
   fields: [
     {

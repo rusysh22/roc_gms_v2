@@ -1,6 +1,8 @@
 import type { Access, CollectionBeforeChangeHook, FieldAccess, Payload } from 'payload'
 import { Forbidden } from 'payload'
 
+import { recordAuditLog } from '@/lib/audit'
+
 export type UserRole =
   | 'super_admin'
   | 'event_admin'
@@ -13,6 +15,8 @@ export type UserRole =
 type AccessUser = {
   roles?: UserRole[] | null
 }
+
+type AccessUserWithId = AccessUser & { id: string | number }
 
 const hasRole = (user: AccessUser | null | undefined, roles: UserRole[]) => {
   return Boolean(user?.roles?.some((role) => roles.includes(role)))
@@ -144,6 +148,77 @@ const fieldChanged = (
   originalDoc: Record<string, unknown>,
   field: string,
 ) => field in data && getFieldValueId(data[field]) !== getFieldValueId(originalDoc[field])
+
+/** MSG-06: resolves how far a member's EventMemberships.sport_ids narrows them for this event.
+ * `null` means unrestricted - either there's no membership row at all (an event with zero
+ * EventMemberships rows is open to any staff account, same as canAccessEvent's default), or at
+ * least one of the member's rows for this event has an empty sport_ids (empty = all sports, and
+ * a member with multiple rows should get the union of what any one row grants, not the
+ * intersection). A non-null Set is the union of every populated row's sport_ids. */
+const resolveMembershipSportScope = async (
+  payload: Payload,
+  userId: string | number,
+  eventId: string | number,
+): Promise<Set<string> | null> => {
+  const memberships = await payload.find({
+    collection: 'event-memberships',
+    depth: 0,
+    limit: 50,
+    where: { and: [{ event_id: { equals: eventId } }, { user_id: { equals: userId } }] },
+  })
+
+  if (memberships.docs.length === 0) {
+    return null
+  }
+
+  const restrictedSportIds = new Set<string>()
+  for (const membership of memberships.docs) {
+    const sportIds = Array.isArray(membership.sport_ids) ? membership.sport_ids : []
+    if (sportIds.length === 0) {
+      return null
+    }
+    for (const sportId of sportIds) {
+      restrictedSportIds.add(String(getFieldValueId(sportId)))
+    }
+  }
+  return restrictedSportIds
+}
+
+/** MSG-06 enforcement point: bars a scoped member from creating or updating a match outside
+ * their assigned sports, regardless of what their account-level role would otherwise allow.
+ * super_admin/event_admin are always exempt - EventMemberships.sport_ids only narrows, and this
+ * hook is the one place that narrowing actually takes effect. Runs on create too (unlike
+ * enforceMatchMutationCapabilities below, which only cares about update), since a scoped
+ * scheduler creating fixtures for the wrong sport is exactly the gap this closes. */
+export const enforceMatchSportScope: CollectionBeforeChangeHook = async ({ data, req, originalDoc }) => {
+  const user = req.user as AccessUserWithId | null | undefined
+  if (!user || hasRole(user, ['super_admin', 'event_admin'])) {
+    return data
+  }
+
+  const eventId = getFieldValueId(data.event_id ?? originalDoc?.event_id) as string | number | undefined
+  const sportId = getFieldValueId(data.sport_id ?? originalDoc?.sport_id) as string | number | undefined
+  if (!eventId || !sportId) {
+    return data
+  }
+
+  const scope = await resolveMembershipSportScope(req.payload, user.id, eventId)
+  if (scope && !scope.has(String(sportId))) {
+    const matchId = getFieldValueId(originalDoc?.id)
+    await recordAuditLog({
+      payload: req.payload,
+      action: 'match.sport_scope_denied',
+      entityType: 'matches',
+      entityId: (matchId ?? `new:${sportId}`) as string | number,
+      before: null,
+      after: { eventId, attemptedSportId: sportId, allowedSportIds: Array.from(scope) },
+      actorUserId: user.id,
+    })
+    throw new Forbidden(req.t)
+  }
+
+  return data
+}
 
 /** Collection-boundary enforcement for the create_match/schedule_match/operate_match/
  * revise_result split (AUDIT_E2E AUTH-02): runs on every entry point (Local API, REST, GraphQL,

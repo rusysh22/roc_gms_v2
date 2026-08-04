@@ -53,6 +53,22 @@ export const EventMemberships: CollectionConfig = {
         { label: 'Draw', value: 'draw' },
       ],
     },
+    // MSG-06: the one field on this collection that actually narrows capability rather than just
+    // annotating it - see the comment at the top of this file. Empty (the default) means "every
+    // sport", so every existing membership row keeps behaving exactly as before. Enforced in
+    // enforceMatchSportScope (src/access/roles.ts), which runs on every Matches mutation path
+    // (Local API, REST, GraphQL, Payload Admin), not just the custom workspace UI.
+    {
+      name: 'sport_ids',
+      type: 'relationship',
+      relationTo: 'sports',
+      hasMany: true,
+      filterOptions: ({ data }) => ({ event_id: { equals: data?.event_id } }),
+      admin: {
+        description:
+          'Restrict this member to specific sports. Leave empty for all sports. This field can only narrow what the member may do - it never grants capability their account roles lack.',
+      },
+    },
   ],
   timestamps: true,
 }
