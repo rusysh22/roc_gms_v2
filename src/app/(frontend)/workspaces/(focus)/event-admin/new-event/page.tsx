@@ -207,7 +207,13 @@ const StepProgress = ({
             </span>
           )
           return (
-            <li key={step.key} className={cn('flex items-center', index < STEPS.length - 1 && 'flex-1')}>
+            // `items-start` (not `items-center`) is load-bearing: the connector div's `mt-3.5` is
+            // calibrated to land at the pill's vertical center measured *from the li's top edge*.
+            // With `items-center`, flexbox instead centers the connector against its sibling's full
+            // height - which varies per step because labels wrap to a different number of lines
+            // ("Event" is one line, "Setup Assistant" is two), so neighboring connector segments sat
+            // at different heights and the whole row read as crooked.
+            <li key={step.key} className={cn('flex items-start', index < STEPS.length - 1 && 'flex-1')}>
               {reachable ? (
                 <Link
                   href={href}
