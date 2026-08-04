@@ -104,6 +104,38 @@ describe('computeSchedulePlan', () => {
     expect(new Set(plan.assignments.map((a) => a.courtId))).toEqual(new Set([10, 11]))
   })
 
+  // MSG-04: 2026-08-10 is a Monday, so this week runs Mon(10)...Sun(16). allowedWeekdays
+  // restricts placement to Tue-Fri (2,3,4,5) - Saturday, Sunday, and Monday must never receive a
+  // placement even though the range covers all seven days and there's ample court capacity.
+  it('only places matches on allowed weekdays', () => {
+    const weekParams: SchedulePlanParams = {
+      ...baseParams,
+      rangeStartDate: '2026-08-10',
+      rangeEndDate: '2026-08-16',
+      allowedWeekdays: [2, 3, 4, 5],
+    }
+    const candidates = Array.from({ length: 10 }, (_, index) =>
+      match({ id: index + 1, match_number: `M${index + 1}` }),
+    )
+    const courts = [court({ id: 10 })]
+
+    const plan = computeSchedulePlan({
+      candidates,
+      courts,
+      rosterIndex: emptyRoster,
+      categoryRulesets: emptyRulesets,
+      existingCourtOccupancy: new Map(),
+      existingIdentityOccupancy: new Map(),
+      params: weekParams,
+    })
+
+    expect(plan.assignments.length).toBeGreaterThan(0)
+    for (const assignment of plan.assignments) {
+      const weekday = new Date(assignment.startAt).getDay()
+      expect([2, 3, 4, 5]).toContain(weekday)
+    }
+  })
+
   it('never double-books a single court', () => {
     const candidates = [
       match({ id: 1, match_number: 'M1' }),

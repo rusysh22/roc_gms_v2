@@ -44,6 +44,19 @@ const parseMinuteOfDay = (value: string, fallback: number) => {
   return hours * 60 + minutes
 }
 
+// MSG-04: values match JS Date#getDay() (0 = Sunday), which is what scheduleOptimizer.ts's
+// allowedWeekdays already expects - listed Monday-first here purely for display order.
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 0, label: 'Sun' },
+]
+const ALL_WEEKDAYS = WEEKDAY_OPTIONS.map((option) => option.value)
+
 export default async function ScheduleOptimizerPage({ searchParams }: { searchParams?: SearchParams }) {
   const access = await requireWorkspaceAccess({
     allowedRoles: WORKSPACE_ROLES.scheduler,
@@ -79,6 +92,17 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
   const dailyStart = get(query, 'dailyStart') || '08:00'
   const dailyEnd = get(query, 'dailyEnd') || '18:00'
 
+  // MSG-04: a plain GET form can't distinguish "every weekday checkbox was unchecked and
+  // submitted" from "the page just loaded and the weekday param was never in the URL at all" -
+  // both look like an absent `weekday` param. The always-present `weekdaySubmitted` marker
+  // resolves that: only trust an empty selection once we know the form was actually submitted.
+  const weekdaySubmitted = get(query, 'weekdaySubmitted') === '1'
+  const rawWeekdayValues = query.weekday
+  const submittedWeekdays = (Array.isArray(rawWeekdayValues) ? rawWeekdayValues : rawWeekdayValues ? [rawWeekdayValues] : [])
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
+  const selectedWeekdays = weekdaySubmitted ? submittedWeekdays : ALL_WEEKDAYS
+
   const params: SchedulePlanParams = {
     rangeStartDate,
     rangeEndDate,
@@ -87,10 +111,15 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
     slotStepMinutes: SLOT_STEP_MINUTES,
     defaultDurationMinutes: DEFAULT_DURATION_MINUTES,
     defaultMinRestMinutes: DEFAULT_MIN_REST_MINUTES,
+    allowedWeekdays: selectedWeekdays,
   }
 
   const validRange =
-    Boolean(rangeStartDate) && Boolean(rangeEndDate) && rangeStartDate <= rangeEndDate && params.dailyStartMinute < params.dailyEndMinute
+    Boolean(rangeStartDate) &&
+    Boolean(rangeEndDate) &&
+    rangeStartDate <= rangeEndDate &&
+    params.dailyStartMinute < params.dailyEndMinute &&
+    selectedWeekdays.length > 0
 
   const [plan, venuesResult, courtsResult] = await Promise.all([
     validRange
@@ -129,6 +158,7 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
       <Card className="mb-6 flex flex-col gap-4">
         <CardTitle>Proposal window</CardTitle>
         <form method="get" className="grid gap-4 sm:grid-cols-4">
+          <input type="hidden" name="weekdaySubmitted" value="1" />
           <Field label="From date">
             <Input type="date" name="rangeStart" defaultValue={rangeStartDate} required />
           </Field>
@@ -141,11 +171,30 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
           <Field label="Daily end time">
             <Input type="time" name="dailyEnd" defaultValue={dailyEnd} required />
           </Field>
+          <fieldset className="sm:col-span-4">
+            <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">Active days</legend>
+            <div className="flex flex-wrap gap-3">
+              {WEEKDAY_OPTIONS.map((option) => (
+                <label key={option.value} className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    name="weekday"
+                    value={option.value}
+                    defaultChecked={selectedWeekdays.includes(option.value)}
+                    className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div className="sm:col-span-4">
             <SubmitButton>Generate proposal</SubmitButton>
           </div>
         </form>
-        {!validRange ? (
+        {!validRange && selectedWeekdays.length === 0 ? (
+          <p className="text-sm font-semibold text-gold">Select at least one active day.</p>
+        ) : !validRange ? (
           <p className="text-sm font-semibold text-gold">
             Check the dates and hours above - the end must be after the start.
           </p>

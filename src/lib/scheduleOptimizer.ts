@@ -194,6 +194,10 @@ export type SchedulePlanParams = {
   slotStepMinutes: number
   defaultDurationMinutes: number
   defaultMinRestMinutes: number
+  // MSG-04: which days of the week matches may be placed on - 0 = Sunday ... 6 = Saturday
+  // (JS Date#getDay() convention). Empty/undefined means every day is allowed, so a caller that
+  // doesn't pass this (existing callers, existing tests) keeps its exact prior behavior.
+  allowedWeekdays?: number[]
 }
 
 const MAX_DAYS = 62 // sanity cap so a fat-fingered date range can't spin the slot search forever
@@ -210,14 +214,22 @@ const formatLocalDayKey = (date: Date): string => {
   return `${year}-${month}-${day}`
 }
 
-const dayKeysInRange = (startDate: string, endDate: string): string[] => {
+// MSG-04: `allowedWeekdays` filters which of the scanned calendar days actually produce a key -
+// the MAX_DAYS cap still bounds the number of calendar days *scanned* (not the number of allowed
+// days found), so a narrow weekday filter over a long date range can't silently expand the scan
+// far past MAX_DAYS looking for enough matching days.
+const dayKeysInRange = (startDate: string, endDate: string, allowedWeekdays?: number[]): string[] => {
   const keys: string[] = []
   const cursor = new Date(`${startDate}T00:00:00`)
   const end = new Date(`${endDate}T00:00:00`)
   if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return keys
 
+  const allowedSet = allowedWeekdays && allowedWeekdays.length > 0 ? new Set(allowedWeekdays) : null
+
   for (let i = 0; cursor.getTime() <= end.getTime() && i < MAX_DAYS; i += 1) {
-    keys.push(formatLocalDayKey(cursor))
+    if (!allowedSet || allowedSet.has(cursor.getDay())) {
+      keys.push(formatLocalDayKey(cursor))
+    }
     cursor.setDate(cursor.getDate() + 1)
   }
 
@@ -260,7 +272,7 @@ export const computeSchedulePlan = (input: {
   }
 
   const eligibleCourts = courts.filter((court) => court.is_active !== false)
-  const dayKeys = dayKeysInRange(params.rangeStartDate, params.rangeEndDate)
+  const dayKeys = dayKeysInRange(params.rangeStartDate, params.rangeEndDate, params.allowedWeekdays)
 
   const sortOrder = (a: OptimizerMatch, b: OptimizerMatch) => {
     if (Boolean(a.is_featured) !== Boolean(b.is_featured)) return a.is_featured ? -1 : 1
