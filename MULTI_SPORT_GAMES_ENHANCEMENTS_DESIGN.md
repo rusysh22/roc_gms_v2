@@ -1,6 +1,6 @@
 # Multi-Sport Games Enhancements — Design Draft
 
-**Status:** Draft (belum diimplementasikan)
+**Status:** MSG-01 s.d. MSG-12 sudah diimplementasikan & ter-commit di branch ini (lihat riwayat commit untuk detail per item). Bagian B (MSG-07–12) belum diverifikasi visual/Playwright di lingkungan sesi ini — verifikasi dua-viewport dan `npm run test:e2e` per rencana verifikasi di bawah masih perlu dijalankan sebelum dianggap final.
 **Tanggal:** 4 Agustus 2026
 **Konteks:** Kebutuhan muncul dari sesi konsultasi alur "Kompas Gramedia Cup 2026", tetapi seluruh rancangan di dokumen ini bersifat **generik** untuk semua event multi-cabor bergaya olimpiade/PORSENI/games. Nama event tersebut hanya dipakai sebagai contoh kasus, tidak pernah sebagai asumsi desain.
 
