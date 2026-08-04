@@ -398,7 +398,14 @@ export default async function NewEventWizardPage({
   }
 
   return (
-    <main className="flex min-h-svh flex-col">
+    // Fixed viewport-height shell from `lg:` up (`h-svh overflow-hidden`) so header/stepper/summary
+    // stay put and only the step content scrolls within its own pane below - a lightly-filled step
+    // like Sports & Rulesets then shows with zero scrolling at all, while a data-heavy one (a long
+    // Registration entries table, History's audit log) still scrolls, just inside its own pane
+    // instead of the whole page. Left at the pre-existing `min-h-svh` (page grows and scrolls
+    // normally) below `lg:` - two independently-scrolling panes stacked in one mobile column would
+    // be fiddlier to use than a single normal scroll, not an improvement.
+    <main className="flex min-h-svh flex-col lg:h-svh lg:overflow-hidden">
       <FocusHeader
         backHref="/workspaces/event-admin"
         backLabel="Event Admin"
@@ -422,8 +429,8 @@ export default async function NewEventWizardPage({
         <StepProgress eventId={eventId} current={step} completedSteps={completedSteps} />
       </FocusHeader>
 
-      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
-        <div className="flex min-w-0 flex-col gap-4">
+      <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 px-4 py-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
+        <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
           {wizardError && errorMessages[wizardError] ? (
             <AlertBanner tone="error">{errorMessages[wizardError]}</AlertBanner>
           ) : null}
@@ -515,7 +522,11 @@ export default async function NewEventWizardPage({
           {step === 'history' && event ? <HistoryStep payload={payload} eventId={eventId} /> : null}
         </div>
 
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        {/* No longer `lg:sticky lg:top-24` - that pattern relied on the page itself scrolling
+            past a pinned sidebar. Now that the shell is a fixed-height grid row (see `main` above),
+            the aside is just the row's second column: it stretches to the row's full height by
+            default and scrolls independently if SummaryPanel's own content ever runs long. */}
+        <aside className="lg:min-h-0 lg:overflow-y-auto lg:pl-1">
           <SummaryPanel payload={payload} eventId={eventId} event={event as SummaryEventDoc | null} />
         </aside>
       </div>
