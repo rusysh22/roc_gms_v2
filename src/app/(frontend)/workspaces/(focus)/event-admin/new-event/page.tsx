@@ -817,8 +817,20 @@ const SummaryPanel = async ({
   )
 }
 
-const StepActions = ({ children }: { children: ReactNode }) => (
-  <div className="flex flex-wrap justify-end gap-2">{children}</div>
+// `sticky` is opt-in, not the default: BracketStep renders a StepActions block of secondary
+// nav links (Generate another category / Go to Scheduler / Go to Brackets Workspace) *before*
+// its actual final content (the Publish card), so pinning every StepActions to the bottom would
+// wrongly float that mid-step block over content that comes after it. The 5 "Continue to X"
+// usages are each step's genuine last element - those pass `sticky` explicitly.
+const StepActions = ({ children, sticky = false }: { children: ReactNode; sticky?: boolean }) => (
+  <div
+    className={cn(
+      'flex flex-wrap justify-end gap-2',
+      sticky && 'sticky bottom-0 z-10 border-t border-line bg-mist pb-1 pt-3',
+    )}
+  >
+    {children}
+  </div>
 )
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 1 (option A, full): a curated 4-option subset of
@@ -1190,7 +1202,7 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
         </div>
       </div>
 
-      <StepActions>
+      <StepActions sticky>
         <Button asChild>
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=categories`}>
             Continue to Categories
@@ -1461,7 +1473,7 @@ const CategoriesStep = async ({
         )}
       </Card>
 
-      <StepActions>
+      <StepActions sticky>
         <Button asChild>
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}>
             Continue to Clubs / Teams / Players
@@ -1908,7 +1920,7 @@ const ParticipantsStep = async ({
         </Card>
       ) : null}
 
-      <StepActions>
+      <StepActions sticky>
         <Button asChild>
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration`}>
             Continue to Registration
@@ -2252,7 +2264,7 @@ const RegistrationStep = async ({
         )}
       </Card>
 
-      <StepActions>
+      <StepActions sticky>
         <Button asChild>
           <Link
             href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=draw&categoryId=${selectedCategoryId}`}
@@ -2424,7 +2436,7 @@ const DrawStep = async ({
         )}
       </Card>
 
-      <StepActions>
+      <StepActions sticky>
         <Button asChild>
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate`}>
             Continue to Generate Matches
