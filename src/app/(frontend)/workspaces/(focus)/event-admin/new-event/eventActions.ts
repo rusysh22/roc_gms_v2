@@ -21,6 +21,7 @@ import { slugify, text, wizardPage } from './wizardShared'
 const setupTournamentTypes = new Set(['single_elimination', 'round_robin', 'group_stage_to_knockout', 'league'])
 const setupParticipantModes = new Set(['individual', 'pair', 'team', 'club'])
 const setupParticipantSources = new Set(['manual', 'excel', 'registration_form', 'copy_previous'])
+const setupEventScales = new Set(['single_sport', 'multi_sport'])
 
 const findAvailableSlug = async (payload: Payload, base: string): Promise<string | null> => {
   for (let suffix = 2; suffix <= 50; suffix += 1) {
@@ -47,11 +48,13 @@ export async function createEventAction(formData: FormData): Promise<void> {
   const setupTournamentTypeInput = text(formData, 'setupTournamentType')
   const setupParticipantModeInput = text(formData, 'setupParticipantMode')
   const setupParticipantSourceInput = text(formData, 'setupParticipantSource')
+  const setupEventScaleInput = text(formData, 'setupEventScale')
   const setupTournamentType = setupTournamentTypes.has(setupTournamentTypeInput) ? setupTournamentTypeInput : undefined
   const setupParticipantMode = setupParticipantModes.has(setupParticipantModeInput) ? setupParticipantModeInput : undefined
   const setupParticipantSource = setupParticipantSources.has(setupParticipantSourceInput)
     ? setupParticipantSourceInput
     : undefined
+  const setupEventScale = setupEventScales.has(setupEventScaleInput) ? setupEventScaleInput : undefined
 
   // Failed submissions redirect back with every entered value in the query string so the form can
   // re-populate itself - previously a validation error (or a taken slug) silently wiped the whole
@@ -70,6 +73,7 @@ export async function createEventAction(formData: FormData): Promise<void> {
       setupTournamentType: setupTournamentTypeInput,
       setupParticipantMode: setupParticipantModeInput,
       setupParticipantSource: setupParticipantSourceInput,
+      setupEventScale: setupEventScaleInput,
       ...extra,
     })
     redirect(`${wizardPage}?${query.toString()}`)
@@ -131,6 +135,7 @@ export async function createEventAction(formData: FormData): Promise<void> {
       | 'registration_form'
       | 'copy_previous'
       | undefined,
+    setup_event_scale: setupEventScale as 'single_sport' | 'multi_sport' | undefined,
   }
   const created = await payload.create({ collection: 'events', data })
   await recordAuditLog({

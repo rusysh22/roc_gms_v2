@@ -9,6 +9,7 @@ import {
   Copy,
   FileSpreadsheet,
   GitBranch,
+  Medal,
   PenLine,
   Repeat,
   Trophy,
@@ -468,7 +469,7 @@ export default async function NewEventWizardPage({
             </AlertBanner>
           ) : null}
 
-          {step === 'setup' ? <SetupStep /> : null}
+          {step === 'setup' ? <SetupStep scale={get(params, 'scale')} /> : null}
           {step === 'event' ? (
             <EventStep
               defaultName={get(params, 'name')}
@@ -481,6 +482,7 @@ export default async function NewEventWizardPage({
               defaultSetupTournamentType={get(params, 'setupTournamentType')}
               defaultSetupParticipantMode={get(params, 'setupParticipantMode')}
               defaultSetupParticipantSource={get(params, 'setupParticipantSource')}
+              defaultSetupEventScale={get(params, 'setupEventScale')}
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
@@ -1021,84 +1023,145 @@ const PARTICIPANT_SOURCE_CHOICES = [
 // as hidden inputs in EventStep's form, and only actually persisted (onto Events.setup_*) once
 // the event is created - see eventActions.ts. Fully skippable; skipping preserves every existing
 // default exactly as it was before this step existed.
-const SetupStep = () => (
-  <Card className="flex flex-col gap-6">
-    <div>
-      <CardTitle>{stepNumber('setup')}. Setup Assistant</CardTitle>
-      <p className="mt-1 text-sm text-ink-soft">
-        Answer a couple of quick questions and we&apos;ll pre-fill the format and participant type
-        choices in later steps. Everything here stays fully editable - skip it if you&apos;d
-        rather decide as you go.
-      </p>
-    </div>
-    <form method="get" action="/workspaces/event-admin/new-event" className="flex flex-col gap-6">
-      <input type="hidden" name="step" value="event" />
-      <fieldset>
-        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
-          What kind of tournament is this?
-        </legend>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {TOURNAMENT_TYPE_CHOICES.map(({ value, label, helper, Icon }) => (
-            <label
-              key={value}
-              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
-            >
-              <input type="radio" name="setupTournamentType" value={value} className="sr-only" />
-              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
-              <span className="text-sm font-bold text-ink">{label}</span>
-              <span className="text-xs text-ink-soft">{helper}</span>
-            </label>
-          ))}
+// MSG-12: the assistant's first question used to be "what kind of tournament is this?", asked
+// once at the event level - honest for a single-sport event, but not for a multi-sport one, where
+// the real answer is "depends which category" (futsal is a group-stage-to-knockout team event,
+// badminton singles is a straight knockout individual event, ...). "How big is your event?" is
+// always answerable regardless, so it's the actual first question now. The old "who's competing?"
+// question is gone entirely - MSG-07's catalog picker derives participant mode per category from
+// what's actually being run, so asking for one event-wide answer here had already stopped being
+// useful once that shipped.
+const EVENT_SCALE_CHOICES = [
+  {
+    value: 'single_sport',
+    label: 'Single sport',
+    helper: 'One sport, one or more categories within it.',
+    Icon: Trophy,
+  },
+  {
+    value: 'multi_sport',
+    label: 'Multi-sport',
+    helper: 'Several sports, each with its own categories.',
+    Icon: Medal,
+  },
+] as const
+
+const SetupStep = ({ scale }: { scale?: string }) => {
+  if (scale !== 'single_sport' && scale !== 'multi_sport') {
+    return (
+      <Card className="flex flex-col gap-6">
+        <div>
+          <CardTitle>{stepNumber('setup')}. Setup Assistant</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            Answer a couple of quick questions and we&apos;ll pre-fill choices in later steps.
+            Everything here stays fully editable - skip it if you&apos;d rather decide as you go.
+          </p>
         </div>
-      </fieldset>
-      <fieldset>
-        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
-          Who&apos;s competing?
-        </legend>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {PARTICIPANT_MODE_CHOICES.map(({ value, label, helper, Icon }) => (
-            <label
-              key={value}
-              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
-            >
-              <input type="radio" name="setupParticipantMode" value={value} className="sr-only" />
-              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
-              <span className="text-sm font-bold text-ink">{label}</span>
-              <span className="text-xs text-ink-soft">{helper}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
-          Where does your participant data live right now?
-        </legend>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {PARTICIPANT_SOURCE_CHOICES.map(({ value, label, helper, Icon }) => (
-            <label
-              key={value}
-              className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
-            >
-              <input type="radio" name="setupParticipantSource" value={value} className="sr-only" />
-              <Icon className="h-5 w-5 text-green" aria-hidden="true" />
-              <span className="text-sm font-bold text-ink">{label}</span>
-              <span className="text-xs text-ink-soft">{helper}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton>Continue</SubmitButton>
+        <fieldset>
+          <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+            How big is your event?
+          </legend>
+          <div className="grid grid-cols-2 gap-3">
+            {EVENT_SCALE_CHOICES.map(({ value, label, helper, Icon }) => (
+              <Link
+                key={value}
+                href={`/workspaces/event-admin/new-event?step=setup&scale=${value}`}
+                className="flex flex-col gap-2 rounded-card border border-line bg-paper p-3 no-underline transition-colors hover:border-green hover:bg-mist"
+              >
+                <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+                <span className="text-sm font-bold text-ink">{label}</span>
+                <span className="text-xs text-ink-soft">{helper}</span>
+              </Link>
+            ))}
+          </div>
+        </fieldset>
         <Link
           href="/workspaces/event-admin/new-event?step=event"
           className="text-sm font-bold text-ink-soft underline underline-offset-2 hover:text-ink"
         >
           Skip for now
         </Link>
+      </Card>
+    )
+  }
+
+  const isMultiSport = scale === 'multi_sport'
+
+  return (
+    <Card className="flex flex-col gap-6">
+      <div>
+        <CardTitle>{stepNumber('setup')}. Setup Assistant</CardTitle>
+        <p className="mt-1 text-sm text-ink-soft">
+          Answer a couple of quick questions and we&apos;ll pre-fill choices in later steps.
+          Everything here stays fully editable - skip it if you&apos;d rather decide as you go.
+        </p>
       </div>
-    </form>
-  </Card>
-)
+      <form method="get" action="/workspaces/event-admin/new-event" className="flex flex-col gap-6">
+        <input type="hidden" name="step" value="event" />
+        <input type="hidden" name="setupEventScale" value={scale} />
+        <fieldset>
+          <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+            {isMultiSport
+              ? "What format do you use most often? (You'll set this per sport next.)"
+              : 'What kind of tournament is this?'}
+          </legend>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {TOURNAMENT_TYPE_CHOICES.map(({ value, label, helper, Icon }) => (
+              <label
+                key={value}
+                className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+              >
+                <input type="radio" name="setupTournamentType" value={value} className="sr-only" />
+                <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+                <span className="text-sm font-bold text-ink">{label}</span>
+                <span className="text-xs text-ink-soft">{helper}</span>
+              </label>
+            ))}
+          </div>
+          {isMultiSport ? (
+            <p className="mt-2 text-xs text-ink-soft">
+              This is just a starting point - the catalog in the next step lets you pick a
+              different format for any sport.
+            </p>
+          ) : null}
+        </fieldset>
+        <fieldset>
+          <legend className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+            Where does your participant data live right now?
+          </legend>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {PARTICIPANT_SOURCE_CHOICES.map(({ value, label, helper, Icon }) => (
+              <label
+                key={value}
+                className="flex cursor-pointer flex-col gap-2 rounded-card border border-line bg-paper p-3 transition-colors has-[:checked]:border-green has-[:checked]:bg-mist has-[:checked]:ring-2 has-[:checked]:ring-green/20"
+              >
+                <input type="radio" name="setupParticipantSource" value={value} className="sr-only" />
+                <Icon className="h-5 w-5 text-green" aria-hidden="true" />
+                <span className="text-sm font-bold text-ink">{label}</span>
+                <span className="text-xs text-ink-soft">{helper}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="flex flex-wrap items-center gap-3">
+          <SubmitButton>Continue</SubmitButton>
+          <Link
+            href="/workspaces/event-admin/new-event?step=setup"
+            className="text-sm font-bold text-ink-soft underline underline-offset-2 hover:text-ink"
+          >
+            Back
+          </Link>
+          <Link
+            href="/workspaces/event-admin/new-event?step=event"
+            className="text-sm font-bold text-ink-soft underline underline-offset-2 hover:text-ink"
+          >
+            Skip for now
+          </Link>
+        </div>
+      </form>
+    </Card>
+  )
+}
 
 const EventStep = ({
   defaultName,
@@ -1111,6 +1174,7 @@ const EventStep = ({
   defaultSetupTournamentType,
   defaultSetupParticipantMode,
   defaultSetupParticipantSource,
+  defaultSetupEventScale,
 }: {
   defaultName: string
   defaultSlug: string
@@ -1122,6 +1186,7 @@ const EventStep = ({
   defaultSetupTournamentType: string
   defaultSetupParticipantMode: string
   defaultSetupParticipantSource: string
+  defaultSetupEventScale: string
 }) => (
   <Card className="flex flex-col gap-4">
     <div>
@@ -1140,6 +1205,7 @@ const EventStep = ({
         <input type="hidden" name="setupTournamentType" value={defaultSetupTournamentType} />
         <input type="hidden" name="setupParticipantMode" value={defaultSetupParticipantMode} />
         <input type="hidden" name="setupParticipantSource" value={defaultSetupParticipantSource} />
+        <input type="hidden" name="setupEventScale" value={defaultSetupEventScale} />
         <EventNameSlugFields
           defaultName={defaultName}
           defaultSlug={defaultSlug}

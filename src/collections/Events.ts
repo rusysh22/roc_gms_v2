@@ -195,6 +195,22 @@ export const Events: CollectionConfig = {
       ],
     },
     {
+      // MSG-12: added so the Setup Assistant's first question can be "how big is your event"
+      // (always answerable) instead of a single tournament format/participant mode that a
+      // multi-sport event can't honestly answer at the event level - see SetupStep. Purely a
+      // pre-fill signal, like the other setup_* fields; never read by anything outside the wizard.
+      name: 'setup_event_scale',
+      type: 'select',
+      admin: {
+        description:
+          'Set by the wizard\'s Setup Assistant (Step 0) - whether the organizer described this as a single-sport or multi-sport event. Changes the wording of the format question that follows. Optional; leave empty if skipped.',
+      },
+      options: [
+        { label: 'Single sport', value: 'single_sport' },
+        { label: 'Multi-sport', value: 'multi_sport' },
+      ],
+    },
+    {
       type: 'row',
       fields: [
         {
@@ -212,11 +228,17 @@ export const Events: CollectionConfig = {
           ],
         },
         {
+          // MSG-12: the question that fills this is no longer asked in the Setup Assistant (MSG-07
+          // moved "who's competing" to the per-category catalog picker, where it belongs - a
+          // multi-sport event's participant mode genuinely varies by category, so one event-level
+          // answer was never honest for it). The field itself stays, and CategoriesStep still reads
+          // it for pre-fill, so an event that answered this before MSG-12 shipped keeps behaving
+          // exactly as it did - removing the field would be a migration with no upside.
           name: 'setup_participant_mode',
           type: 'select',
           admin: {
             description:
-              'Set by the wizard\'s Setup Assistant (Step 0) - pre-selects the Categories step\'s "who\'s competing" choice card. Optional; leave empty if skipped.',
+              'No longer asked in the Setup Assistant as of MSG-12 (multi-sport events can\'t answer it honestly at the event level - see setup_event_scale). Still read for pre-fill by any event that answered it before then.',
           },
           options: [
             { label: 'Individual player', value: 'individual' },
