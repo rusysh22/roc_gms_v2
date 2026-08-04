@@ -573,7 +573,7 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
 
   // AUDIT_E2E RULE-01: the ruleset's target_score/max_score/deuce_enabled/allow_draw were
   // previously never read at all - any score plus any winner selection was accepted outright.
-  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const ruleset = await loadRulesetForMatch(payload, { categoryId: match.category_id, stageId: match.stage_id })
   const scoreValidation = validateSetScore({
     ruleset,
     participantAScore,
@@ -681,7 +681,7 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
 
   // AUDIT_E2E RULE-01: best_of previously had no effect at all - a best-of-3 match could keep
   // accumulating a 4th, 5th, ... set indefinitely even after one side had already clinched it.
-  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const ruleset = await loadRulesetForMatch(payload, { categoryId: match.category_id, stageId: match.stage_id })
   const winsA = countSetWinsForSide(existingSetDocs, match.participant_a_entry_id)
   const winsB = countSetWinsForSide(existingSetDocs, match.participant_b_entry_id)
   if (isBestOfAlreadyDecided(ruleset?.best_of, winsA, winsB)) {
@@ -941,7 +941,7 @@ export async function applyLiveScorePoint({
     return { ok: false, error: 'invalid_request' }
   }
 
-  const ruleset = await loadRulesetForMatch(payload, match.category_id)
+  const ruleset = await loadRulesetForMatch(payload, { categoryId: match.category_id, stageId: match.stage_id })
   const column = side === 'a' ? 'participant_a_score' : 'participant_b_score'
   const maxScore = ruleset?.max_score
 

@@ -136,8 +136,8 @@ describe('computeSchedulePlan', () => {
     ]
     const courts = [court({ id: 10 }), court({ id: 11 })]
     const rulesets = new Map<string, CategoryRulesetInfo>([
-      ['1', { minRestMinutes: 60 }],
-      ['2', { minRestMinutes: 60 }],
+      ['category:1', { minRestMinutes: 60 }],
+      ['category:2', { minRestMinutes: 60 }],
     ])
 
     const plan = computeSchedulePlan({
@@ -156,6 +156,39 @@ describe('computeSchedulePlan', () => {
     expect(gapMinutes).toBeGreaterThanOrEqual(60)
   })
 
+  // MSG-03: a stage-level ruleset override (e.g. a knockout stage's best-of-5 running longer than
+  // its category's best-of-3 group stage) must win over the category-level default - this is what
+  // resolveRulesetInfo's stage-key-first lookup exists for.
+  it('uses a stage-level ruleset override duration in preference to the category default', () => {
+    const candidates = [
+      match({ id: 1, match_number: 'M1', category_id: 1, stage_id: 100 }),
+      match({ id: 2, match_number: 'M2', category_id: 1, stage_id: 200 }),
+    ]
+    const courts = [court({ id: 10 })]
+    const rulesets = new Map<string, CategoryRulesetInfo>([
+      ['category:1', { defaultDurationMinutes: 30 }],
+      ['stage:200', { defaultDurationMinutes: 90 }],
+    ])
+
+    const plan = computeSchedulePlan({
+      candidates,
+      courts,
+      rosterIndex: emptyRoster,
+      categoryRulesets: rulesets,
+      existingCourtOccupancy: new Map(),
+      existingIdentityOccupancy: new Map(),
+      params: baseParams,
+    })
+
+    expect(plan.assignments).toHaveLength(2)
+    const withoutOverride = plan.assignments.find((a) => a.matchId === 1)!
+    const withOverride = plan.assignments.find((a) => a.matchId === 2)!
+    const durationWithout = (new Date(withoutOverride.endAt).getTime() - new Date(withoutOverride.startAt).getTime()) / 60000
+    const durationWith = (new Date(withOverride.endAt).getTime() - new Date(withOverride.startAt).getTime()) / 60000
+    expect(durationWithout).toBe(30)
+    expect(durationWith).toBe(90)
+  })
+
   it('recognizes a shared roster player between an individual entry and a team entry (the core cross-category identity fix)', () => {
     const rosterIndex: RosterIndex = new Map([['700', ['501']]])
     const individualEntry = entry(1, 'individual', { player_id: 501 })
@@ -166,8 +199,8 @@ describe('computeSchedulePlan', () => {
     ]
     const courts = [court({ id: 10 }), court({ id: 11 })]
     const rulesets = new Map<string, CategoryRulesetInfo>([
-      ['1', { minRestMinutes: 45 }],
-      ['2', { minRestMinutes: 45 }],
+      ['category:1', { minRestMinutes: 45 }],
+      ['category:2', { minRestMinutes: 45 }],
     ])
 
     const plan = computeSchedulePlan({
@@ -197,8 +230,8 @@ describe('computeSchedulePlan', () => {
     ]
     const courts = [court({ id: 10 }), court({ id: 11 })]
     const rulesets = new Map<string, CategoryRulesetInfo>([
-      ['1', { minRestMinutes: 60 }],
-      ['2', { minRestMinutes: 60 }],
+      ['category:1', { minRestMinutes: 60 }],
+      ['category:2', { minRestMinutes: 60 }],
     ])
 
     const plan = computeSchedulePlan({

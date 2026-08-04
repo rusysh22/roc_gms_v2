@@ -108,14 +108,29 @@ export const isBestOfAlreadyDecided = (
   return winsA >= neededWins || winsB >= neededWins
 }
 
-/** Resolves the ruleset that applies to a match via match.category_id -> category.ruleset_id.
- * Returns null (not an error) when the category has no ruleset assigned - callers should treat a
+/** Resolves the ruleset that applies to a match: the match's stage's own ruleset_id if set
+ * (MSG-03's per-stage override - e.g. best-of-3 group matches, best-of-5 semifinal/final within
+ * the same category), otherwise falling back to match.category_id -> category.ruleset_id.
+ * Returns null (not an error) when neither has a ruleset assigned - callers should treat a
  * missing ruleset as "no extra constraints", not as a validation failure, since not every category
- * requires one (e.g. score_type: 'result' friendlies). */
+ * requires one (e.g. score_type: 'result' friendlies). Takes { categoryId, stageId } rather than a
+ * bare categoryId (its previous signature) so a caller can never accidentally skip the stage-level
+ * override by forgetting to pass it - every call site is forced to supply both. */
 export const loadRulesetForMatch = async (
   payload: Payload,
-  categoryId: string | number | null | undefined,
+  { categoryId, stageId }: { categoryId: string | number | null | undefined; stageId: string | number | null | undefined },
 ): Promise<RulesetSummary | null> => {
+  if (stageId) {
+    const stage = await payload.findByID({ collection: 'stages', id: stageId, depth: 0 }).catch(() => null)
+    const stageRulesetId = stage ? getRelationId(stage.ruleset_id) : undefined
+    if (stageRulesetId) {
+      const stageRuleset = await payload.findByID({ collection: 'rulesets', id: stageRulesetId, depth: 0 }).catch(() => null)
+      if (stageRuleset) {
+        return stageRuleset as RulesetSummary
+      }
+    }
+  }
+
   if (!categoryId) {
     return null
   }

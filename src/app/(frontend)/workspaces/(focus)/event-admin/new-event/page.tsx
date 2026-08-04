@@ -63,7 +63,7 @@ import {
   previewParticipantsImportAction,
 } from './participantActions'
 import { addEntriesAction, shuffleSeedsAction, withdrawEntryAction } from './entriesSeedActions'
-import { generateMatchesAction } from './generateActions'
+import { generateMatchesAction, setStageRulesetOverrideAction } from './generateActions'
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
 import { UnsavedChangesGuard } from './UnsavedChangesGuard'
@@ -2768,6 +2768,21 @@ const BracketStep = async ({
     stage = groupStageResult.docs[0]
   }
 
+  // MSG-03: scoped to the category's own sport, matching CategoriesStep's ruleset picker - a
+  // stage override from a different sport's ruleset would silently apply that sport's scoring
+  // fields (best_of, target_score, ...) to matches of this one.
+  const rulesetOptions = category
+    ? (
+        await payload.find({
+          collection: 'rulesets',
+          depth: 0,
+          limit: 200,
+          where: { and: [{ event_id: { equals: eventId } }, { sport_id: { equals: category.sport_id } }] },
+          sort: 'name',
+        })
+      ).docs
+    : []
+
   return (
     <>
       <div className="flex flex-col gap-3">
@@ -2806,6 +2821,35 @@ const BracketStep = async ({
           </AlertBanner>
         ) : null}
       </div>
+
+      {stage && category ? (
+        <Card className="flex flex-col gap-3">
+          <div>
+            <CardTitle>
+              <GlossaryHint
+                term="Ruleset for this stage"
+                definition='Leave as "Inherit from category" unless this stage needs different rules than the rest of the category - e.g. best-of-3 in the group stage but best-of-5 in the semifinal/final (MSG-03).'
+              />
+            </CardTitle>
+          </div>
+          <form action={setStageRulesetOverrideAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="categoryId" value={selectedCategoryId} />
+            <input type="hidden" name="stageId" value={String(stage.id)} />
+            <Field label="Ruleset" className="min-w-[240px] flex-1">
+              <Select name="rulesetId" defaultValue={String(getRelationshipId(stage.ruleset_id as RelationshipDoc) || '')}>
+                <option value="">Inherit from category</option>
+                {rulesetOptions.map((ruleset) => (
+                  <option key={ruleset.id} value={ruleset.id}>
+                    {ruleset.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <SubmitButton variant="secondary">Save</SubmitButton>
+          </form>
+        </Card>
+      ) : null}
 
       {!stage ? (
         <Card>

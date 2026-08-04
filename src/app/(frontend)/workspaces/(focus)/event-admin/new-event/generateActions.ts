@@ -252,3 +252,42 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
     `${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardGenerated=${createdCount}${failedParam}`,
   )
 }
+
+// MSG-03: sets or clears a stage's ruleset override. Empty rulesetId clears it back to "inherit
+// from category" (Stages.ruleset_id is optional) rather than being rejected as invalid input.
+export async function setStageRulesetOverrideAction(formData: FormData): Promise<void> {
+  const { payload } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const stageId = text(formData, 'stageId')
+  const rulesetId = text(formData, 'rulesetId')
+
+  if (!stageId) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardError=invalid_request`)
+  }
+
+  const stage = await payload.findByID({ collection: 'stages', id: stageId, depth: 0 }).catch(() => null)
+  if (!stage || String(stage.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardError=invalid_relationship`)
+  }
+
+  if (rulesetId) {
+    const ruleset = await payload.findByID({ collection: 'rulesets', id: rulesetId, depth: 0 }).catch(() => null)
+    if (!ruleset || String(ruleset.event_id) !== String(eventId)) {
+      redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardError=invalid_relationship`)
+    }
+  }
+
+  await payload.update({
+    collection: 'stages',
+    id: stageId,
+    data: { ruleset_id: rulesetId ? Number(rulesetId) : null },
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardUpdated=1`)
+}

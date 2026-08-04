@@ -36,6 +36,12 @@ export type OptimizerMatch = {
   is_featured?: boolean | null
   sport_id?: RelationshipDoc | Id | null
   category_id?: RelationshipDoc | Id | null
+  // MSG-03: needed to look up a per-stage ruleset override (e.g. a knockout stage's best-of-5
+  // overriding its category's best-of-3 default) - without this, computeSchedulePlan/
+  // buildExistingOccupancy can only ever see the category-level duration/rest, silently ignoring
+  // any stage override even though loadRulesetForMatch (src/lib/ruleValidation.ts) already applies
+  // it for score validation.
+  stage_id?: RelationshipDoc | Id | null
   scheduled_start_at?: string | null
   scheduled_end_at?: string | null
   venue_id?: RelationshipDoc | Id | null
@@ -60,6 +66,25 @@ export type OptimizerCourt = {
 export type CategoryRulesetInfo = {
   defaultDurationMinutes?: number
   minRestMinutes?: number
+}
+
+// MSG-03: buildCategoryRulesetIndex keys entries as `category:<id>` and `stage:<id>` in the same
+// map (a stage entry only exists when that stage has its own ruleset_id override) - this resolves
+// a match's effective info by checking its stage key first, falling back to its category key,
+// mirroring loadRulesetForMatch's own stage-then-category resolution order exactly.
+const resolveRulesetInfo = (
+  rulesetIndex: Map<string, CategoryRulesetInfo>,
+  categoryId: string | undefined,
+  stageId: string | undefined,
+): CategoryRulesetInfo => {
+  if (stageId) {
+    const stageInfo = rulesetIndex.get(`stage:${stageId}`)
+    if (stageInfo) return stageInfo
+  }
+  if (categoryId) {
+    return rulesetIndex.get(`category:${categoryId}`) || {}
+  }
+  return {}
 }
 
 // team_id (stringified) -> active roster player_ids (stringified). Built by the caller from the
@@ -292,7 +317,8 @@ export const computeSchedulePlan = (input: {
 
       const sportId = getRelationshipId(match.sport_id)
       const categoryId = getRelationshipId(match.category_id)
-      const rulesetInfo = (categoryId && categoryRulesets.get(categoryId)) || {}
+      const stageId = getRelationshipId(match.stage_id)
+      const rulesetInfo = resolveRulesetInfo(categoryRulesets, categoryId, stageId)
       const durationMinutes = rulesetInfo.defaultDurationMinutes || params.defaultDurationMinutes
       const restMinutes = rulesetInfo.minRestMinutes ?? params.defaultMinRestMinutes
       const durationMs = durationMinutes * 60_000
@@ -391,18 +417,37 @@ export const computeSchedulePlan = (input: {
 }
 
 export const buildCategoryRulesetIndex = async (payload: Payload, eventId: Id): Promise<Map<string, CategoryRulesetInfo>> => {
-  const categories = await payload.find({
-    collection: 'competition-categories',
-    depth: 1,
-    limit: 500,
-    where: { event_id: { equals: eventId } },
-  })
+  const [categories, stages] = await Promise.all([
+    payload.find({
+      collection: 'competition-categories',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+    }),
+    payload.find({
+      collection: 'stages',
+      depth: 1,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+    }),
+  ])
 
   const index = new Map<string, CategoryRulesetInfo>()
   for (const category of categories.docs) {
     const ruleset = category.ruleset_id
     if (ruleset && typeof ruleset === 'object') {
-      index.set(String(category.id), {
+      index.set(`category:${category.id}`, {
+        defaultDurationMinutes: ruleset.default_duration_minutes ?? undefined,
+        minRestMinutes: ruleset.min_rest_minutes ?? undefined,
+      })
+    }
+  }
+  // MSG-03: only present when the stage has its own override - resolveRulesetInfo checks this key
+  // first and falls back to the category key above when it's absent.
+  for (const stage of stages.docs) {
+    const ruleset = stage.ruleset_id
+    if (ruleset && typeof ruleset === 'object') {
+      index.set(`stage:${stage.id}`, {
         defaultDurationMinutes: ruleset.default_duration_minutes ?? undefined,
         minRestMinutes: ruleset.min_rest_minutes ?? undefined,
       })
@@ -436,7 +481,8 @@ export const buildExistingOccupancy = (
     }
 
     const categoryId = getRelationshipId(match.category_id)
-    const restMinutes = (categoryId ? categoryRulesets.get(categoryId)?.minRestMinutes : undefined) ?? defaultMinRestMinutes
+    const stageId = getRelationshipId(match.stage_id)
+    const restMinutes = resolveRulesetInfo(categoryRulesets, categoryId, stageId).minRestMinutes ?? defaultMinRestMinutes
     const identities = new Set<string>([
       ...getExpandedIdentities(match.participant_a_entry_id, rosterIndex),
       ...getExpandedIdentities(match.participant_b_entry_id, rosterIndex),

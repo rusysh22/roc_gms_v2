@@ -74,6 +74,15 @@ export const Stages: CollectionConfig = {
         { label: 'Archived', value: 'archived' },
       ],
     },
+    {
+      name: 'ruleset_id',
+      type: 'relationship',
+      relationTo: 'rulesets',
+      admin: {
+        description:
+          'MSG-03: optional per-stage override. Leave empty to inherit the category\'s ruleset - e.g. best-of-3 group matches, best-of-5 semifinal/final. See src/lib/ruleValidation.ts\'s loadRulesetForMatch for resolution order.',
+      },
+    },
   ],
   timestamps: true,
 }
