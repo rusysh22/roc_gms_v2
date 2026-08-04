@@ -505,7 +505,7 @@ export default async function NewEventWizardPage({
               importSkipped={get(params, 'wizardImportSkipped')}
               importIssues={get(params, 'wizardImportIssues')}
               importMoreIssues={get(params, 'wizardImportMoreIssues')}
-              importPreviewMediaId={get(params, 'importPreviewMediaId')}
+              importPreviewFile={get(params, 'importPreviewFile')}
               importPreviewClubs={get(params, 'importPreviewClubs')}
               importPreviewTeams={get(params, 'importPreviewTeams')}
               importPreviewPlayers={get(params, 'importPreviewPlayers')}
@@ -1831,7 +1831,7 @@ const ParticipantsStep = async ({
   importSkipped,
   importIssues,
   importMoreIssues,
-  importPreviewMediaId,
+  importPreviewFile,
   importPreviewClubs,
   importPreviewTeams,
   importPreviewPlayers,
@@ -1847,7 +1847,7 @@ const ParticipantsStep = async ({
   importSkipped?: string
   importIssues?: string
   importMoreIssues?: string
-  importPreviewMediaId?: string
+  importPreviewFile?: string
   importPreviewClubs?: string
   importPreviewTeams?: string
   importPreviewPlayers?: string
@@ -1997,7 +1997,7 @@ const ParticipantsStep = async ({
       {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 2 gap-fill: "belum ada preview mapping yang
           menjawab apakah satu row menjadi club, team, player, roster, atau entry" - shows exactly
           that before anything is written, instead of committing the instant a file is chosen. */}
-      {importPreviewMediaId ? (
+      {importPreviewFile ? (
         <Card className="flex flex-col gap-4 border-gold">
           <div>
             <CardTitle>Review import before confirming</CardTitle>
@@ -2047,12 +2047,12 @@ const ParticipantsStep = async ({
           <div className="flex flex-wrap gap-3">
             <form action={confirmParticipantsImportAction}>
               <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="mediaId" value={importPreviewMediaId} />
+              <input type="hidden" name="scratchFile" value={importPreviewFile} />
               <SubmitButton>Confirm &amp; import</SubmitButton>
             </form>
             <form action={cancelParticipantsImportAction}>
               <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="mediaId" value={importPreviewMediaId} />
+              <input type="hidden" name="scratchFile" value={importPreviewFile} />
               <SubmitButton variant="secondary">Cancel</SubmitButton>
             </form>
           </div>

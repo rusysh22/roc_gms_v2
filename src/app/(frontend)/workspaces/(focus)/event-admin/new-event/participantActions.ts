@@ -1,5 +1,6 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { revalidatePath } from 'next/cache'
@@ -229,11 +230,20 @@ export async function addPairAction(formData: FormData): Promise<void> {
 
 const validGenders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
-// Local-disk media storage (see payload.config.ts's Media collection: staticDir under
-// media/content) - reading a previously-uploaded file's bytes back is just a filesystem read.
-// The preview step uploads here as scratch storage rather than committing anything yet;
-// confirm re-reads and deletes it, cancel just deletes it.
-const MEDIA_DIR = path.resolve(process.cwd(), 'media/content')
+// Bare filesystem scratch storage - NOT the Media collection. Media enforces "this must be a real,
+// decodable image" (validateMediaUpload/validateImageBuffer in src/collections/Media.ts) at the
+// collection boundary, which an .xlsx workbook can never satisfy; routing the preview upload
+// through Media used to fail every import with "File could not be read as a valid image." before
+// a single row was ever parsed. The preview step writes here as scratch storage rather than
+// committing anything yet; confirm re-reads and deletes it, cancel just deletes it. The filename
+// is a server-generated UUID threaded back through the page as a plain query param - validated
+// against SCRATCH_FILENAME_PATTERN before ever touching the filesystem again, since at that point
+// it's client-controlled input and a forged value must not be able to path-traverse out of this
+// directory.
+const SCRATCH_DIR = path.resolve(process.cwd(), 'media/import-scratch')
+const SCRATCH_FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.xlsx$/
+const scratchFilePath = (filename: string): string | null =>
+  SCRATCH_FILENAME_PATTERN.test(filename) ? path.join(SCRATCH_DIR, filename) : null
 
 const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedParticipantsWorkbook | null> => {
   if (!(file instanceof File) || file.size === 0) {
@@ -274,9 +284,9 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     limit: 1000,
     where: { event_id: { equals: eventId } },
   })
-  const knownEmployeeIds = new Set(
+  const knownIdentificationNumbers = new Set(
     existingPlayers.docs
-      .map((player) => (player.employee_id ? String(player.employee_id).trim().toLowerCase() : ''))
+      .map((player) => (player.identification_number ? String(player.identification_number).trim().toLowerCase() : ''))
       .filter(Boolean),
   )
 
@@ -326,13 +336,13 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   }
 
   for (const row of parsed.players) {
-    const employeeIdKey = row.employeeId ? row.employeeId.trim().toLowerCase() : ''
-    if (employeeIdKey && knownEmployeeIds.has(employeeIdKey)) {
-      skip('Players', row.name, `Employee ID "${row.employeeId}" is already used in this event`)
+    const identificationNumberKey = row.identificationNumber ? row.identificationNumber.trim().toLowerCase() : ''
+    if (identificationNumberKey && knownIdentificationNumbers.has(identificationNumberKey)) {
+      skip('Players', row.name, `Identification number "${row.identificationNumber}" is already used in this event`)
       continue
     }
-    if (employeeIdKey) {
-      knownEmployeeIds.add(employeeIdKey)
+    if (identificationNumberKey) {
+      knownIdentificationNumbers.add(identificationNumberKey)
     }
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Players', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
@@ -381,16 +391,14 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
   const plan = await planParticipantsImport(payload, eventId, parsed)
   // Scratch storage only - not a real event asset, deleted by confirm/cancel. Re-uploading (not
   // trying to preserve the original File object) is the only option since a File can't survive a
-  // redirect/second form submission; local-disk media storage makes re-reading it back cheap.
-  const media = await payload.create({
-    collection: 'media',
-    data: { alt: 'participants-import-preview (temporary)' },
-    file: { data: buffer, mimetype: file.type || 'application/octet-stream', name: file.name, size: file.size },
-  })
+  // redirect/second form submission; a plain filesystem write makes re-reading it back cheap.
+  const scratchFilename = `${randomUUID()}.xlsx`
+  await fs.mkdir(SCRATCH_DIR, { recursive: true })
+  await fs.writeFile(path.join(SCRATCH_DIR, scratchFilename), buffer)
 
   const { issuesParam, moreIssues } = encodeIssues(plan.issues)
   redirect(
-    `${wizardPage}?eventId=${eventId}&step=participants&importPreviewMediaId=${media.id}` +
+    `${wizardPage}?eventId=${eventId}&step=participants&importPreviewFile=${scratchFilename}` +
       `&importPreviewClubs=${plan.clubsToCreate}&importPreviewTeams=${plan.teamsToCreate}&importPreviewPlayers=${plan.playersToCreate}` +
       (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : '') +
       (issuesParam ? `&importPreviewIssues=${issuesParam}` : '') +
@@ -399,15 +407,16 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
 }
 
 export async function cancelParticipantsImportAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
 
   const eventId = text(formData, 'eventId')
-  const mediaId = text(formData, 'mediaId')
-  if (mediaId) {
-    await payload.delete({ collection: 'media', id: mediaId }).catch(() => {})
+  const scratchFile = text(formData, 'scratchFile')
+  const filePath = scratchFile ? scratchFilePath(scratchFile) : null
+  if (filePath) {
+    await fs.unlink(filePath).catch(() => {})
   }
 
   redirect(`${wizardPage}?eventId=${eventId}&step=participants`)
@@ -420,23 +429,19 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   })
 
   const eventId = text(formData, 'eventId')
-  const mediaId = text(formData, 'mediaId')
+  const scratchFile = text(formData, 'scratchFile')
   const event = await getWizardEvent(payload, eventId)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
-  if (!mediaId) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
-  }
-
-  const media = await payload.findByID({ collection: 'media', id: mediaId, depth: 0 }).catch(() => null)
-  if (!media?.filename) {
+  const filePath = scratchFile ? scratchFilePath(scratchFile) : null
+  if (!filePath) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
   let parsed
   try {
-    const buffer = await fs.readFile(path.join(MEDIA_DIR, media!.filename!))
+    const buffer = await fs.readFile(filePath!)
     parsed = parseParticipantsWorkbook(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength))
   } catch {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
@@ -458,9 +463,9 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     limit: 1000,
     where: { event_id: { equals: eventId } },
   })
-  const knownEmployeeIds = new Set(
+  const knownIdentificationNumbers = new Set(
     existingPlayers.docs
-      .map((player) => (player.employee_id ? String(player.employee_id).trim().toLowerCase() : ''))
+      .map((player) => (player.identification_number ? String(player.identification_number).trim().toLowerCase() : ''))
       .filter(Boolean),
   )
 
@@ -552,9 +557,9 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   }
 
   for (const row of parsed.players) {
-    const employeeIdKey = row.employeeId ? row.employeeId.trim().toLowerCase() : ''
-    if (employeeIdKey && knownEmployeeIds.has(employeeIdKey)) {
-      skip('Players', row.name, `Employee ID "${row.employeeId}" is already used in this event`)
+    const identificationNumberKey = row.identificationNumber ? row.identificationNumber.trim().toLowerCase() : ''
+    if (identificationNumberKey && knownIdentificationNumbers.has(identificationNumberKey)) {
+      skip('Players', row.name, `Identification number "${row.identificationNumber}" is already used in this event`)
       continue
     }
     try {
@@ -574,17 +579,17 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         name: row.name,
         email: row.email,
         gender,
-        employee_id: row.employeeId,
+        identification_number: row.identificationNumber,
         photo: row.photo,
       }
       await payload.create({ collection: 'players', data })
-      if (employeeIdKey) {
-        knownEmployeeIds.add(employeeIdKey)
+      if (identificationNumberKey) {
+        knownIdentificationNumbers.add(identificationNumberKey)
       }
       created += 1
     } catch {
-      // Falls through here mainly if the unique (event_id, employee_id) DB index is hit despite
-      // the in-memory check above - e.g. a concurrent import into the same event.
+      // Falls through here mainly if the unique (event_id, identification_number) DB index is hit
+      // despite the in-memory check above - e.g. a concurrent import into the same event.
       skip('Players', row.name, 'Could not save (unexpected error)')
     }
   }
@@ -608,7 +613,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
 
   // Scratch upload only - the real data now lives in clubs/teams/players, this file has served
   // its purpose.
-  await payload.delete({ collection: 'media', id: mediaId }).catch(() => {})
+  await fs.unlink(filePath!).catch(() => {})
 
   revalidatePath(wizardPage)
   const { issuesParam, moreIssues } = encodeIssues(issues)
