@@ -199,6 +199,11 @@ const recalculateResultCachesBestEffort = async ({
             target_match_number: advancement.targetMatchNumber,
             target_slot: advancement.targetSlot,
             advanced: advancement.advanced,
+            // MSG-01: present only when this match is a semifinal wired to a Bronze Final.
+            loser_target_match_id: advancement.loserTargetMatchId,
+            loser_target_match_number: advancement.loserTargetMatchNumber,
+            loser_target_slot: advancement.loserTargetSlot,
+            loser_advanced: advancement.loserAdvanced,
           },
           actorUserId,
         })
@@ -206,6 +211,10 @@ const recalculateResultCachesBestEffort = async ({
         if (advancement.targetMatchNumber) {
           revalidatePath(`/workspaces/matches/${advancement.targetMatchNumber}`)
           revalidatePath(`/matches/${advancement.targetMatchNumber}`)
+        }
+        if (advancement.loserTargetMatchNumber) {
+          revalidatePath(`/workspaces/matches/${advancement.loserTargetMatchNumber}`)
+          revalidatePath(`/matches/${advancement.loserTargetMatchNumber}`)
         }
       } catch (error) {
         payload.logger.error(

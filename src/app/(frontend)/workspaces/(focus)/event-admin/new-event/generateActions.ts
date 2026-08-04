@@ -151,6 +151,7 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
       categorySlug: category!.slug,
       stageId: stage.id,
       entries: schedulableEntries,
+      thirdPlacePolicy: (category!.third_place_policy as 'none' | 'match' | 'shared' | undefined) ?? 'none',
       nextMatchNumber,
     })
     createdCount = result.createdCount

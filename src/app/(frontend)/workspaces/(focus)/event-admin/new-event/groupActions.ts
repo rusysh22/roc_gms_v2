@@ -602,6 +602,7 @@ export async function promoteToKnockoutAction(formData: FormData): Promise<void>
     categorySlug: category!.slug,
     stageId: knockoutStage.id,
     entries: qualifierEntries,
+    thirdPlacePolicy: (category!.third_place_policy as 'none' | 'match' | 'shared' | undefined) ?? 'none',
     nextMatchNumber,
   })
 

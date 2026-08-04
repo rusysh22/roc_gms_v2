@@ -1404,6 +1404,21 @@ const CategoriesStep = async ({
                 })}
               </Select>
             </Field>
+            <Field
+              label={
+                <GlossaryHint
+                  term="Third place (optional)"
+                  definition="Only applies to Single/Double Elimination. 'Bronze Final' auto-creates a match the two semifinal losers are routed into once each semifinal's result is published."
+                />
+              }
+              className="sm:col-span-2"
+            >
+              <Select name="thirdPlacePolicy" defaultValue="none">
+                <option value="none">No third place</option>
+                <option value="match">Third-place match (Bronze Final)</option>
+                <option value="shared">Both semifinal losers share third</option>
+              </Select>
+            </Field>
             <label className="flex items-center gap-2 text-sm font-semibold text-ink sm:col-span-2">
               <input
                 name="rosterRequired"
@@ -1451,6 +1466,9 @@ const CategoriesStep = async ({
                     {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
                     {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
                     {String(category.format_type).replaceAll('_', ' ')}
+                    {category.third_place_policy && category.third_place_policy !== 'none'
+                      ? ` · ${category.third_place_policy === 'match' ? 'bronze final' : 'shared third'}`
+                      : ''}
                   </span>
                 </div>
                 <form action={updateCategoryStatusAction} className="flex shrink-0 items-center gap-2">

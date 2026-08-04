@@ -624,6 +624,7 @@ const seed = async () => {
             | 'friendly'
             | 'time_trial'
             | 'score_ranking',
+          third_place_policy: 'none',
           status: categoryData.status as 'open' | 'draft' | 'published' | 'archived' | 'locked',
         },
       }))

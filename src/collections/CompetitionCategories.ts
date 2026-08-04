@@ -124,6 +124,21 @@ export const CompetitionCategories: CollectionConfig = {
       },
     },
     {
+      name: 'third_place_policy',
+      type: 'select',
+      required: true,
+      defaultValue: 'none',
+      admin: {
+        description:
+          'Single/double elimination only. "match" generates a Bronze Final that the two semifinal losers are automatically routed into once each semifinal publishes a result (MSG-01). "shared" awards third place to both semifinal losers without a match.',
+      },
+      options: [
+        { label: 'No third place', value: 'none' },
+        { label: 'Third-place match (Bronze Final)', value: 'match' },
+        { label: 'Both semifinal losers share third', value: 'shared' },
+      ],
+    },
+    {
       name: 'result_unit',
       type: 'text',
       admin: {

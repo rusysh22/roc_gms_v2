@@ -9,6 +9,7 @@ import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
 const categoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
 const participantModes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd'])
+const thirdPlacePolicies = new Set(['none', 'match', 'shared'])
 const formatTypes = new Set([
   'single_elimination',
   'double_elimination',
@@ -35,6 +36,8 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
   const rulesetId = text(formData, 'rulesetId')
   const minRoster = text(formData, 'minRosterSize')
   const maxRoster = text(formData, 'maxRosterSize')
+  const thirdPlacePolicyRaw = text(formData, 'thirdPlacePolicy')
+  const thirdPlacePolicy = thirdPlacePolicies.has(thirdPlacePolicyRaw) ? thirdPlacePolicyRaw : 'none'
 
   const event = await getWizardEvent(payload, eventId)
   if (!event) {
@@ -100,6 +103,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
       | 'friendly'
       | 'time_trial'
       | 'score_ranking',
+    third_place_policy: thirdPlacePolicy as 'none' | 'match' | 'shared',
     status: 'draft' as const,
   }
   const created = await payload.create({ collection: 'competition-categories', data })

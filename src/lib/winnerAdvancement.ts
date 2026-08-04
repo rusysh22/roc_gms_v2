@@ -37,6 +37,11 @@ type AdvancementMatch = {
   winner_entry_id?: RelationshipDoc | Id | null
   next_match_id?: RelationshipDoc | Id | null
   next_match_slot?: 'a' | 'b' | null
+  // MSG-01: only ever set on a semifinal that feeds a Bronze Final (see
+  // createSingleEliminationBracketMatches in matchGeneration.ts) - every other single-elimination
+  // match has this unset, so the loser-routing step below is a no-op for them.
+  next_loser_match_id?: RelationshipDoc | Id | null
+  next_loser_match_slot?: 'a' | 'b' | null
 }
 
 export type WinnerAdvancementOutcome =
@@ -60,6 +65,13 @@ export type WinnerAdvancementResult = {
   targetMatchNumber?: string
   targetSlot?: 'a' | 'b'
   advanced?: boolean
+  // MSG-01: populated only when the source match is a semifinal wired to a Bronze Final
+  // (next_loser_match_id set) - undefined for every other match, including a Bronze Final itself
+  // (it has no next_loser_match_id of its own).
+  loserTargetMatchId?: Id
+  loserTargetMatchNumber?: string
+  loserTargetSlot?: 'a' | 'b'
+  loserAdvanced?: boolean
 }
 
 const getRelationshipId = (value: RelationshipDoc | Id | null | undefined): Id | undefined => {
@@ -200,11 +212,81 @@ export const getSingleEliminationAdvancementPreview = async (
   }
 }
 
+// MSG-01: mirrors src/lib/doubleElimination.ts's own advanceIntoSlot exactly (kept as a separate
+// copy rather than a shared import, matching that file's existing choice to have no runtime
+// dependency between the single- and double-elimination advancement modules).
+const advanceIntoSlot = async (
+  payload: Payload,
+  targetMatchId: Id,
+  targetSlot: 'a' | 'b',
+  entryId: Id,
+): Promise<'advanced' | 'already_advanced' | 'skipped_target_occupied'> => {
+  const targetMatch = await getMatchById(payload, targetMatchId)
+  const currentOccupantId = getRelationshipId(
+    targetSlot === 'a' ? targetMatch.participant_a_entry_id : targetMatch.participant_b_entry_id,
+  )
+
+  if (idsEqual(currentOccupantId, entryId)) {
+    return 'already_advanced'
+  }
+  if (currentOccupantId && !UNSTARTED_TARGET_STATUSES.has(targetMatch.status)) {
+    return 'skipped_target_occupied'
+  }
+
+  await payload.update({
+    collection: 'matches',
+    id: targetMatchId,
+    data:
+      targetSlot === 'a'
+        ? { participant_a_entry_id: Number(entryId) }
+        : { participant_b_entry_id: Number(entryId) },
+  })
+  return 'advanced'
+}
+
+// MSG-01: routes a semifinal's loser into its Bronze Final slot, if this match was wired with a
+// next_loser_match_id at generation time (see createSingleEliminationBracketMatches). A no-op for
+// every match that wasn't - which is every match except a semifinal under third_place_policy:
+// 'match'. Called independently of winner advancement above: even if the winner side is already
+// occupied/unstarted-blocked, the loser side should still get its own chance to route.
+const routeSemifinalLoserToBronze = async (
+  payload: Payload,
+  match: AdvancementMatch,
+  winnerEntryId: Id,
+): Promise<Pick<WinnerAdvancementResult, 'loserTargetMatchId' | 'loserTargetMatchNumber' | 'loserTargetSlot' | 'loserAdvanced'>> => {
+  const loserTargetMatchId = getRelationshipId(match.next_loser_match_id)
+  const loserTargetSlot = match.next_loser_match_slot || undefined
+  if (!loserTargetMatchId || !loserTargetSlot) {
+    return {}
+  }
+
+  const participantAId = getRelationshipId(match.participant_a_entry_id)
+  const participantBId = getRelationshipId(match.participant_b_entry_id)
+  const loserEntryId = idsEqual(participantAId, winnerEntryId) ? participantBId : participantAId
+  if (!loserEntryId) {
+    return { loserTargetMatchId, loserTargetSlot, loserAdvanced: false }
+  }
+
+  const targetMatch = await getMatchById(payload, loserTargetMatchId)
+  const outcome = await advanceIntoSlot(payload, loserTargetMatchId, loserTargetSlot, loserEntryId)
+
+  return {
+    loserTargetMatchId,
+    loserTargetMatchNumber: targetMatch.match_number,
+    loserTargetSlot,
+    loserAdvanced: outcome === 'advanced',
+  }
+}
+
 export const attemptSingleEliminationWinnerAdvancement = async (
   payload: Payload,
   matchId: Id,
 ): Promise<WinnerAdvancementResult> => {
   const preview = await getSingleEliminationAdvancementPreview(payload, matchId)
+  const match = await getMatchById(payload, matchId)
+  const loserRouting = preview.winnerEntryId
+    ? await routeSemifinalLoserToBronze(payload, match, preview.winnerEntryId)
+    : {}
 
   if (preview.outcome === 'advanced' && preview.targetMatchId && preview.targetSlot) {
     await payload.update({
@@ -218,6 +300,7 @@ export const attemptSingleEliminationWinnerAdvancement = async (
 
     return {
       ...preview,
+      ...loserRouting,
       advanced: true,
       reason: `Winner advanced to ${preview.targetMatchNumber} participant ${preview.targetSlot.toUpperCase()}.`,
     }
@@ -232,6 +315,7 @@ export const attemptSingleEliminationWinnerAdvancement = async (
     if (!UNSTARTED_TARGET_STATUSES.has(targetMatch.status)) {
       return {
         ...preview,
+        ...loserRouting,
         reason: `${preview.targetMatchNumber} has already progressed (status: ${targetMatch.status}) and cannot be silently corrected. Resolve the conflict manually.`,
       }
     }
@@ -247,11 +331,12 @@ export const attemptSingleEliminationWinnerAdvancement = async (
 
     return {
       ...preview,
+      ...loserRouting,
       outcome: 'revised',
       advanced: true,
       reason: `Winner revision propagated to ${preview.targetMatchNumber} participant ${preview.targetSlot.toUpperCase()}.`,
     }
   }
 
-  return preview
+  return { ...preview, ...loserRouting }
 }

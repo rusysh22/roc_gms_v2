@@ -247,6 +247,12 @@ export type CreateSingleEliminationBracketMatchesInput = {
   // generateMatchesAction), so re-running match generation for an existing category still matches
   // its own previously-created matches instead of silently creating duplicates.
   groupSegment?: string
+  // MSG-01: 'match' creates a Bronze Final that the two semifinal losers are routed into via
+  // next_loser_match_id/next_loser_match_slot (see src/lib/winnerAdvancement.ts) once each
+  // semifinal's result is published. 'shared' and 'none' create no extra match. Defaults to
+  // 'none' so callers that don't pass it (existing tests, any not-yet-updated call site) keep
+  // generating exactly the matches they did before this field existed.
+  thirdPlacePolicy?: 'none' | 'match' | 'shared'
   nextMatchNumber: (prefix: string) => string
 }
 
@@ -273,6 +279,7 @@ export const createSingleEliminationBracketMatches = async ({
   stageId,
   entries,
   groupSegment = 'no-group',
+  thirdPlacePolicy = 'none',
   nextMatchNumber,
 }: CreateSingleEliminationBracketMatchesInput): Promise<CreateSingleEliminationBracketMatchesResult> => {
   const sportIdValue = Number(typeof sportId === 'object' ? sportId.id : sportId)
@@ -363,6 +370,66 @@ export const createSingleEliminationBracketMatches = async ({
             data: { next_match_id: matchId, next_match_slot: 'b' },
           })
         }
+      }
+    }
+  }
+
+  // MSG-01: a Bronze Final needs two real semifinals to feed it - a 2-entrant bracket (totalRounds
+  // === 1) has only a Final and nobody to draw a "semifinal loser" from. getRoundOrder in
+  // brackets.ts already sorts a "bronze" round name at 45, between Semifinal (40) and Final (50),
+  // so no bracket-display change is needed here.
+  if (thirdPlacePolicy === 'match' && totalRounds >= 2) {
+    const semifinalRound = totalRounds - 2
+    const semifinalAId = matchIdByRoundAndIndex.get(`${semifinalRound}:0`)
+    const semifinalBId = matchIdByRoundAndIndex.get(`${semifinalRound}:1`)
+
+    if (semifinalAId && semifinalBId) {
+      const bronzeGenerationKey = `${eventSlug}:${categorySlug}:${stageId}:${groupSegment}:single_elimination:bronze`
+      const existingBronze = await payload.find({
+        collection: 'matches',
+        depth: 0,
+        limit: 1,
+        where: { generation_key: { equals: bronzeGenerationKey } },
+      })
+
+      let bronzeMatchId = existingBronze.docs[0]?.id
+
+      if (!bronzeMatchId) {
+        try {
+          const created = await payload.create({
+            collection: 'matches',
+            data: {
+              event_id: Number(eventId),
+              sport_id: sportIdValue,
+              category_id: Number(categoryId),
+              stage_id: Number(stageId),
+              round_name: 'Bronze Final',
+              match_number: nextMatchNumber('bronze'),
+              status: 'ready_for_scheduling',
+              generation_source: 'single_elimination',
+              generation_key: bronzeGenerationKey,
+              is_public: true,
+              documentation_status: 'not_started',
+            },
+          })
+          bronzeMatchId = created.id
+          createdCount += 1
+        } catch {
+          failedCount += 1
+        }
+      }
+
+      if (bronzeMatchId) {
+        await payload.update({
+          collection: 'matches',
+          id: semifinalAId,
+          data: { next_loser_match_id: bronzeMatchId, next_loser_match_slot: 'a' },
+        })
+        await payload.update({
+          collection: 'matches',
+          id: semifinalBId,
+          data: { next_loser_match_id: bronzeMatchId, next_loser_match_slot: 'b' },
+        })
       }
     }
   }
