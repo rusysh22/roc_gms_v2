@@ -8,7 +8,7 @@ export type ParsedPlayerRow = {
   email?: string
   phone?: string
   gender?: string
-  employeeId?: string
+  identificationNumber?: string
   photo?: string
 }
 
@@ -55,7 +55,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       email: str(row.email) || undefined,
       phone: str(row.phone) || undefined,
       gender: str(row.gender).toLowerCase() || undefined,
-      employeeId: str(row.employee_id) || undefined,
+      identificationNumber: str(row.identification_number) || undefined,
       photo: str(row.photo) || undefined,
     }))
     .filter((row) => row.name)

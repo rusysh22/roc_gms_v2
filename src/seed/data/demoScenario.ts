@@ -74,7 +74,7 @@ export type DemoEntrySeed = {
   display_name: string
   categorySlug: string
   entry_type: string
-  playerEmployeeId?: string
+  playerIdentificationNumber?: string
   teamSlug?: string
   clubSlug?: string
   seed_number?: number
@@ -413,37 +413,37 @@ export const demoScenario = {
     },
   ],
   players: [
-    { name: 'Andi Pratama', employee_id: 'ROC-2026-001', email: 'andi.pratama@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-it-club' },
-    { name: 'Budi Santoso', employee_id: 'ROC-2026-002', email: 'budi.santoso@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
-    { name: 'Citra Lestari', employee_id: 'ROC-2026-003', email: 'citra.lestari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-hr' },
-    { name: 'Dewi Anggraini', employee_id: 'ROC-2026-004', email: 'dewi.anggraini@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-marketing' },
-    { name: 'Eko Wijaya', employee_id: 'ROC-2026-005', email: 'eko.wijaya@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-it-club' },
-    { name: 'Fajar Nugroho', employee_id: 'ROC-2026-006', email: 'fajar.nugroho@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
-    { name: 'Gilang Ramadhan', employee_id: 'ROC-2026-007', email: 'gilang.ramadhan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-operations' },
-    { name: 'Hendra Setiawan', employee_id: 'ROC-2026-008', email: 'hendra.setiawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
-    { name: 'Irfan Hidayat', employee_id: 'ROC-2026-009', email: 'irfan.hidayat@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
-    { name: 'Joko Prasetyo', employee_id: 'ROC-2026-010', email: 'joko.prasetyo@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-marketing' },
-    { name: 'Kirana Dewanti', employee_id: 'ROC-2026-011', email: 'kirana.dewanti@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-operations' },
-    { name: 'Made Wirawan', employee_id: 'ROC-2026-012', email: 'made.wirawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
-    { name: 'Nadia Putri', employee_id: 'ROC-2026-013', email: 'nadia.putri@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-hr' },
-    { name: 'Kartika Sari', employee_id: 'ROC-2026-014', email: 'kartika.sari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-operations' },
-    { name: 'Lukman Hakim', employee_id: 'ROC-2026-015', email: 'lukman.hakim@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
-    { name: 'Oscar Pratomo', employee_id: 'ROC-2026-016', email: 'oscar.pratomo@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
-    { name: 'Putri Ayu', employee_id: 'ROC-2026-017', email: 'putri.ayu@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-it-club' },
-    { name: 'Rian Saputra', employee_id: 'ROC-2026-018', email: 'rian.saputra@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-operations' },
-    { name: 'Sari Wulandari', employee_id: 'ROC-2026-019', email: 'sari.wulandari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-legal' },
-    { name: 'Tono Setiawan', employee_id: 'ROC-2026-020', email: 'tono.setiawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
-    { name: 'Umi Kalsum', employee_id: 'ROC-2026-021', email: 'umi.kalsum@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-marketing' },
-    { name: 'Vino Anggara', employee_id: 'ROC-2026-022', email: 'vino.anggara@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
+    { name: 'Andi Pratama', identification_number: 'ROC-2026-001', email: 'andi.pratama@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-it-club' },
+    { name: 'Budi Santoso', identification_number: 'ROC-2026-002', email: 'budi.santoso@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
+    { name: 'Citra Lestari', identification_number: 'ROC-2026-003', email: 'citra.lestari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-hr' },
+    { name: 'Dewi Anggraini', identification_number: 'ROC-2026-004', email: 'dewi.anggraini@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-marketing' },
+    { name: 'Eko Wijaya', identification_number: 'ROC-2026-005', email: 'eko.wijaya@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-it-club' },
+    { name: 'Fajar Nugroho', identification_number: 'ROC-2026-006', email: 'fajar.nugroho@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
+    { name: 'Gilang Ramadhan', identification_number: 'ROC-2026-007', email: 'gilang.ramadhan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-operations' },
+    { name: 'Hendra Setiawan', identification_number: 'ROC-2026-008', email: 'hendra.setiawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
+    { name: 'Irfan Hidayat', identification_number: 'ROC-2026-009', email: 'irfan.hidayat@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
+    { name: 'Joko Prasetyo', identification_number: 'ROC-2026-010', email: 'joko.prasetyo@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-marketing' },
+    { name: 'Kirana Dewanti', identification_number: 'ROC-2026-011', email: 'kirana.dewanti@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-operations' },
+    { name: 'Made Wirawan', identification_number: 'ROC-2026-012', email: 'made.wirawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
+    { name: 'Nadia Putri', identification_number: 'ROC-2026-013', email: 'nadia.putri@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-hr' },
+    { name: 'Kartika Sari', identification_number: 'ROC-2026-014', email: 'kartika.sari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-operations' },
+    { name: 'Lukman Hakim', identification_number: 'ROC-2026-015', email: 'lukman.hakim@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
+    { name: 'Oscar Pratomo', identification_number: 'ROC-2026-016', email: 'oscar.pratomo@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-finance' },
+    { name: 'Putri Ayu', identification_number: 'ROC-2026-017', email: 'putri.ayu@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-it-club' },
+    { name: 'Rian Saputra', identification_number: 'ROC-2026-018', email: 'rian.saputra@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-operations' },
+    { name: 'Sari Wulandari', identification_number: 'ROC-2026-019', email: 'sari.wulandari@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-legal' },
+    { name: 'Tono Setiawan', identification_number: 'ROC-2026-020', email: 'tono.setiawan@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-hr' },
+    { name: 'Umi Kalsum', identification_number: 'ROC-2026-021', email: 'umi.kalsum@roc-gms.local', gender: 'female', clubSlug: 'roc-olympic-2026-marketing' },
+    { name: 'Vino Anggara', identification_number: 'ROC-2026-022', email: 'vino.anggara@roc-gms.local', gender: 'male', clubSlug: 'roc-olympic-2026-legal' },
   ],
   teams: [
-    { name: 'IT Smash Pair', slug: 'roc-olympic-2026-it-smash-pair', clubSlug: 'roc-olympic-2026-it-club', captainEmployeeId: 'ROC-2026-001', contact_email: 'it.club@roc-gms.local' },
-    { name: 'Marketing Mix Pair', slug: 'roc-olympic-2026-marketing-mix-pair', clubSlug: 'roc-olympic-2026-marketing', captainEmployeeId: 'ROC-2026-004', contact_email: 'marketing@roc-gms.local' },
-    { name: 'HR Rally Pair', slug: 'roc-olympic-2026-hr-rally-pair', clubSlug: 'roc-olympic-2026-hr', captainEmployeeId: 'ROC-2026-012', contact_email: 'hr@roc-gms.local' },
-    { name: 'IT Futsal Squad', slug: 'roc-olympic-2026-it-futsal-squad', clubSlug: 'roc-olympic-2026-it-club', captainEmployeeId: 'ROC-2026-005', contact_email: 'it.club@roc-gms.local' },
-    { name: 'Finance Futsal Squad', slug: 'roc-olympic-2026-finance-futsal-squad', clubSlug: 'roc-olympic-2026-finance', captainEmployeeId: 'ROC-2026-006', contact_email: 'finance@roc-gms.local' },
-    { name: 'Marketing Futsal Squad', slug: 'roc-olympic-2026-marketing-futsal-squad', clubSlug: 'roc-olympic-2026-marketing', captainEmployeeId: 'ROC-2026-010', contact_email: 'marketing@roc-gms.local' },
-    { name: 'Legal Futsal Crew', slug: 'roc-olympic-2026-legal-futsal-crew', clubSlug: 'roc-olympic-2026-legal', captainEmployeeId: 'ROC-2026-022', contact_email: 'legal@roc-gms.local' },
+    { name: 'IT Smash Pair', slug: 'roc-olympic-2026-it-smash-pair', clubSlug: 'roc-olympic-2026-it-club', captainIdentificationNumber: 'ROC-2026-001', contact_email: 'it.club@roc-gms.local' },
+    { name: 'Marketing Mix Pair', slug: 'roc-olympic-2026-marketing-mix-pair', clubSlug: 'roc-olympic-2026-marketing', captainIdentificationNumber: 'ROC-2026-004', contact_email: 'marketing@roc-gms.local' },
+    { name: 'HR Rally Pair', slug: 'roc-olympic-2026-hr-rally-pair', clubSlug: 'roc-olympic-2026-hr', captainIdentificationNumber: 'ROC-2026-012', contact_email: 'hr@roc-gms.local' },
+    { name: 'IT Futsal Squad', slug: 'roc-olympic-2026-it-futsal-squad', clubSlug: 'roc-olympic-2026-it-club', captainIdentificationNumber: 'ROC-2026-005', contact_email: 'it.club@roc-gms.local' },
+    { name: 'Finance Futsal Squad', slug: 'roc-olympic-2026-finance-futsal-squad', clubSlug: 'roc-olympic-2026-finance', captainIdentificationNumber: 'ROC-2026-006', contact_email: 'finance@roc-gms.local' },
+    { name: 'Marketing Futsal Squad', slug: 'roc-olympic-2026-marketing-futsal-squad', clubSlug: 'roc-olympic-2026-marketing', captainIdentificationNumber: 'ROC-2026-010', contact_email: 'marketing@roc-gms.local' },
+    { name: 'Legal Futsal Crew', slug: 'roc-olympic-2026-legal-futsal-crew', clubSlug: 'roc-olympic-2026-legal', captainIdentificationNumber: 'ROC-2026-022', contact_email: 'legal@roc-gms.local' },
   ],
   venues: [
     { name: 'Main Hall', address: 'ROC Office Campus, Main Building', description: 'Indoor hall for badminton matches.', is_virtual: false },
@@ -480,15 +480,15 @@ export const demoScenario = {
   entries: [
     // Badminton Men Single - full 8-entry bracket (seeds 1-8) plus one withdrawn entry to prove
     // withdrawn/disqualified participants are excluded from bracket generation.
-    { display_name: 'Andi Pratama', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-001', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed' },
-    { display_name: 'Budi Santoso', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-002', clubSlug: 'roc-olympic-2026-finance', seed_number: 2, status: 'confirmed' },
-    { display_name: 'Eko Wijaya', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-005', clubSlug: 'roc-olympic-2026-it-club', seed_number: 3, status: 'confirmed' },
-    { display_name: 'Fajar Nugroho', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-006', clubSlug: 'roc-olympic-2026-finance', seed_number: 4, status: 'confirmed' },
-    { display_name: 'Gilang Ramadhan', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-007', clubSlug: 'roc-olympic-2026-operations', seed_number: 5, status: 'confirmed' },
-    { display_name: 'Hendra Setiawan', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-008', clubSlug: 'roc-olympic-2026-legal', seed_number: 6, status: 'confirmed' },
-    { display_name: 'Irfan Hidayat', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-009', clubSlug: 'roc-olympic-2026-hr', seed_number: 7, status: 'confirmed' },
-    { display_name: 'Joko Prasetyo', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-010', clubSlug: 'roc-olympic-2026-marketing', seed_number: 8, status: 'confirmed' },
-    { display_name: 'Kirana Dewanti (Withdrawn)', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerEmployeeId: 'ROC-2026-011', clubSlug: 'roc-olympic-2026-operations', status: 'withdrawn' },
+    { display_name: 'Andi Pratama', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-001', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed' },
+    { display_name: 'Budi Santoso', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-002', clubSlug: 'roc-olympic-2026-finance', seed_number: 2, status: 'confirmed' },
+    { display_name: 'Eko Wijaya', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-005', clubSlug: 'roc-olympic-2026-it-club', seed_number: 3, status: 'confirmed' },
+    { display_name: 'Fajar Nugroho', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-006', clubSlug: 'roc-olympic-2026-finance', seed_number: 4, status: 'confirmed' },
+    { display_name: 'Gilang Ramadhan', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-007', clubSlug: 'roc-olympic-2026-operations', seed_number: 5, status: 'confirmed' },
+    { display_name: 'Hendra Setiawan', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-008', clubSlug: 'roc-olympic-2026-legal', seed_number: 6, status: 'confirmed' },
+    { display_name: 'Irfan Hidayat', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-009', clubSlug: 'roc-olympic-2026-hr', seed_number: 7, status: 'confirmed' },
+    { display_name: 'Joko Prasetyo', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-010', clubSlug: 'roc-olympic-2026-marketing', seed_number: 8, status: 'confirmed' },
+    { display_name: 'Kirana Dewanti (Withdrawn)', categorySlug: 'roc-olympic-2026-badminton-men-single', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-011', clubSlug: 'roc-olympic-2026-operations', status: 'withdrawn' },
 
     // Badminton Mixed Double - 3 pairs, full round robin.
     { display_name: 'IT Smash Pair', categorySlug: 'roc-olympic-2026-badminton-mixed-double', entry_type: 'pair', teamSlug: 'roc-olympic-2026-it-smash-pair', clubSlug: 'roc-olympic-2026-it-club', seed_number: 1, status: 'confirmed', groupName: 'Group A' },
@@ -506,20 +506,20 @@ export const demoScenario = {
     { display_name: 'TBD Futsal Opponent', categorySlug: 'roc-olympic-2026-futsal-men', entry_type: 'tbd', status: 'pending', groupName: 'Group B' },
 
     // Table Tennis Open Single - 4 entries, partially completed bracket (one TBD final slot).
-    { display_name: 'Kartika Sari', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-014', clubSlug: 'roc-olympic-2026-operations', seed_number: 1, status: 'confirmed' },
-    { display_name: 'Lukman Hakim', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-015', clubSlug: 'roc-olympic-2026-legal', seed_number: 2, status: 'confirmed' },
-    { display_name: 'Oscar Pratomo', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-016', clubSlug: 'roc-olympic-2026-finance', seed_number: 3, status: 'confirmed' },
-    { display_name: 'Putri Ayu', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-017', clubSlug: 'roc-olympic-2026-it-club', seed_number: 4, status: 'confirmed' },
+    { display_name: 'Kartika Sari', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-014', clubSlug: 'roc-olympic-2026-operations', seed_number: 1, status: 'confirmed' },
+    { display_name: 'Lukman Hakim', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-015', clubSlug: 'roc-olympic-2026-legal', seed_number: 2, status: 'confirmed' },
+    { display_name: 'Oscar Pratomo', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-016', clubSlug: 'roc-olympic-2026-finance', seed_number: 3, status: 'confirmed' },
+    { display_name: 'Putri Ayu', categorySlug: 'roc-olympic-2026-table-tennis-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-017', clubSlug: 'roc-olympic-2026-it-club', seed_number: 4, status: 'confirmed' },
 
     // Chess Open - 4 entries, round robin with draws.
-    { display_name: 'Rian Saputra', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-018', clubSlug: 'roc-olympic-2026-operations', seed_number: 1, status: 'confirmed' },
-    { display_name: 'Sari Wulandari', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-019', clubSlug: 'roc-olympic-2026-legal', seed_number: 2, status: 'confirmed' },
-    { display_name: 'Tono Setiawan', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-020', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed' },
-    { display_name: 'Umi Kalsum', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerEmployeeId: 'ROC-2026-021', clubSlug: 'roc-olympic-2026-marketing', seed_number: 4, status: 'confirmed' },
+    { display_name: 'Rian Saputra', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-018', clubSlug: 'roc-olympic-2026-operations', seed_number: 1, status: 'confirmed' },
+    { display_name: 'Sari Wulandari', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-019', clubSlug: 'roc-olympic-2026-legal', seed_number: 2, status: 'confirmed' },
+    { display_name: 'Tono Setiawan', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-020', clubSlug: 'roc-olympic-2026-hr', seed_number: 3, status: 'confirmed' },
+    { display_name: 'Umi Kalsum', categorySlug: 'roc-olympic-2026-chess-open', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-021', clubSlug: 'roc-olympic-2026-marketing', seed_number: 4, status: 'confirmed' },
 
     // Running 100m - reuses two existing players in a lightweight, non-bracket format.
-    { display_name: 'Andi Pratama (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerEmployeeId: 'ROC-2026-001', clubSlug: 'roc-olympic-2026-it-club', status: 'confirmed' },
-    { display_name: 'Budi Santoso (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerEmployeeId: 'ROC-2026-002', clubSlug: 'roc-olympic-2026-finance', status: 'confirmed' },
+    { display_name: 'Andi Pratama (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-001', clubSlug: 'roc-olympic-2026-it-club', status: 'confirmed' },
+    { display_name: 'Budi Santoso (Running)', categorySlug: 'roc-olympic-2026-running-100m', entry_type: 'individual', playerIdentificationNumber: 'ROC-2026-002', clubSlug: 'roc-olympic-2026-finance', status: 'confirmed' },
 
     // Padel Men - 32 pair entries, a clean power-of-two bracket (no byes). Pair "teams" here are
     // plain display-name entries (no Team/Player records) since the goal is bracket-scale testing,
@@ -559,12 +559,12 @@ export const demoScenario = {
     })),
   ] satisfies DemoEntrySeed[],
   rosterSeeds: [
-    { teamSlug: 'roc-olympic-2026-it-smash-pair', employeeId: 'ROC-2026-001', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'captain' },
-    { teamSlug: 'roc-olympic-2026-it-smash-pair', employeeId: 'ROC-2026-003', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'player' },
-    { teamSlug: 'roc-olympic-2026-hr-rally-pair', employeeId: 'ROC-2026-012', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'captain' },
-    { teamSlug: 'roc-olympic-2026-hr-rally-pair', employeeId: 'ROC-2026-013', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'player' },
-    { teamSlug: 'roc-olympic-2026-it-futsal-squad', employeeId: 'ROC-2026-005', categorySlug: 'roc-olympic-2026-futsal-men', role: 'captain' },
-    { teamSlug: 'roc-olympic-2026-finance-futsal-squad', employeeId: 'ROC-2026-006', categorySlug: 'roc-olympic-2026-futsal-men', role: 'captain' },
+    { teamSlug: 'roc-olympic-2026-it-smash-pair', identificationNumber: 'ROC-2026-001', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'captain' },
+    { teamSlug: 'roc-olympic-2026-it-smash-pair', identificationNumber: 'ROC-2026-003', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'player' },
+    { teamSlug: 'roc-olympic-2026-hr-rally-pair', identificationNumber: 'ROC-2026-012', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'captain' },
+    { teamSlug: 'roc-olympic-2026-hr-rally-pair', identificationNumber: 'ROC-2026-013', categorySlug: 'roc-olympic-2026-badminton-mixed-double', role: 'player' },
+    { teamSlug: 'roc-olympic-2026-it-futsal-squad', identificationNumber: 'ROC-2026-005', categorySlug: 'roc-olympic-2026-futsal-men', role: 'captain' },
+    { teamSlug: 'roc-olympic-2026-finance-futsal-squad', identificationNumber: 'ROC-2026-006', categorySlug: 'roc-olympic-2026-futsal-men', role: 'captain' },
   ],
 
   // Hand-declared matches. Some are fully resolved at creation time (existing pattern); the

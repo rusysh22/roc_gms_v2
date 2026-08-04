@@ -660,14 +660,14 @@ const seed = async () => {
 
   const playerIds = new Map<string, SeedId>()
   for (const playerData of demoScenario.players) {
-    const existingPlayer = await findOne(payload, 'players', 'employee_id', playerData.employee_id)
+    const existingPlayer = await findOne(payload, 'players', 'identification_number', playerData.identification_number)
     const player =
       existingPlayer ||
       (await payload.create({
         collection: 'players',
         data: {
           name: playerData.name,
-          employee_id: playerData.employee_id,
+          identification_number: playerData.identification_number,
           email: playerData.email,
           gender: playerData.gender as 'other' | 'male' | 'female' | 'prefer_not_to_say',
           event_id: Number(eventId),
@@ -675,7 +675,7 @@ const seed = async () => {
         },
       }))
 
-    playerIds.set(playerData.employee_id, getId(player))
+    playerIds.set(playerData.identification_number, getId(player))
   }
 
   const teamIds = new Map<string, SeedId>()
@@ -690,7 +690,7 @@ const seed = async () => {
           slug: teamData.slug,
           event_id: Number(eventId),
           club_id: Number(clubIds.get(teamData.clubSlug)),
-          captain_player_id: Number(playerIds.get(teamData.captainEmployeeId)),
+          captain_player_id: Number(playerIds.get(teamData.captainIdentificationNumber)),
           contact_email: teamData.contact_email,
         },
       }))
@@ -700,7 +700,7 @@ const seed = async () => {
 
   for (const rosterData of demoScenario.rosterSeeds) {
     const teamId = teamIds.get(rosterData.teamSlug)
-    const playerId = playerIds.get(rosterData.employeeId)
+    const playerId = playerIds.get(rosterData.identificationNumber)
     const categoryId = categoryIds.get(rosterData.categorySlug)
     const existingRoster =
       teamId && playerId ? await findRoster(payload, eventId, teamId, playerId) : undefined
@@ -745,8 +745,8 @@ const seed = async () => {
             | 'tbd',
           club_id: entryData.clubSlug ? Number(clubIds.get(entryData.clubSlug)) : undefined,
           team_id: entryData.teamSlug ? Number(teamIds.get(entryData.teamSlug)) : undefined,
-          player_id: entryData.playerEmployeeId
-            ? Number(playerIds.get(entryData.playerEmployeeId))
+          player_id: entryData.playerIdentificationNumber
+            ? Number(playerIds.get(entryData.playerIdentificationNumber))
             : undefined,
           display_name: entryData.display_name,
           seed_number: entryData.seed_number,

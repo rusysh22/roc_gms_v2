@@ -30,8 +30,9 @@ const normalizeName = (value: string) => value.trim().toLowerCase()
 // - Team `captain_player_id` isn't carried over (it would need players copied first, which
 //   creates a circular club->team->player->team dependency for no real payoff - an organizer can
 //   re-set the captain in a few seconds after the copy).
-// - Player `employee_id` is dropped, not copied - it's a *globally* unique field (not scoped per
-//   event like slugs are), so copying it verbatim across events would collide constantly.
+// - Player `identification_number` (and `photo`) aren't copied - carrying an ID number forward
+//   into a new event implies it's still valid there, which isn't something this action can verify.
+//   An organizer can re-enter it in a few seconds after the copy if it's still correct.
 export async function copyParticipantsFromEventAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.draw,

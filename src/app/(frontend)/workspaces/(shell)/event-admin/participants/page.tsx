@@ -108,8 +108,8 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
         <Input name="name" required defaultValue={player?.name || ''} />
       </Field>
       <ChoiceField name="clubId" label="Club" options={toOptions(clubs.docs)} value={idOf(player?.club_id)} />
-      <Field label="Employee ID">
-        <Input name="employeeId" defaultValue={player?.employee_id || ''} />
+      <Field label="Identification number">
+        <Input name="identificationNumber" defaultValue={player?.identification_number || ''} />
       </Field>
       <Field label="Email">
         <Input name="email" type="email" defaultValue={player?.email || ''} />

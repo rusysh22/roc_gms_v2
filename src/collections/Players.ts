@@ -5,7 +5,7 @@ import { canManageParticipants, canReadEventBackoffice } from '@/access/roles'
 export const Players: CollectionConfig = {
   slug: 'players',
   admin: {
-    defaultColumns: ['name', 'club_id', 'employee_id', 'email', 'gender'],
+    defaultColumns: ['name', 'club_id', 'identification_number', 'email', 'gender'],
     group: 'Participants',
     useAsTitle: 'name',
   },
@@ -15,11 +15,16 @@ export const Players: CollectionConfig = {
     read: canReadEventBackoffice,
     update: canManageParticipants,
   },
-  // MSG-05: employee_id uniqueness must be scoped per event, not global - it used to be a bare
-  // `unique: true` field, which meant the same person's employee ID collided across two
-  // unrelated events. Postgres unique indexes treat NULL as distinct, so players without an
-  // employee_id (the common case before this field was ever asked for) are unaffected.
-  indexes: [{ fields: ['event_id', 'employee_id'], unique: true }],
+  // MSG-05: identification_number uniqueness must be scoped per event, not global - it used to be
+  // a bare `unique: true` field, which meant the same person's ID collided across two unrelated
+  // events. Postgres unique indexes treat NULL as distinct, so players without one (the common
+  // case before this field was ever asked for) are unaffected.
+  //
+  // Deliberately not named "employee_id" - this app runs tournaments for offices, but just as
+  // often for schools, clubs, or the general public, none of which have "employees". Whatever ID
+  // system the organizer already uses (student ID, member number, staff ID, national ID, or none
+  // at all) fits under this one generic name.
+  indexes: [{ fields: ['event_id', 'identification_number'], unique: true }],
   fields: [
     {
       name: 'event_id',
@@ -40,8 +45,11 @@ export const Players: CollectionConfig = {
       required: true,
     },
     {
-      name: 'employee_id',
+      name: 'identification_number',
       type: 'text',
+      admin: {
+        description: 'Optional - whatever ID the organizer already uses (student ID, member number, staff ID, etc.).',
+      },
       index: true,
     },
     {
