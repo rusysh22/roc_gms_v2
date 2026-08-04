@@ -610,6 +610,40 @@ const SummarySection = ({
   )
 }
 
+type SportReadinessGroupData = {
+  sportId: string
+  sportName: string
+  readyCount: number
+  totalCount: number
+  pending: { id: string | number; name: string; tone: 'green' | 'blue' | 'gold' | 'neutral'; label: string }[]
+}
+
+// MSG-11: one sport's row in the Progress panel - collapses to a single "✓ N/N" line once every
+// category in it is ready, and only lists the categories that still need something otherwise.
+const SportReadinessGroup = ({ group }: { group: SportReadinessGroupData }) => (
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-between gap-2">
+      <span className="truncate text-xs font-bold text-ink">{group.sportName}</span>
+      <span
+        className={cn('shrink-0 text-xs font-semibold', group.pending.length === 0 ? 'text-green' : 'text-ink-soft')}
+      >
+        {group.pending.length === 0 ? '✓ ' : ''}
+        {group.readyCount}/{group.totalCount}
+      </span>
+    </div>
+    {group.pending.length > 0 ? (
+      <div className="flex flex-col gap-1 pl-2">
+        {group.pending.map((row) => (
+          <div key={row.id} className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-ink-soft">{row.name}</span>
+            <StatusBadge tone={row.tone}>{row.label}</StatusBadge>
+          </div>
+        ))}
+      </div>
+    ) : null}
+  </div>
+)
+
 const SummaryPanel = async ({
   payload,
   eventId,
@@ -776,9 +810,40 @@ const SummaryPanel = async ({
       tone = 'green'
       label = 'Ready'
     }
-    return { id: category.id, name: String(category.name), tone, label }
+    return {
+      id: category.id,
+      name: String(category.name),
+      tone,
+      label,
+      sportId: String(getRelationshipId(category.sport_id as RelationshipDoc)),
+      sportName: getRelationshipLabel(category.sport_id as RelationshipDoc),
+    }
   })
   const readyCount = categoryReadiness.filter((row) => row.tone === 'green').length
+
+  // MSG-11: a flat 19-row list doesn't scale - group by sport instead, and only show detail rows
+  // for a category that still needs work. A sport where every category is already ready collapses
+  // to a single "✓ N/N" line, so a mostly-done event stays short even as its category count grows.
+  const sportGroups: { sportId: string; sportName: string; readyCount: number; totalCount: number; pending: typeof categoryReadiness }[] = []
+  const sportGroupIndex = new Map<string, number>()
+  for (const row of categoryReadiness) {
+    let index = sportGroupIndex.get(row.sportId)
+    if (index === undefined) {
+      index = sportGroups.length
+      sportGroupIndex.set(row.sportId, index)
+      sportGroups.push({ sportId: row.sportId, sportName: row.sportName, readyCount: 0, totalCount: 0, pending: [] })
+    }
+    const group = sportGroups[index]
+    group.totalCount += 1
+    if (row.tone === 'green') {
+      group.readyCount += 1
+    } else {
+      group.pending.push(row)
+    }
+  }
+  const VISIBLE_SPORT_GROUPS = 3
+  const visibleSportGroups = sportGroups.slice(0, VISIBLE_SPORT_GROUPS)
+  const hiddenSportGroups = sportGroups.slice(VISIBLE_SPORT_GROUPS)
 
   return (
     <Card className="flex flex-col gap-3">
@@ -792,17 +857,47 @@ const SummaryPanel = async ({
       </div>
       {categoryReadiness.length > 0 ? (
         <div className="flex flex-col gap-2 border-b border-line pb-3">
-          <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">
-            Category readiness · {readyCount}/{categoryReadiness.length} ready
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {categoryReadiness.map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold text-ink">{row.name}</span>
-                <StatusBadge tone={row.tone}>{row.label}</StatusBadge>
-              </div>
-            ))}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+              Category readiness · {readyCount}/{categoryReadiness.length}
+            </p>
           </div>
+          <div
+            role="progressbar"
+            aria-valuenow={Math.round((readyCount / categoryReadiness.length) * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Category readiness"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-mist"
+          >
+            <div
+              className="h-full rounded-full bg-green transition-[width] duration-300"
+              style={{ width: `${Math.round((readyCount / categoryReadiness.length) * 100)}%` }}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            {visibleSportGroups.map((group) => (
+              <SportReadinessGroup key={group.sportId} group={group} />
+            ))}
+            {hiddenSportGroups.length > 0 ? (
+              <details>
+                <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
+                  … {hiddenSportGroups.length} more sport{hiddenSportGroups.length === 1 ? '' : 's'}
+                </summary>
+                <div className="mt-2 flex flex-col gap-2">
+                  {hiddenSportGroups.map((group) => (
+                    <SportReadinessGroup key={group.sportId} group={group} />
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
+          <Link
+            href="/workspaces/analytics/readiness"
+            className="text-xs font-bold text-green underline underline-offset-2"
+          >
+            View full readiness →
+          </Link>
         </div>
       ) : null}
       <div className="flex flex-col">
