@@ -8,7 +8,9 @@ Postgres, Redis, and Mailpit ports) and must not be deployed as-is. Documentatio
 enforces a size and type allowlist locally; deploy a malware-scanning storage pipeline for untrusted
 production uploads.
 
-ROC Game Management System V2 is a Next.js and Payload CMS foundation for running an internal office olympiad.
+ROC Game Management System V2 is a Next.js and Payload CMS foundation for running multi-sport
+tournaments and games - office sports days, inter-school competitions, community/public games, and
+similar events.
 
 ## Local Setup
 
