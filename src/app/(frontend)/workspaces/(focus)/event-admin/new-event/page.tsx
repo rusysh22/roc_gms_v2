@@ -2445,6 +2445,74 @@ const RegistrationStep = async ({
   )
 }
 
+// MSG-10: Draw and Bracket used to switch categories with a plain dropdown, showing nothing about
+// which categories still need work - on a 19-category event that meant remembering, outside the
+// app, which ones you'd already handled. Generate Matches already solved this with a list that
+// shows every category with its status; this is that same shape reused by Draw and Bracket
+// (grouped by sport, current selection highlighted, a ready/not-ready marker per row) without
+// touching Generate's own richer per-row actions.
+type CategorySwitcherItem = {
+  id: string
+  name: string
+  sportLabel: string
+  statusLabel: string
+  ready: boolean
+}
+
+const CategorySwitcherList = ({
+  eventId,
+  step,
+  items,
+  selectedCategoryId,
+}: {
+  eventId: string
+  step: string
+  items: CategorySwitcherItem[]
+  selectedCategoryId: string
+}) => {
+  const groups = new Map<string, CategorySwitcherItem[]>()
+  for (const item of items) {
+    const list = groups.get(item.sportLabel) || []
+    list.push(item)
+    groups.set(item.sportLabel, list)
+  }
+
+  return (
+    <div className="flex max-h-72 flex-col gap-3 overflow-y-auto pr-1">
+      {[...groups.entries()].map(([sportLabel, group]) => (
+        <div key={sportLabel} className="flex flex-col gap-1.5">
+          <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">{sportLabel}</p>
+          <div className="flex flex-col gap-1.5">
+            {group.map((item) => (
+              <Link
+                key={item.id}
+                href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=${step}&categoryId=${item.id}`}
+                className={cn(
+                  'flex items-center justify-between gap-3 rounded-card border px-3 py-2 text-sm no-underline transition-colors',
+                  item.id === selectedCategoryId
+                    ? 'border-green bg-mist'
+                    : 'border-line bg-paper hover:border-green',
+                )}
+              >
+                <span className="min-w-0 truncate font-bold text-ink">{item.name}</span>
+                <span
+                  className={cn(
+                    'shrink-0 text-xs font-semibold',
+                    item.ready ? 'text-green' : 'text-ink-soft',
+                  )}
+                >
+                  {item.ready ? '✓ ' : ''}
+                  {item.statusLabel}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const DrawStep = async ({
   payload,
   eventId,
@@ -2462,37 +2530,47 @@ const DrawStep = async ({
     sort: 'name',
   })
 
+  // MSG-10: fetched unconditionally (not just when `categoryId` is absent) - the switcher list
+  // below needs every category's seed status, not just whichever one is currently selected.
+  const categoryIds = categories.docs.map((cat) => String(cat.id))
+  const allConfirmedEntries = categoryIds.length
+    ? await payload.find({
+        collection: 'competition-entries',
+        depth: 0,
+        limit: 5000,
+        where: {
+          and: [{ category_id: { in: categoryIds } }, { status: { equals: 'confirmed' } }],
+        },
+      })
+    : { docs: [] as { category_id?: unknown; seed_number?: unknown }[] }
+  const entryStatsByCategory = new Map<string, { total: number; seeded: number }>()
+  for (const entry of allConfirmedEntries.docs) {
+    const catId = String(getRelationshipId(entry.category_id as RelationshipDoc))
+    const stats = entryStatsByCategory.get(catId) || { total: 0, seeded: 0 }
+    stats.total += 1
+    if (entry.seed_number != null) stats.seeded += 1
+    entryStatsByCategory.set(catId, stats)
+  }
+
   // Prefer a category that actually has entries to seed over one with none yet - seeding an empty
   // category has nothing to show, so it's a worse default than one that's ready for a draw.
-  const categoryIds = categories.docs.map((cat) => String(cat.id))
-  const entryCountsResult = categoryId
-    ? null
-    : categoryIds.length
-      ? await payload.find({
-          collection: 'competition-entries',
-          depth: 0,
-          limit: 2000,
-          where: {
-            and: [{ category_id: { in: categoryIds } }, { status: { equals: 'confirmed' } }],
-          },
-        })
-      : null
-  const entryCountByCategory = new Map<string, number>()
-  for (const entry of entryCountsResult?.docs ?? []) {
-    const catId = String(getRelationshipId(entry.category_id as RelationshipDoc))
-    entryCountByCategory.set(catId, (entryCountByCategory.get(catId) || 0) + 1)
-  }
   const nextCategoryWithEntries = categories.docs.find(
-    (cat) => cat.status !== 'draft' && (entryCountByCategory.get(String(cat.id)) || 0) >= 2,
+    (cat) => cat.status !== 'draft' && (entryStatsByCategory.get(String(cat.id))?.total || 0) >= 2,
   )
 
   const selectedCategoryId =
     categoryId || String(nextCategoryWithEntries?.id ?? categories.docs[0]?.id ?? '')
   const selectedCategory = categories.docs.find((c) => String(c.id) === selectedCategoryId)
-  const categoryOptions = categories.docs.map((category) => ({
-    id: String(category.id),
-    label: `${getRelationshipLabel(category.sport_id as RelationshipDoc)} — ${category.name}`,
-  }))
+  const switcherItems: CategorySwitcherItem[] = categories.docs.map((category) => {
+    const stats = entryStatsByCategory.get(String(category.id)) || { total: 0, seeded: 0 }
+    return {
+      id: String(category.id),
+      name: category.name,
+      sportLabel: getRelationshipLabel(category.sport_id as RelationshipDoc),
+      statusLabel: stats.total === 0 ? 'no entries' : `${stats.seeded}/${stats.total} seeded`,
+      ready: stats.total > 0 && stats.seeded === stats.total,
+    }
+  })
 
   if (!selectedCategory) {
     return (
@@ -2540,20 +2618,12 @@ const DrawStep = async ({
             the previous step.
           </p>
         </div>
-        <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
-          <input type="hidden" name="eventId" value={eventId} />
-          <input type="hidden" name="step" value="draw" />
-          <Field label="Sport & category" className="min-w-[240px] flex-1">
-            <SearchableSelect
-              name="categoryId"
-              defaultValue={selectedCategoryId}
-              options={categoryOptions.map((category) => ({ value: category.id, label: category.label }))}
-            />
-          </Field>
-          <Button type="submit" variant="secondary">
-            Switch category
-          </Button>
-        </form>
+        <CategorySwitcherList
+          eventId={eventId}
+          step="draw"
+          items={switcherItems}
+          selectedCategoryId={selectedCategoryId}
+        />
       </Card>
 
       <Card className="flex flex-col gap-4">
@@ -2849,31 +2919,42 @@ const BracketStep = async ({
     where: { event_id: { equals: eventId } },
     sort: 'name',
   })
+  // MSG-10: fetched unconditionally (not just when `categoryId` is absent) - the switcher list
+  // below needs every category's bracket status, not just whichever one is currently selected.
+  const categoryIds = categories.docs.map((cat) => String(cat.id))
+  const allStages = categoryIds.length
+    ? await payload.find({
+        collection: 'stages',
+        depth: 0,
+        limit: 500,
+        where: { category_id: { in: categoryIds } },
+      })
+    : { docs: [] as { category_id?: unknown; status?: unknown }[] }
+  const stagedCategoryIds = new Set(
+    allStages.docs.map((stage) => String(getRelationshipId(stage.category_id as RelationshipDoc))),
+  )
+  const publishedCategoryIds = new Set(
+    allStages.docs
+      .filter((stage) => stage.status === 'published')
+      .map((stage) => String(getRelationshipId(stage.category_id as RelationshipDoc))),
+  )
   // AUDIT item 8: default to a category that already has a generated stage, so landing here
   // without an explicit categoryId shows a real bracket instead of the "no stage yet" empty state
   // for whichever category happens to sort first.
-  const categoryIds = categories.docs.map((cat) => String(cat.id))
-  const stagedCategoryIds = categoryId
-    ? new Set<string>()
-    : categoryIds.length
-      ? new Set(
-          (
-            await payload.find({
-              collection: 'stages',
-              depth: 0,
-              limit: 200,
-              where: { and: [{ category_id: { in: categoryIds } }, { order: { equals: 1 } }] },
-            })
-          ).docs.map((stage) => String(getRelationshipId(stage.category_id as RelationshipDoc))),
-        )
-      : new Set<string>()
   const categoryWithStage = categories.docs.find((cat) => stagedCategoryIds.has(String(cat.id)))
 
   const selectedCategoryId =
     categoryId || String(categoryWithStage?.id ?? categories.docs[0]?.id ?? '')
-  const categoryOptions = categories.docs.map((cat) => ({
+  const switcherItems: CategorySwitcherItem[] = categories.docs.map((cat) => ({
     id: String(cat.id),
-    label: `${getRelationshipLabel(cat.sport_id as RelationshipDoc)} — ${cat.name}`,
+    name: cat.name,
+    sportLabel: getRelationshipLabel(cat.sport_id as RelationshipDoc),
+    statusLabel: publishedCategoryIds.has(String(cat.id))
+      ? 'published'
+      : stagedCategoryIds.has(String(cat.id))
+        ? 'generated'
+        : 'no bracket yet',
+    ready: publishedCategoryIds.has(String(cat.id)),
   }))
 
   if (!selectedCategoryId) {
@@ -2938,20 +3019,12 @@ const BracketStep = async ({
       <div className="flex flex-col gap-3">
         <h2 className="text-sm font-extrabold text-ink">{stepNumber('bracket')}. Bracket / fixtures</h2>
         <Card>
-          <form className="flex flex-wrap items-end gap-3" method="get" action="/workspaces/event-admin/new-event">
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="step" value="bracket" />
-            <Field label="Sport & category" className="min-w-[240px] flex-1">
-              <SearchableSelect
-                name="categoryId"
-                defaultValue={selectedCategoryId}
-                options={categoryOptions.map((cat) => ({ value: cat.id, label: cat.label }))}
-              />
-            </Field>
-            <Button type="submit" variant="secondary">
-              Switch category
-            </Button>
-          </form>
+          <CategorySwitcherList
+            eventId={eventId}
+            step="bracket"
+            items={switcherItems}
+            selectedCategoryId={selectedCategoryId}
+          />
         </Card>
         {generated ? (
           <AlertBanner tone="success">
