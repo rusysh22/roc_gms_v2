@@ -52,6 +52,7 @@ import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal
 import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { addRulesetAction, addSportAction } from './sportActions'
+import { SportCatalogPicker } from './SportCatalogPicker'
 import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
 import {
   addClubAction,
@@ -136,6 +137,8 @@ const errorMessages: Record<string, string> = {
   double_elimination_requires_power_of_two:
     'Double elimination auto-generation needs an exact power-of-two number of confirmed entries (4, 8, 16, 32...). Add or remove entries to reach one, or build the bracket manually in the Scheduler workspace.',
   invalid_publish_option: 'Choose one of the three publish options.',
+  invalid_catalog_sport: 'Choose a sport from the catalog and a valid format.',
+  empty_catalog_selection: 'Tick at least one event before adding.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -435,6 +438,14 @@ export default async function NewEventWizardPage({
             <AlertBanner tone="error">{errorMessages[wizardError]}</AlertBanner>
           ) : null}
           {wizardUpdated ? <AlertBanner tone="success">Saved.</AlertBanner> : null}
+          {get(params, 'wizardCatalogAdded') ? (
+            <AlertBanner tone="success">
+              Added {get(params, 'wizardCatalogAdded')} event(s) from the catalog.
+              {get(params, 'wizardCatalogIssues')
+                ? ' Some were skipped because a category with that name already exists.'
+                : ''}
+            </AlertBanner>
+          ) : null}
           {get(params, 'wizardUndone') ? (
             <AlertBanner tone="success">
               Phase undone. The knockout matches were removed and the group stage is unlocked for
@@ -1093,8 +1104,19 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
 
   return (
     <>
+      <Card className="flex flex-col gap-3">
+        <CardTitle>Quick add from catalog</CardTitle>
+        <p className="text-xs text-ink-soft">
+          Pick a common sport and tick its standard events - we&apos;ll create the sport, a starting
+          ruleset, and one category per event you tick. Fastest way to set up a standard sport.
+        </p>
+        <div>
+          <SportCatalogPicker eventId={eventId} />
+        </div>
+      </Card>
+
       <Card className="flex flex-col gap-4">
-        <CardTitle>{stepNumber('sports')}. Add a sport</CardTitle>
+        <CardTitle>{stepNumber('sports')}. Add a sport manually</CardTitle>
         <form action={addSportAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="eventId" value={eventId} />
           <Field label="Sport name">

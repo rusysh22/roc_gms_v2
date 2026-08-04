@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   Layers,
   ListChecks,
+  ListOrdered,
   Medal,
   Megaphone,
   Menu,
@@ -78,6 +79,12 @@ const GROUPS: SidebarGroup[] = [
         label: 'Facilities & Venues',
         icon: Layers,
         href: '/workspaces/event-admin/facilities',
+        roles: ['super_admin', 'event_admin'],
+      },
+      {
+        label: 'Rulesets',
+        icon: ListOrdered,
+        href: '/workspaces/event-admin/rulesets',
         roles: ['super_admin', 'event_admin'],
       },
       {
