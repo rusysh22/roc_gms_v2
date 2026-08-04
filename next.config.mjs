@@ -30,6 +30,17 @@ const nextConfig = {
       },
     ]
   },
+  // Next's Server Action body parser defaults to 1MB, well under several file uploads already in
+  // this app that go through a plain `<form action={serverAction}>` (not a separate upload
+  // endpoint) - e.g. FileUpload declares up to 10MB for match attachments/media, 8MB for appearance
+  // banners, 5MB for event/article logos. Any of those over ~1MB threw "Body exceeded 1 MB limit"
+  // at submit time. Set well above the largest declared FileUpload limit (10MB) to leave headroom
+  // for multipart/form-data overhead.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '15mb',
+    },
+  },
 }
 
 export default withPayload(nextConfig)
