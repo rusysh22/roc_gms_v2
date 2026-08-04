@@ -53,7 +53,14 @@ import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { addRulesetAction, addSportAction } from './sportActions'
 import { SportCatalogPicker } from './SportCatalogPicker'
-import { addCategoryAction, updateCategoryStatusAction } from './categoryActions'
+import {
+  addCategoryAction,
+  deleteCategoryAction,
+  duplicateCategoryAction,
+  updateCategoryAction,
+  updateCategoryStatusAction,
+} from './categoryActions'
+import { CrudFormModal } from '@/components/ui/crud-modal'
 import {
   addClubAction,
   addPairAction,
@@ -139,6 +146,8 @@ const errorMessages: Record<string, string> = {
   invalid_publish_option: 'Choose one of the three publish options.',
   invalid_catalog_sport: 'Choose a sport from the catalog and a valid format.',
   empty_catalog_selection: 'Tick at least one event before adding.',
+  category_in_use:
+    'This category already has entries, stages, or matches - archive it instead of deleting.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -481,6 +490,7 @@ export default async function NewEventWizardPage({
               eventId={eventId}
               setupTournamentType={String(event.setup_tournament_type || '')}
               setupParticipantMode={String(event.setup_participant_mode || '')}
+              editingCategoryId={get(params, 'editCategory')}
             />
           ) : null}
           {step === 'participants' && event ? (
@@ -1275,16 +1285,29 @@ const PARTICIPANT_MODE_CHOICES = [
   },
 ] as const
 
+const FORMAT_TYPE_OPTIONS = [
+  { value: 'single_elimination', label: 'Single elimination' },
+  { value: 'double_elimination', label: 'Double elimination' },
+  { value: 'round_robin', label: 'Round robin' },
+  { value: 'group_stage_to_knockout', label: 'Group stage, then knockout' },
+  { value: 'league', label: 'League' },
+  { value: 'friendly', label: 'Friendly (no standings)' },
+  { value: 'time_trial', label: 'Time trial' },
+  { value: 'score_ranking', label: 'Score ranking' },
+] as const
+
 const CategoriesStep = async ({
   payload,
   eventId,
   setupTournamentType,
   setupParticipantMode,
+  editingCategoryId,
 }: {
   payload: Payload
   eventId: string
   setupTournamentType: string
   setupParticipantMode: string
+  editingCategoryId?: string
 }) => {
   const [sports, categories, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -1472,43 +1495,148 @@ const CategoriesStep = async ({
           <EmptyState>No categories added yet.</EmptyState>
         ) : (
           <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-            {categories.docs.map((category) => (
-              <div
-                key={category.id}
-                className="flex flex-col gap-3 rounded-card border border-line bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <strong className="text-sm font-bold text-ink">{category.name}</strong>
-                    <StatusBadge tone={categoryStatusTone(String(category.status))}>
-                      {String(category.status).replaceAll('_', ' ')}
-                    </StatusBadge>
+            {categories.docs.map((category) => {
+              const editing = editingCategoryId === String(category.id)
+              const deleteFormId = `delete-category-${category.id}`
+              const closeHref = `/workspaces/event-admin/new-event?eventId=${eventId}&step=categories`
+              return (
+                <div
+                  key={category.id}
+                  className="flex flex-col gap-3 rounded-card border border-line bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <strong className="text-sm font-bold text-ink">{category.name}</strong>
+                      <StatusBadge tone={categoryStatusTone(String(category.status))}>
+                        {String(category.status).replaceAll('_', ' ')}
+                      </StatusBadge>
+                    </div>
+                    <span className="text-xs font-semibold text-ink-soft">
+                      {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
+                      {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
+                      {String(category.format_type).replaceAll('_', ' ')}
+                      {category.third_place_policy && category.third_place_policy !== 'none'
+                        ? ` · ${category.third_place_policy === 'match' ? 'bronze final' : 'shared third'}`
+                        : ''}
+                    </span>
                   </div>
-                  <span className="text-xs font-semibold text-ink-soft">
-                    {getRelationshipLabel(category.sport_id as RelationshipDoc)} &middot;{' '}
-                    {String(category.participant_mode).replaceAll('_', ' ')} &middot;{' '}
-                    {String(category.format_type).replaceAll('_', ' ')}
-                    {category.third_place_policy && category.third_place_policy !== 'none'
-                      ? ` · ${category.third_place_policy === 'match' ? 'bronze final' : 'shared third'}`
-                      : ''}
-                  </span>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <form action={updateCategoryStatusAction} className="flex items-center gap-2">
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="categoryId" value={String(category.id)} />
+                      <Select name="status" defaultValue={String(category.status)} className="h-9 text-xs">
+                        <option value="draft">Draft</option>
+                        <option value="open">Open</option>
+                        <option value="locked">Locked</option>
+                        <option value="published">Published</option>
+                        <option value="archived">Archived</option>
+                      </Select>
+                      <SubmitButton size="sm" variant="secondary">
+                        Save
+                      </SubmitButton>
+                    </form>
+
+                    <CrudFormModal
+                      key={editing ? `edit-${category.id}` : `closed-${category.id}`}
+                      title={`Edit ${category.name}`}
+                      openDefault={editing}
+                      closeHref={closeHref}
+                      trigger={
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`${closeHref}&editCategory=${category.id}`}>Edit</Link>
+                        </Button>
+                      }
+                    >
+                      <form action={updateCategoryAction} className="grid gap-4 sm:grid-cols-2">
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="categoryId" value={String(category.id)} />
+                        <Field label="Category name" className="sm:col-span-2">
+                          <Input name="name" required defaultValue={category.name} />
+                        </Field>
+                        <Field label="Who's competing?">
+                          <Select name="participantMode" defaultValue={String(category.participant_mode)}>
+                            <option value="individual">Individual player</option>
+                            <option value="pair">Pair</option>
+                            <option value="team">Team</option>
+                            <option value="club">Club / delegation</option>
+                            <option value="open">Open</option>
+                            <option value="tbd">Not sure yet</option>
+                          </Select>
+                        </Field>
+                        <Field label="Format">
+                          <Select name="formatType" defaultValue={String(category.format_type)}>
+                            {FORMAT_TYPE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label="Ruleset" className="sm:col-span-2">
+                          <Select
+                            name="rulesetId"
+                            defaultValue={category.ruleset_id ? String(getRelationshipId(category.ruleset_id as RelationshipDoc)) : ''}
+                          >
+                            <option value="">No ruleset</option>
+                            {rulesets.docs.map((ruleset) => (
+                              <option key={ruleset.id} value={String(ruleset.id)}>
+                                {ruleset.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label="Perebutan juara 3">
+                          <Select name="thirdPlacePolicy" defaultValue={String(category.third_place_policy || 'none')}>
+                            <option value="none">None</option>
+                            <option value="match">Third-place match (Bronze Final)</option>
+                            <option value="shared">Both semifinal losers share third</option>
+                          </Select>
+                        </Field>
+                        <label className="flex items-center gap-2 text-sm font-semibold text-ink sm:col-span-2">
+                          <input
+                            name="rosterRequired"
+                            type="checkbox"
+                            defaultChecked={Boolean(category.roster_required)}
+                            className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                          />
+                          Roster required
+                        </label>
+                        <Field label="Min roster size">
+                          <Input name="minRosterSize" type="number" min="0" defaultValue={category.min_roster_size ?? ''} />
+                        </Field>
+                        <Field label="Max roster size">
+                          <Input name="maxRosterSize" type="number" min="0" defaultValue={category.max_roster_size ?? ''} />
+                        </Field>
+                        <div className="sm:col-span-2">
+                          <SubmitButton>Save category</SubmitButton>
+                        </div>
+                      </form>
+                    </CrudFormModal>
+
+                    <form action={duplicateCategoryAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="categoryId" value={String(category.id)} />
+                      <SubmitButton size="sm" variant="ghost">
+                        Duplicate
+                      </SubmitButton>
+                    </form>
+
+                    <form id={deleteFormId} action={deleteCategoryAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="categoryId" value={String(category.id)} />
+                    </form>
+                    <ConfirmSubmitButton
+                      formId={deleteFormId}
+                      size="sm"
+                      variant="ghost"
+                      confirmMessage={`Delete "${category.name}"? Only allowed if it has no entries, stages, or matches yet.`}
+                    >
+                      Delete
+                    </ConfirmSubmitButton>
+                  </div>
                 </div>
-                <form action={updateCategoryStatusAction} className="flex shrink-0 items-center gap-2">
-                  <input type="hidden" name="eventId" value={eventId} />
-                  <input type="hidden" name="categoryId" value={String(category.id)} />
-                  <Select name="status" defaultValue={String(category.status)} className="h-9 text-xs">
-                    <option value="draft">Draft</option>
-                    <option value="open">Open</option>
-                    <option value="locked">Locked</option>
-                    <option value="published">Published</option>
-                    <option value="archived">Archived</option>
-                  </Select>
-                  <SubmitButton size="sm" variant="secondary">
-                    Save
-                  </SubmitButton>
-                </form>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </Card>
