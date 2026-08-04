@@ -146,6 +146,29 @@ export const CompetitionCategories: CollectionConfig = {
           'Time Trial / Score Ranking only: unit shown next to each entry\'s recorded result (e.g. "seconds", "points", "meters").',
       },
     },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'medal_eligible',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: {
+            description:
+              'MSG-02: whether this category counts toward the event medal tally (when the event has medal_tally_enabled on). Turn off for exhibition/friendly categories.',
+          },
+        },
+        {
+          name: 'medal_weight',
+          type: 'number',
+          min: 0,
+          defaultValue: 1,
+          admin: {
+            description: 'Multiplies this category\'s medal count on the tally - only change from 1 for a category that should count for more than one medal.',
+          },
+        },
+      ],
+    },
   ],
   timestamps: true,
 }

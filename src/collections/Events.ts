@@ -264,6 +264,58 @@ export const Events: CollectionConfig = {
       name: 'theme_config',
       type: 'json',
     },
+    {
+      name: 'medal_tally_enabled',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        description:
+          'MSG-02: turns on the medal tally / overall contingent standings feature for this event - the public /medals page, the workspace medals page, and automatic medal derivation when a category finishes. Off by default so existing events are unaffected.',
+      },
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'medal_ranking_method',
+          type: 'select',
+          defaultValue: 'gold_first',
+          admin: {
+            description: 'How contingents are ranked against each other on the medal tally.',
+          },
+          options: [
+            { label: 'Most gold first (Olympic-style)', value: 'gold_first' },
+            { label: 'Weighted points', value: 'weighted_points' },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'row',
+      fields: [
+        {
+          name: 'medal_points_gold',
+          type: 'number',
+          min: 0,
+          defaultValue: 3,
+          admin: { description: 'Only used when medal_ranking_method is weighted_points.' },
+        },
+        {
+          name: 'medal_points_silver',
+          type: 'number',
+          min: 0,
+          defaultValue: 2,
+          admin: { description: 'Only used when medal_ranking_method is weighted_points.' },
+        },
+        {
+          name: 'medal_points_bronze',
+          type: 'number',
+          min: 0,
+          defaultValue: 1,
+          admin: { description: 'Only used when medal_ranking_method is weighted_points.' },
+        },
+      ],
+    },
   ],
   timestamps: true,
 }

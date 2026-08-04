@@ -722,6 +722,11 @@ export default async function EventHomePage({
             <Link href={`${eventPath}/schedule?tab=standings`} className="text-ink-soft no-underline hover:text-ink">
               Standings
             </Link>
+            {event.medal_tally_enabled ? (
+              <Link href={`${eventPath}/medals`} className="text-ink-soft no-underline hover:text-ink">
+                Medal Tally
+              </Link>
+            ) : null}
             <Link href={`${eventPath}/updates`} className="text-ink-soft no-underline hover:text-ink">
               Updates
             </Link>

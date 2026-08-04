@@ -20,6 +20,7 @@ import { EventMemberships } from './src/collections/EventMemberships'
 import { Groups } from './src/collections/Groups'
 import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
+import { MedalRecords } from './src/collections/MedalRecords'
 import { Media } from './src/collections/Media'
 import { Players } from './src/collections/Players'
 import { RegistrationSubmissions } from './src/collections/RegistrationSubmissions'
@@ -83,6 +84,7 @@ export default buildConfig({
     MatchSets,
     Standings,
     Brackets,
+    MedalRecords,
     Media,
     Articles,
     Announcements,

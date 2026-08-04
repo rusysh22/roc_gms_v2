@@ -34,6 +34,12 @@ export type PublicEventDoc = {
   logo?: EventBannerImage | string | number | null
   banner_image?: EventBannerImage | string | number | null
   theme_config?: EventThemeConfig | null
+  // MSG-02
+  medal_tally_enabled?: boolean | null
+  medal_ranking_method?: 'gold_first' | 'weighted_points' | null
+  medal_points_gold?: number | null
+  medal_points_silver?: number | null
+  medal_points_bronze?: number | null
 }
 
 // "hidden" (never published) and "preview_only" (admin/member preview, not yet a public teaser)

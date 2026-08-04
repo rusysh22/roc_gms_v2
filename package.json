@@ -12,6 +12,7 @@
     "seed:reset-matches": "payload run src/scripts/resetDemoMatchData.ts",
     "brackets:recalculate": "payload run src/scripts/recalculateBrackets.ts",
     "standings:recalculate": "payload run src/scripts/recalculateStandings.ts",
+    "medals:recalculate": "payload run src/scripts/recalculateMedals.ts",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",
     "typecheck": "tsc --noEmit",

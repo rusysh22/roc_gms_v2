@@ -8,6 +8,7 @@ import type { Payload } from 'payload'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { attemptDoubleEliminationAdvancement, recalculateDoubleEliminationBracket } from '@/lib/doubleElimination'
+import { recalculateMedalsForCategory } from '@/lib/medals'
 import { postMatchAnnouncement } from '@/lib/matchNotifications'
 import {
   countSetWinsForSide,
@@ -110,6 +111,57 @@ const standingResultStatuses = new Set(['finished', 'result_published'])
 const ACTIVE_SCORE_ENTRY_STATUSES = new Set(['ongoing', 'paused', 'under_review'])
 const rankingStageTypes = new Set(['time_trial', 'score_ranking'])
 
+// MSG-02: called from every branch of recalculateResultCachesBestEffort below, after that
+// branch's own standings/bracket cache recalculation - medal derivation reads the standings/bracket
+// state those just wrote, so it must run after them, not in parallel. A no-op (not even a
+// database write) for any event with medal_tally_enabled off, which is every event by default.
+const recalculateMedalsBestEffort = async ({
+  payload,
+  match,
+  matchNumber,
+  action,
+  actorUserId,
+}: {
+  payload: Payload
+  match: MinimalMatch
+  matchNumber: string
+  action: string
+  actorUserId: string | number | null
+}) => {
+  if (!match.event_id || !match.category_id) {
+    return
+  }
+
+  try {
+    const event = await payload.findByID({ collection: 'events', id: match.event_id, depth: 0 })
+    if (!event.medal_tally_enabled) {
+      return
+    }
+
+    const result = await recalculateMedalsForCategory(payload, match.category_id)
+
+    await recordAuditLog({
+      payload,
+      action: 'medal.recalculate',
+      entityType: 'matches',
+      entityId: match.id,
+      before: null,
+      after: {
+        reason: action,
+        match_number: matchNumber,
+        category_id: match.category_id,
+        written: result.written,
+        skipped_manual: result.skippedManual,
+        finished: result.finished,
+        blocked_by_tie: result.blockedByTie,
+      },
+      actorUserId,
+    })
+  } catch (error) {
+    payload.logger.error(`Failed to recalculate medals after ${action} on match ${matchNumber}: ${error}`)
+  }
+}
+
 const recalculateResultCachesBestEffort = async ({
   payload,
   match,
@@ -174,6 +226,7 @@ const recalculateResultCachesBestEffort = async ({
       )
     }
 
+    await recalculateMedalsBestEffort({ payload, match, matchNumber, action, actorUserId })
     return
   }
 
@@ -248,10 +301,15 @@ const recalculateResultCachesBestEffort = async ({
         `Failed to recalculate bracket after ${action} on match ${matchNumber}: ${error}`,
       )
     }
+    await recalculateMedalsBestEffort({ payload, match, matchNumber, action, actorUserId })
     return
   }
 
   if (stage.stage_type === 'double_elimination') {
+    // MSG-02: no recalculateMedalsBestEffort call here - deriveMedalsForCategory has no
+    // double-elimination strategy yet (winners/losers bracket + grand final reset has no clean
+    // gold/silver/bronze mapping without more design work), so a category on this stage type
+    // never produces medals even with medal_tally_enabled on.
     if (match.status === 'result_published' && match.winner_entry_id) {
       try {
         const advancement = await attemptDoubleEliminationAdvancement(payload, match.id)
@@ -336,6 +394,8 @@ const recalculateResultCachesBestEffort = async ({
         `Failed to recalculate ranking standings after ${action} on match ${matchNumber}: ${error}`,
       )
     }
+
+    await recalculateMedalsBestEffort({ payload, match, matchNumber, action, actorUserId })
   }
 }
 
