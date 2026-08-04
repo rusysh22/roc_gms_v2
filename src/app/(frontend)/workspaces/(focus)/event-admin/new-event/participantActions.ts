@@ -268,6 +268,17 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     where: { event_id: { equals: eventId } },
   })
   const knownTeamSlugs = new Set(existingTeams.docs.map((team) => String(team.slug)))
+  const existingPlayers = await payload.find({
+    collection: 'players',
+    depth: 0,
+    limit: 1000,
+    where: { event_id: { equals: eventId } },
+  })
+  const knownEmployeeIds = new Set(
+    existingPlayers.docs
+      .map((player) => (player.employee_id ? String(player.employee_id).trim().toLowerCase() : ''))
+      .filter(Boolean),
+  )
 
   let clubsToCreate = 0
   let teamsToCreate = 0
@@ -315,6 +326,14 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   }
 
   for (const row of parsed.players) {
+    const employeeIdKey = row.employeeId ? row.employeeId.trim().toLowerCase() : ''
+    if (employeeIdKey && knownEmployeeIds.has(employeeIdKey)) {
+      skip('Players', row.name, `Employee ID "${row.employeeId}" is already used in this event`)
+      continue
+    }
+    if (employeeIdKey) {
+      knownEmployeeIds.add(employeeIdKey)
+    }
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Players', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
     }
@@ -433,6 +452,17 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   for (const club of existingClubs.docs) {
     clubIdByName.set(String(club.name).trim().toLowerCase(), Number(club.id))
   }
+  const existingPlayers = await payload.find({
+    collection: 'players',
+    depth: 0,
+    limit: 1000,
+    where: { event_id: { equals: eventId } },
+  })
+  const knownEmployeeIds = new Set(
+    existingPlayers.docs
+      .map((player) => (player.employee_id ? String(player.employee_id).trim().toLowerCase() : ''))
+      .filter(Boolean),
+  )
 
   let created = 0
   let skipped = 0
@@ -522,6 +552,11 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   }
 
   for (const row of parsed.players) {
+    const employeeIdKey = row.employeeId ? row.employeeId.trim().toLowerCase() : ''
+    if (employeeIdKey && knownEmployeeIds.has(employeeIdKey)) {
+      skip('Players', row.name, `Employee ID "${row.employeeId}" is already used in this event`)
+      continue
+    }
     try {
       const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
       if (row.clubName && !clubId) {
@@ -539,10 +574,17 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         name: row.name,
         email: row.email,
         gender,
+        employee_id: row.employeeId,
+        photo: row.photo,
       }
       await payload.create({ collection: 'players', data })
+      if (employeeIdKey) {
+        knownEmployeeIds.add(employeeIdKey)
+      }
       created += 1
     } catch {
+      // Falls through here mainly if the unique (event_id, employee_id) DB index is hit despite
+      // the in-memory check above - e.g. a concurrent import into the same event.
       skip('Players', row.name, 'Could not save (unexpected error)')
     }
   }

@@ -15,6 +15,11 @@ export const Players: CollectionConfig = {
     read: canReadEventBackoffice,
     update: canManageParticipants,
   },
+  // MSG-05: employee_id uniqueness must be scoped per event, not global - it used to be a bare
+  // `unique: true` field, which meant the same person's employee ID collided across two
+  // unrelated events. Postgres unique indexes treat NULL as distinct, so players without an
+  // employee_id (the common case before this field was ever asked for) are unaffected.
+  indexes: [{ fields: ['event_id', 'employee_id'], unique: true }],
   fields: [
     {
       name: 'event_id',
@@ -37,7 +42,6 @@ export const Players: CollectionConfig = {
     {
       name: 'employee_id',
       type: 'text',
-      unique: true,
       index: true,
     },
     {

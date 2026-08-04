@@ -18,9 +18,14 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       '4. "gender" on the Players sheet must be one of: male, female, other, prefer_not_to_say - ' +
         'or left blank.',
     ],
-    ['5. Do not rename the Clubs / Teams / Players sheet tabs - the importer reads them by name.'],
-    ['6. Delete the example row before adding your own data (or just overwrite it).'],
-    ['7. Upload this file on the Clubs / Teams / Players step of the New Event Wizard.'],
+    [
+      '5. "employee_id" on the Players sheet is optional but must be unique within this event if ' +
+        'set - a duplicate will fail just that row, not the whole import.',
+    ],
+    ['6. "photo" on the Players sheet is optional and must be a URL to an image, not a file upload.'],
+    ['7. Do not rename the Clubs / Teams / Players sheet tabs - the importer reads them by name.'],
+    ['8. Delete the example row before adding your own data (or just overwrite it).'],
+    ['9. Upload this file on the Clubs / Teams / Players step of the New Event Wizard.'],
   ])
   instructionsSheet['!cols'] = [{ wch: 100 }]
   XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions')
@@ -44,9 +49,19 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       email: 'john@example.com',
       phone: '0812-0000-0000',
       gender: 'male',
+      employee_id: 'EMP-0001',
+      photo: 'https://example.com/photos/john-smith.jpg',
     },
   ])
-  playersSheet['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 28 }, { wch: 18 }, { wch: 18 }]
+  playersSheet['!cols'] = [
+    { wch: 26 },
+    { wch: 22 },
+    { wch: 28 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 36 },
+  ]
   XLSX.utils.book_append_sheet(workbook, playersSheet, 'Players')
 
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
