@@ -1,12 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
-import { ArrowLeft, MapPin } from 'lucide-react'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 
 import config from '@payload-config'
 import { getMatchDetail } from '../../../../matchDetailData'
 import { AutoRefresh } from '@/components/auto-refresh'
-import { Card, CardTitle } from '@/components/ui/card'
 import { ShareButtons } from '@/components/share-buttons'
 import { AnnouncementFeed, ArticleCard } from '../../../../contentComponents'
 import {
@@ -14,9 +13,10 @@ import {
   getRelationshipId,
   getScopedPublicAnnouncements,
 } from '../../../../contentData'
-import { formatDateTime, getRelationshipLabel } from '../../../../workspaces/workspaceComponents'
+import { getRelationshipLabel } from '../../../../workspaces/workspaceComponents'
 import {
   DocumentationGallery,
+  MatchInfoStrip,
   PublicBracketImpactPanel,
   PublicCommentList,
   PublicStandingImpactPanel,
@@ -91,20 +91,23 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
     <main className="font-sans text-ink">
       <section className="px-4 pt-4 pb-6">
         <div className="mx-auto max-w-3xl">
-          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
+          <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm">
             <Link
               href={`${eventPath}/schedule`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
+              className="inline-flex items-center gap-1 font-semibold text-brand-secondary hover:underline"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Back to schedule
+              Schedule
             </Link>
             {categoryHref ? (
-              <Link href={categoryHref} className="text-sm font-semibold text-brand-secondary hover:underline">
-                View category page
-              </Link>
+              <>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-soft" aria-hidden="true" />
+                <Link href={categoryHref} className="font-semibold text-brand-secondary hover:underline">
+                  {getRelationshipLabel(match.category_id)}
+                </Link>
+              </>
             ) : null}
-          </div>
+          </nav>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
               {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
@@ -121,61 +124,28 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
             {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
             {getRelationshipLabel(match.participant_b_entry_id)}
           </h1>
-          <p className="mt-2 text-sm text-ink-soft">
-            {match.match_number} / {match.round_name || 'Match'}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-bold text-ink-soft">
+              {match.match_number}
+            </span>
+            {match.round_name ? (
+              <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-bold text-ink-soft">
+                {match.round_name}
+              </span>
+            ) : null}
+          </div>
         </div>
       </section>
 
-      <section className="px-4 pb-8" aria-label="Score">
+      <section className="px-4 pb-6" aria-label="Score">
         <div className="mx-auto max-w-3xl">
           <ScoreCard match={match} matchSets={matchSets} />
         </div>
       </section>
 
       <section className="px-4 pb-8" aria-label="Schedule and venue">
-        <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
-          <Card>
-            <CardTitle>Schedule</CardTitle>
-            <dl className="mt-3 flex flex-col gap-2 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-soft">Starts</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-soft">Ends</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at)}</dd>
-              </div>
-            </dl>
-            {/* AUDIT_UI_UX_CSS PUB-18: only shown once a real time exists - nothing to add to a
-                calendar for a match that hasn't been scheduled yet. */}
-            {match.scheduled_start_at ? (
-              <a
-                href={`${eventPath}/matches/${match.match_number}/calendar.ics`}
-                className="mt-3 inline-block text-sm font-bold text-brand-secondary underline underline-offset-2"
-              >
-                Add to calendar (.ics)
-              </a>
-            ) : null}
-          </Card>
-          <Card>
-            <CardTitle>Venue</CardTitle>
-            <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-ink">
-              <MapPin className="h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
-              {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
-            </p>
-          </Card>
-        </div>
-      </section>
-
-      <section className="px-4 pb-8" aria-label="Match announcements">
         <div className="mx-auto max-w-3xl">
-          <AnnouncementFeed
-            announcements={announcements}
-            title="Match Updates"
-            compact
-            basePath={`${eventPath}/updates?tab=announcements`}
-          />
+          <MatchInfoStrip match={match} eventPath={eventPath} />
         </div>
       </section>
 
@@ -187,6 +157,17 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
           </div>
         </section>
       ) : null}
+
+      <section className="px-4 pb-8" aria-label="Match announcements">
+        <div className="mx-auto max-w-3xl">
+          <AnnouncementFeed
+            announcements={announcements}
+            title="Match Updates"
+            compact
+            basePath={`${eventPath}/updates?tab=announcements`}
+          />
+        </div>
+      </section>
 
       <section className="px-4 pb-8" aria-label="Documentation">
         <div className="mx-auto max-w-3xl">

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { FileText, Video } from 'lucide-react'
+import { Calendar, Clock, FileText, MapPin, Trophy, Video } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Card, CardTitle } from '@/components/ui/card'
@@ -12,39 +12,82 @@ import type {
   MatchSetDetail,
   StandingImpact,
 } from '../../matchDetailData'
-import { formatDateTime, formatStatus, getRelationshipId, getRelationshipLabel } from '../../workspaces/workspaceComponents'
+import {
+  formatDateLabel,
+  formatDateTime,
+  formatStatus,
+  formatTimeOnly,
+  getRelationshipId,
+  getRelationshipLabel,
+} from '../../workspaces/workspaceComponents'
+
+// Match statuses that mean "there is no result to show yet" - drives both the center "vs" (rather
+// than a 0-0 score nobody has actually played toward yet) and the "scores will appear" caption
+// under an empty set list.
+const NOT_STARTED_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'check_in_open',
+  'ready_to_start',
+])
+const LIVE_STATUSES = new Set(['ongoing', 'paused'])
 
 // Public-only presentational pieces for the redesigned match detail page. Deliberately not shared
 // with src/app/(frontend)/workspaces/workspaceComponents.tsx (used by the workspace match detail
 // page) so restyling the public page in R2 cannot change workspace page rendering.
 
-const ParticipantScoreRow = ({
+const ParticipantBlock = ({
   label,
   isWinner,
-  setsWon,
-  hasSets,
+  align,
 }: {
   label: string
   isWinner: boolean
-  setsWon: number
-  hasSets: boolean
+  align: 'left' | 'right'
 }) => (
-  <div className={cn('flex items-center justify-between gap-3 px-5 py-4', isWinner && 'bg-mist')}>
+  <div
+    className={cn(
+      'flex min-w-0 flex-1 flex-col gap-1',
+      align === 'right' ? 'items-end text-right' : 'items-start text-left',
+    )}
+  >
+    {isWinner ? (
+      <span className="inline-flex items-center gap-1 text-[0.65rem] font-bold uppercase tracking-wide text-gold">
+        <Trophy className="h-3 w-3 shrink-0" aria-hidden="true" />
+        Winner
+      </span>
+    ) : null}
     <span
-      className={cn('text-lg', isWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft')}
+      className={cn(
+        'truncate text-lg leading-tight font-extrabold sm:text-2xl',
+        isWinner ? 'text-ink' : 'text-ink-soft',
+      )}
+      title={label}
     >
       {label}
     </span>
+  </div>
+)
+
+// AUDIT_UI_UX_CSS/prd redesign: the previous score display was a stacked list with each
+// participant's set count on its own row - readable, but not the "Team A [score] Team B" shape
+// every sports score page uses, which is the shape a spectator scans fastest. Center column shows
+// the actual set score once sets exist, or a plain "vs" pill beforehand rather than a misleading
+// "0 - 0" (nobody has scored 0 sets "to nothing" before the match starts).
+const ScoreCenter = ({ hasSets, aSetsWon, bSetsWon }: { hasSets: boolean; aSetsWon: number; bSetsWon: number }) => (
+  <div className="flex shrink-0 flex-col items-center justify-center px-3">
     {hasSets ? (
-      <span
-        className={cn(
-          'text-3xl tabular-nums',
-          isWinner ? 'font-extrabold text-green' : 'font-bold text-ink-soft',
-        )}
-      >
-        {setsWon}
+      <span className="text-3xl font-extrabold tabular-nums text-ink sm:text-4xl">
+        {aSetsWon}
+        <span className="mx-1.5 text-ink-soft">–</span>
+        {bSetsWon}
       </span>
-    ) : null}
+    ) : (
+      <span className="rounded-full border border-line bg-mist px-3 py-1 text-xs font-bold tracking-wide text-ink-soft uppercase">
+        vs
+      </span>
+    )}
   </div>
 )
 
@@ -66,27 +109,36 @@ export const ScoreCard = ({
   const bSetsWon = matchSets.filter(
     (set) => (set.participant_b_score ?? 0) > (set.participant_a_score ?? 0),
   ).length
+  const isLive = LIVE_STATUSES.has(match.status)
+  const notStartedYet = NOT_STARTED_STATUSES.has(match.status) && matchSets.length === 0
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-4">
-        <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-mist/60 px-5 py-3">
+        <div className="flex items-center gap-2">
+          {isLive ? (
+            <span className="relative flex h-2 w-2" aria-hidden="true">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+            </span>
+          ) : null}
+          <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
+        </div>
         {match.score_summary ? (
-          <p className="text-sm font-semibold text-ink-soft">{match.score_summary}</p>
+          <p className="text-sm font-bold tabular-nums text-ink-soft">{match.score_summary}</p>
         ) : null}
       </div>
-      <div className="flex flex-col divide-y divide-line">
-        <ParticipantScoreRow
+      <div className="flex items-center gap-2 px-5 py-6 sm:gap-6 sm:py-8">
+        <ParticipantBlock
           label={getRelationshipLabel(match.participant_a_entry_id)}
           isWinner={aIsWinner}
-          setsWon={aSetsWon}
-          hasSets={matchSets.length > 0}
+          align="left"
         />
-        <ParticipantScoreRow
+        <ScoreCenter hasSets={matchSets.length > 0} aSetsWon={aSetsWon} bSetsWon={bSetsWon} />
+        <ParticipantBlock
           label={getRelationshipLabel(match.participant_b_entry_id)}
           isWinner={bIsWinner}
-          setsWon={bSetsWon}
-          hasSets={matchSets.length > 0}
+          align="right"
         />
       </div>
       {matchSets.length > 0 ? (
@@ -108,7 +160,67 @@ export const ScoreCard = ({
             ))}
           </div>
         </div>
+      ) : notStartedYet ? (
+        <p className="border-t border-line px-5 py-3 text-center text-xs text-ink-soft">
+          Scores will appear here once the match begins.
+        </p>
       ) : null}
+    </Card>
+  )
+}
+
+// Replaces the old separate Schedule/Venue cards - the two were always read together ("when and
+// where do I need to be"), so splitting them into two same-weight cards made a spectator do the
+// work of mentally merging them back. "Not scheduled" repeated across four dt/dd pairs is also a
+// worse "not scheduled" state than one plain sentence saying so.
+export const MatchInfoStrip = ({ match, eventPath }: { match: MatchDetail; eventPath: string }) => {
+  const isScheduled = Boolean(match.scheduled_start_at)
+
+  return (
+    <Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="flex items-start gap-3">
+          <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Date</p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-ink">
+              {isScheduled ? formatDateLabel(match.scheduled_start_at) : 'Not scheduled yet'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Time</p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-ink">
+              {isScheduled
+                ? `${formatTimeOnly(match.scheduled_start_at)} – ${formatTimeOnly(match.scheduled_end_at)}`
+                : '—'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Venue</p>
+            <p className="mt-0.5 truncate text-sm font-semibold text-ink">
+              {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
+            </p>
+          </div>
+        </div>
+      </div>
+      {isScheduled ? (
+        <a
+          href={`${eventPath}/matches/${match.match_number}/calendar.ics`}
+          className="mt-4 inline-block text-sm font-bold text-brand-secondary underline underline-offset-2"
+        >
+          Add to calendar (.ics)
+        </a>
+      ) : (
+        <p className="mt-4 text-xs text-ink-soft">
+          This match hasn&apos;t been scheduled yet - check back for updates.
+        </p>
+      )}
     </Card>
   )
 }
