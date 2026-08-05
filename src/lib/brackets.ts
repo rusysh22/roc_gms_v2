@@ -28,6 +28,8 @@ export type BracketMatch = {
   participant_a_entry_id?: RelationshipDoc | Id | null
   participant_b_entry_id?: RelationshipDoc | Id | null
   winner_entry_id?: RelationshipDoc | Id | null
+  venue_id?: RelationshipDoc | Id | null
+  court_id?: RelationshipDoc | Id | null
 }
 
 export type BracketMatchSet = {
@@ -60,6 +62,7 @@ export type BracketMatchCard = {
   winner_entry_id?: Id
   score_summary?: string
   set_score?: string
+  venue_label?: string
   detail_href: string
   participant_a: BracketParticipant
   participant_b: BracketParticipant
@@ -370,6 +373,10 @@ export const buildSingleEliminationBracketLayout = async (
       winner_entry_id: winnerId,
       score_summary: match.score_summary || undefined,
       set_score: buildSetScore(matchSets),
+      venue_label:
+        match.venue_id || match.court_id ?
+          `${getRelationshipLabel(match.venue_id)} / ${getRelationshipLabel(match.court_id)}`
+        : undefined,
       detail_href: `/matches/${match.match_number}`,
       participant_a: buildParticipant(match.participant_a_entry_id, winnerId, clubLabelByEntryId),
       participant_b: buildParticipant(match.participant_b_entry_id, winnerId, clubLabelByEntryId),

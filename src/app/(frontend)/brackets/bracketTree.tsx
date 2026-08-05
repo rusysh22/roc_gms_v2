@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { ArrowRight, Crown, X } from 'lucide-react'
+import { ArrowRight, Crown, MapPin, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketRound } from '@/lib/brackets'
@@ -54,10 +54,21 @@ type GLootMatch = {
   startTime: string
   state: string
   href?: string
+  roundName?: string
+  scoreSummary?: string
+  setScoreText?: string
+  venueLabel?: string
   participantAName?: string
   participantBName?: string
   participantASubLabel?: string
   participantBSubLabel?: string
+  // Sourced directly from participant_a/participant_b (unconditionally), unlike `participants`
+  // below which drops a side entirely when it has no id yet (TBD) - the modal needs A/B-aligned
+  // score text that survives that case, not an array that silently shifts when one side is TBD.
+  participantAResultText?: string
+  participantBResultText?: string
+  participantAIsWinner?: boolean
+  participantBIsWinner?: boolean
   participants: GLootParticipant[]
 }
 
@@ -87,6 +98,18 @@ const parseSetsWon = (setScore?: string): [number, number] | null => {
 
   return parsed === 0 ? null : [a, b]
 }
+
+// Same "already decided" bucket used elsewhere (schedule page's Results filter, match detail
+// page) - a match with this status has a real result to show, not just a "vs" placeholder.
+const RESULT_STATUSES = new Set([
+  'finished',
+  'result_published',
+  'under_review',
+  'disputed',
+  'cancelled',
+  'walkover',
+])
+const LIVE_STATUSES = new Set(['ongoing', 'paused'])
 
 const getInferredRoundName = (roundsRemaining: number) => {
   if (roundsRemaining === 0) return 'Final'
@@ -165,10 +188,16 @@ const transformToGLootData = (rounds: BracketRound[], timezone: string): GLootMa
           startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
           state: 'WALK_OVER',
           href: realMatch.detail_href,
+          roundName: round?.name,
+          venueLabel: realMatch.venue_label,
           participantAName: realMatch.participant_a.label,
           participantBName: realMatch.participant_b.label,
           participantASubLabel: realMatch.participant_a.subLabel,
           participantBSubLabel: realMatch.participant_b.subLabel,
+          participantAResultText: hasParticipantA ? 'WO' : undefined,
+          participantBResultText: hasParticipantB ? 'WO' : undefined,
+          participantAIsWinner: hasParticipantA,
+          participantBIsWinner: hasParticipantB,
           participants: [
             {
               id: String(byeParticipant.id),
@@ -189,6 +218,12 @@ const transformToGLootData = (rounds: BracketRound[], timezone: string): GLootMa
         { participant: realMatch.participant_a, score: setsWon?.[0] },
         { participant: realMatch.participant_b, score: setsWon?.[1] },
       ]
+      const resultTextFor = (side: (typeof sides)[number]) => {
+        const isWalkoverWinner = realMatch.status === 'walkover' && side.participant.isWinner
+        if (side.score !== undefined) return String(side.score)
+        if (isWalkoverWinner) return 'WO'
+        return undefined
+      }
 
       for (const { participant, score } of sides) {
         if (!participant.id) {
@@ -217,8 +252,20 @@ const transformToGLootData = (rounds: BracketRound[], timezone: string): GLootMa
         startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
         state: realMatch.status,
         href: realMatch.detail_href,
+        roundName: round?.name,
+        scoreSummary: realMatch.score_summary,
+        setScoreText: realMatch.set_score,
+        venueLabel: realMatch.venue_label,
+        participantAResultText: hasParticipantA ? resultTextFor(sides[0]) : undefined,
+        participantBResultText: hasParticipantB ? resultTextFor(sides[1]) : undefined,
+        participantAIsWinner: hasParticipantA ? sides[0].participant.isWinner : false,
+        participantBIsWinner: hasParticipantB ? sides[1].participant.isWinner : false,
         participantAName: realMatch.participant_a.label,
         participantBName: realMatch.participant_b.label,
+        // Bug fix: previously only the bye branch set these, so the modal (which reads them
+        // directly, not from `participants` below) showed no club/sub-label for any normal match.
+        participantASubLabel: realMatch.participant_a.subLabel,
+        participantBSubLabel: realMatch.participant_b.subLabel,
         participants,
       })
     }
@@ -442,6 +489,11 @@ export const BracketTree = ({
   }
 
   const matches = transformToGLootData(rounds, timezone)
+  const isFinished = Boolean(selectedMatch && RESULT_STATUSES.has(selectedMatch.state))
+  const isLive = Boolean(selectedMatch && LIVE_STATUSES.has(selectedMatch.state))
+  const hasScore = Boolean(
+    selectedMatch?.participantAResultText || selectedMatch?.participantBResultText,
+  )
 
   return (
     <Dialog.Root open={Boolean(selectedMatch)} onOpenChange={(open) => !open && setSelectedMatch(null)}>
@@ -474,40 +526,108 @@ export const BracketTree = ({
 
             {selectedMatch ? (
               <>
-                <div className="flex items-center justify-between gap-3 rounded-card bg-mist px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-ink">
-                      {selectedMatch.participantAName || 'TBD'}
-                    </p>
-                    {selectedMatch.participantASubLabel ? (
-                      <p className="truncate text-xs text-ink-soft">{selectedMatch.participantASubLabel}</p>
-                    ) : null}
+                {selectedMatch.roundName ? (
+                  <p className="-mt-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
+                    {selectedMatch.roundName}
+                  </p>
+                ) : null}
+
+                {/* The score (when the match has one) and a clear winner/loser distinction are
+                    the whole point of opening this modal - a visitor shouldn't have to click
+                    through to the full match page just to see who won and by what score. */}
+                <div className="rounded-card bg-mist px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          'truncate text-sm',
+                          selectedMatch.participantAIsWinner ?
+                            'font-extrabold text-ink'
+                          : 'font-semibold text-ink-soft',
+                        )}
+                      >
+                        {selectedMatch.participantAName || 'TBD'}
+                      </p>
+                      {selectedMatch.participantASubLabel ? (
+                        <p className="truncate text-xs text-ink-soft">{selectedMatch.participantASubLabel}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 px-2 text-center">
+                      {hasScore ? (
+                        <span className="text-xl font-extrabold tabular-nums text-ink">
+                          {selectedMatch.participantAResultText || '–'}
+                          <span className="mx-1.5 text-ink-soft">-</span>
+                          {selectedMatch.participantBResultText || '–'}
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+                          vs
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 text-right">
+                      <p
+                        className={cn(
+                          'truncate text-sm',
+                          selectedMatch.participantBIsWinner ?
+                            'font-extrabold text-ink'
+                          : 'font-semibold text-ink-soft',
+                        )}
+                      >
+                        {selectedMatch.participantBName || 'TBD'}
+                      </p>
+                      {selectedMatch.participantBSubLabel ? (
+                        <p className="truncate text-xs text-ink-soft">{selectedMatch.participantBSubLabel}</p>
+                      ) : null}
+                    </div>
                   </div>
-                  <span className="shrink-0 text-xs font-bold text-ink-soft">vs</span>
-                  <div className="min-w-0 text-right">
-                    <p className="truncate text-sm font-bold text-ink">
-                      {selectedMatch.participantBName || 'TBD'}
+                  {/* Set-by-set breakdown only earns its place when there's more than one set -
+                      with exactly one set, the aggregate score above already says the same thing. */}
+                  {selectedMatch.setScoreText && selectedMatch.setScoreText.split(',').length > 1 ? (
+                    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-line pt-3">
+                      {selectedMatch.setScoreText.split(',').map((set, index) => (
+                        <p key={index} className="text-xs text-ink-soft">
+                          <span className="font-semibold text-ink-soft/80">Set {index + 1}</span>{' '}
+                          <span className="font-bold tabular-nums text-ink">{set.trim()}</span>
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!hasScore && !selectedMatch.startTime ? (
+                    <p className="mt-3 text-center text-xs text-ink-soft">
+                      Scores will appear here once the match begins.
                     </p>
-                    {selectedMatch.participantBSubLabel ? (
-                      <p className="truncate text-xs text-ink-soft">{selectedMatch.participantBSubLabel}</p>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Status</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                      {isFinished ? 'Result' : isLive ? 'Live now' : 'Status'}
+                    </p>
                     <StatusBadge tone={getMatchStatusTone(selectedMatch.state)} className="mt-1">
                       {selectedMatch.state.replaceAll('_', ' ')}
                     </StatusBadge>
                   </div>
                   {selectedMatch.startTime ? (
                     <div className="text-right">
-                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Scheduled</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                        {isFinished ? 'Played' : 'Scheduled'}
+                      </p>
                       <p className="mt-1 text-sm font-semibold text-ink">{selectedMatch.startTime}</p>
                     </div>
                   ) : null}
                 </div>
+
+                {selectedMatch.venueLabel ? (
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Venue</p>
+                      <p className="mt-0.5 truncate text-sm font-semibold text-ink">{selectedMatch.venueLabel}</p>
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* Score and schedule are only ever edited from the Match Officer / Scheduler
                     workspace (a single authorized mutation path per AUDIT_E2E MAT-01/PUB-03) -

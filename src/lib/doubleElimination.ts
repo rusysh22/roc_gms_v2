@@ -12,6 +12,7 @@ import {
   buildSetScore,
   collectEntryClubLabels,
   getRelationshipId,
+  getRelationshipLabel,
 } from './brackets'
 import {
   type MatchGenerationEntry,
@@ -564,6 +565,10 @@ const buildBracketMatchCard = (match: BracketMatch, matchSets: BracketMatchSet[]
     winner_entry_id: winnerId,
     score_summary: match.score_summary || undefined,
     set_score: buildSetScore(matchSets),
+    venue_label:
+      match.venue_id || match.court_id ?
+        `${getRelationshipLabel(match.venue_id)} / ${getRelationshipLabel(match.court_id)}`
+      : undefined,
     detail_href: `/matches/${match.match_number}`,
     participant_a: buildParticipant(match.participant_a_entry_id, winnerId, clubLabelByEntryId),
     participant_b: buildParticipant(match.participant_b_entry_id, winnerId, clubLabelByEntryId),
