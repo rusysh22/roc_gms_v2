@@ -46,6 +46,14 @@ type ScheduleMatch = {
   court_id?: RelationshipDoc | string | number | null
 }
 
+type MatchSetRow = {
+  id: string | number
+  match_id?: RelationshipDoc | string | number | null
+  set_number: number
+  participant_a_score?: number | null
+  participant_b_score?: number | null
+}
+
 type StandingDoc = {
   id: string | number
   rank: number
@@ -159,6 +167,32 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   ])
 
   const allMatches = matchesResult.docs as ScheduleMatch[]
+
+  // MSG follow-up: `score_summary` is a freeform string ("17-21, 19-21") - fine for a single line,
+  // but comma-joining sets reads as one ambiguous number sequence rather than two participants'
+  // actual per-set scores. Fetching the real match-sets rows lets the card render one row per
+  // participant with one column per set (e.g. Rusy 21/19/21 vs Roza 11/21/13), which is how a
+  // multi-set scoreline is actually read. One batched query for every visible match instead of one
+  // per card.
+  const matchIdsWithSets = allMatches.filter((match) => match.score_summary).map((match) => match.id)
+  const matchSetsResult =
+    matchIdsWithSets.length > 0
+      ? await payload.find({
+          collection: 'match-sets',
+          depth: 0,
+          limit: 500,
+          sort: 'set_number',
+          where: { match_id: { in: matchIdsWithSets } },
+        })
+      : null
+  const setsByMatch = new Map<string, MatchSetRow[]>()
+  for (const set of (matchSetsResult?.docs ?? []) as MatchSetRow[]) {
+    const matchKey = String(getRelationshipId(set.match_id))
+    const rows = setsByMatch.get(matchKey) || []
+    rows.push(set)
+    setsByMatch.set(matchKey, rows)
+  }
+
   const sports = sportsResult.docs as SportDoc[]
   const activeSport = sportSlug ? sports.find((sport) => sport.slug === sportSlug) : undefined
 
@@ -301,7 +335,26 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                             const winnerId = getRelationshipId(match.winner_entry_id)
                             const aIsWinner = Boolean(winnerId) && winnerId === entryAId
                             const bIsWinner = Boolean(winnerId) && winnerId === entryBId
-                            const hasScore = Boolean(match.score_summary)
+                            const matchSets = (setsByMatch.get(String(match.id)) || [])
+                              .slice()
+                              .sort((left, right) => left.set_number - right.set_number)
+                            const hasSets = matchSets.length > 0
+                            const rowsData = [
+                              {
+                                key: 'a',
+                                id: entryAId,
+                                label: getRelationshipLabel(match.participant_a_entry_id),
+                                isWinner: aIsWinner,
+                                scores: matchSets.map((set) => set.participant_a_score),
+                              },
+                              {
+                                key: 'b',
+                                id: entryBId,
+                                label: getRelationshipLabel(match.participant_b_entry_id),
+                                isWinner: bIsWinner,
+                                scores: matchSets.map((set) => set.participant_b_score),
+                              },
+                            ]
 
                             return (
                               <Link
@@ -322,72 +375,87 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                   </div>
 
                                   {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.6 + the redesigned
-                                      match-detail scoreboard (MULTI_SPORT_GAMES_ENHANCEMENTS_DESIGN.md-
-                                      adjacent public-page rework): same "Team A / score-or-vs / Team B"
-                                      shape as the match detail hero, so a spectator can tell who's
-                                      winning/who won without opening the card - winner bold, loser
-                                      dimmed, a plain "vs" pill (not a misleading "0-0") before any
-                                      score exists. */}
-                                  <div className="flex items-center gap-2 sm:gap-3">
-                                    <div className="flex min-w-0 flex-1 items-center gap-1">
-                                      <span
-                                        className={cn(
-                                          'truncate text-sm sm:text-base',
-                                          aIsWinner ? 'font-extrabold text-ink'
-                                          : bIsWinner ? 'font-semibold text-ink-soft'
-                                          : 'font-bold text-ink',
-                                        )}
-                                        title={getRelationshipLabel(match.participant_a_entry_id)}
-                                      >
-                                        {getRelationshipLabel(match.participant_a_entry_id)}
+                                      match-detail scoreboard: a real scoreline, not a comma-joined
+                                      string ("17-21, 19-21" reads as one ambiguous number sequence,
+                                      not two participants' per-set scores). One row per participant,
+                                      one column per set - "Rusy 21 19 21 / Roza 11 21 13" instead of
+                                      "17-21, 19-21". A match with no recorded sets yet falls back to a
+                                      plain "vs" pill (not a misleading "0-0"). Winner's row is bold in
+                                      `text-ink`; loser's dims to `font-semibold text-ink-soft`. */}
+                                  {hasSets ? (
+                                    <div className="flex flex-col divide-y divide-line rounded-card border border-line">
+                                      {rowsData.map((row) => (
+                                        <div
+                                          key={row.key}
+                                          className={cn(
+                                            'flex items-center justify-between gap-3 px-3 py-1.5',
+                                            row.isWinner && 'bg-mist',
+                                          )}
+                                        >
+                                          <span className="flex min-w-0 items-center gap-1">
+                                            <span
+                                              className={cn(
+                                                'truncate text-sm sm:text-base',
+                                                row.isWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
+                                              )}
+                                              title={row.label}
+                                            >
+                                              {row.label}
+                                            </span>
+                                            {row.id ? (
+                                              <FavoriteStar eventSlug={event.slug} entryId={row.id} label={row.label} />
+                                            ) : null}
+                                          </span>
+                                          <div className="flex shrink-0 gap-2.5">
+                                            {row.scores.map((score, index) => (
+                                              <span
+                                                key={index}
+                                                className={cn(
+                                                  'w-5 text-center text-sm font-bold tabular-nums sm:text-base',
+                                                  row.isWinner ? 'text-ink' : 'text-ink-soft',
+                                                )}
+                                              >
+                                                {score ?? '–'}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 sm:gap-3">
+                                      <div className="flex min-w-0 flex-1 items-center gap-1">
+                                        <span
+                                          className="truncate text-sm font-bold text-ink sm:text-base"
+                                          title={rowsData[0].label}
+                                        >
+                                          {rowsData[0].label}
+                                        </span>
+                                        {entryAId ? (
+                                          <FavoriteStar eventSlug={event.slug} entryId={entryAId} label={rowsData[0].label} />
+                                        ) : null}
+                                      </div>
+                                      <span className="shrink-0 rounded-full border border-line bg-mist px-2.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+                                        vs
                                       </span>
-                                      {entryAId ? (
-                                        <FavoriteStar
-                                          eventSlug={event.slug}
-                                          entryId={entryAId}
-                                          label={getRelationshipLabel(match.participant_a_entry_id)}
-                                        />
-                                      ) : null}
-                                    </div>
-
-                                    <div className="flex shrink-0 flex-col items-center">
-                                      {hasScore ? (
-                                        <span className="text-sm font-extrabold tabular-nums text-ink sm:text-base">
-                                          {match.score_summary}
+                                      <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                                        {entryBId ? (
+                                          <FavoriteStar eventSlug={event.slug} entryId={entryBId} label={rowsData[1].label} />
+                                        ) : null}
+                                        <span
+                                          className="truncate text-right text-sm font-bold text-ink sm:text-base"
+                                          title={rowsData[1].label}
+                                        >
+                                          {rowsData[1].label}
                                         </span>
-                                      ) : (
-                                        <span className="rounded-full border border-line bg-mist px-2.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
-                                          vs
-                                        </span>
-                                      )}
-                                      {hasScore && match.status === 'finished' ? (
-                                        <span className="text-[0.65rem] font-semibold text-ink-soft">
-                                          Provisional
-                                        </span>
-                                      ) : null}
+                                      </div>
                                     </div>
-
-                                    <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-                                      {entryBId ? (
-                                        <FavoriteStar
-                                          eventSlug={event.slug}
-                                          entryId={entryBId}
-                                          label={getRelationshipLabel(match.participant_b_entry_id)}
-                                        />
-                                      ) : null}
-                                      <span
-                                        className={cn(
-                                          'truncate text-right text-sm sm:text-base',
-                                          bIsWinner ? 'font-extrabold text-ink'
-                                          : aIsWinner ? 'font-semibold text-ink-soft'
-                                          : 'font-bold text-ink',
-                                        )}
-                                        title={getRelationshipLabel(match.participant_b_entry_id)}
-                                      >
-                                        {getRelationshipLabel(match.participant_b_entry_id)}
-                                      </span>
-                                    </div>
-                                  </div>
+                                  )}
+                                  {hasSets && match.status === 'finished' ? (
+                                    <p className="text-[0.65rem] font-semibold text-ink-soft">
+                                      Provisional - pending official publication
+                                    </p>
+                                  ) : null}
 
                                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-ink-soft">
                                     <span>{match.match_number} / {match.round_name || 'Scheduled Match'}</span>
