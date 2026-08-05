@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
 import { resolveEventTimezone } from '@/lib/timezone'
 import { AutoRefresh } from '@/components/auto-refresh'
-import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
 import {
@@ -42,6 +41,7 @@ type ScheduleMatch = {
   category_id?: CategoryDoc | string | number | null
   participant_a_entry_id?: RelationshipDoc | string | number | null
   participant_b_entry_id?: RelationshipDoc | string | number | null
+  winner_entry_id?: RelationshipDoc | string | number | null
   venue_id?: RelationshipDoc | string | number | null
   court_id?: RelationshipDoc | string | number | null
 }
@@ -181,21 +181,6 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     if (right === 'unscheduled') return -1
     return left.localeCompare(right)
   })
-  const getCategoryHref = (match: ScheduleMatch) => {
-    if (
-      match.sport_id &&
-      typeof match.sport_id === 'object' &&
-      match.sport_id.slug &&
-      match.category_id &&
-      typeof match.category_id === 'object' &&
-      match.category_id.slug
-    ) {
-      return `${eventPath}/sports/${match.sport_id.slug}/${match.category_id.slug}`
-    }
-
-    return ''
-  }
-
   const standings = standingsResult.docs as StandingDoc[]
   const standingScopes = standings.reduce<Map<string, StandingDoc[]>>((map, standing) => {
     const scopeKey = getStandingScopeKey(standing)
@@ -311,72 +296,102 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                         </h2>
                         <div className="flex flex-col gap-3">
                           {rows.map((match) => {
-                            const categoryHref = getCategoryHref(match)
                             const entryAId = getRelationshipId(match.participant_a_entry_id)
                             const entryBId = getRelationshipId(match.participant_b_entry_id)
+                            const winnerId = getRelationshipId(match.winner_entry_id)
+                            const aIsWinner = Boolean(winnerId) && winnerId === entryAId
+                            const bIsWinner = Boolean(winnerId) && winnerId === entryBId
+                            const hasScore = Boolean(match.score_summary)
 
                             return (
-                              <Card
+                              <Link
                                 key={match.id}
-                                interactive
-                                accent="blue"
+                                href={`${eventPath}/matches/${match.match_number}`}
                                 data-match-entries={[entryAId, entryBId].filter(Boolean).join(',')}
+                                className="block no-underline"
                               >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div>
+                                <Card interactive accent="blue" className="flex flex-col gap-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
                                     <CardDescription>
                                       {getRelationshipLabel(match.sport_id)} /{' '}
                                       {getRelationshipLabel(match.category_id)}
                                     </CardDescription>
-                                    <CardTitle className="mt-1 flex flex-wrap items-center gap-x-1.5">
-                                      <span className="inline-flex items-center gap-0.5">
-                                        {getRelationshipLabel(match.participant_a_entry_id)}
-                                        {entryAId ? (
-                                          <FavoriteStar
-                                            eventSlug={event.slug}
-                                            entryId={entryAId}
-                                            label={getRelationshipLabel(match.participant_a_entry_id)}
-                                          />
-                                        ) : null}
-                                      </span>
-                                      <span>vs</span>
-                                      <span className="inline-flex items-center gap-0.5">
-                                        {getRelationshipLabel(match.participant_b_entry_id)}
-                                        {entryBId ? (
-                                          <FavoriteStar
-                                            eventSlug={event.slug}
-                                            entryId={entryBId}
-                                            label={getRelationshipLabel(match.participant_b_entry_id)}
-                                          />
-                                        ) : null}
-                                      </span>
-                                    </CardTitle>
-                                    <p className="mt-1 text-xs font-semibold text-ink-soft">
-                                      {match.match_number} / {match.round_name || 'Scheduled Match'}
-                                    </p>
+                                    <StatusBadge tone={getMatchStatusTone(match.status)}>
+                                      {formatStatus(match.status)}
+                                    </StatusBadge>
                                   </div>
-                                  <div className="flex flex-col items-start gap-2 sm:items-end">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <StatusBadge tone={getMatchStatusTone(match.status)}>
-                                        {formatStatus(match.status)}
-                                      </StatusBadge>
-                                      {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.6: the
-                                          schedule list previously required opening match detail
-                                          to see who won or what the score was - now shown inline
-                                          for any match that already has one, "Provisional" for a
-                                          finished-but-not-yet-official result. */}
-                                      {match.score_summary ? (
-                                        <span className="text-sm font-bold tabular-nums text-ink">
+
+                                  {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.6 + the redesigned
+                                      match-detail scoreboard (MULTI_SPORT_GAMES_ENHANCEMENTS_DESIGN.md-
+                                      adjacent public-page rework): same "Team A / score-or-vs / Team B"
+                                      shape as the match detail hero, so a spectator can tell who's
+                                      winning/who won without opening the card - winner bold, loser
+                                      dimmed, a plain "vs" pill (not a misleading "0-0") before any
+                                      score exists. */}
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                                      <span
+                                        className={cn(
+                                          'truncate text-sm sm:text-base',
+                                          aIsWinner ? 'font-extrabold text-ink'
+                                          : bIsWinner ? 'font-semibold text-ink-soft'
+                                          : 'font-bold text-ink',
+                                        )}
+                                        title={getRelationshipLabel(match.participant_a_entry_id)}
+                                      >
+                                        {getRelationshipLabel(match.participant_a_entry_id)}
+                                      </span>
+                                      {entryAId ? (
+                                        <FavoriteStar
+                                          eventSlug={event.slug}
+                                          entryId={entryAId}
+                                          label={getRelationshipLabel(match.participant_a_entry_id)}
+                                        />
+                                      ) : null}
+                                    </div>
+
+                                    <div className="flex shrink-0 flex-col items-center">
+                                      {hasScore ? (
+                                        <span className="text-sm font-extrabold tabular-nums text-ink sm:text-base">
                                           {match.score_summary}
-                                          {match.status === 'finished' ? (
-                                            <span className="ml-1 text-xs font-semibold text-ink-soft">
-                                              (Provisional)
-                                            </span>
-                                          ) : null}
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-full border border-line bg-mist px-2.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+                                          vs
+                                        </span>
+                                      )}
+                                      {hasScore && match.status === 'finished' ? (
+                                        <span className="text-[0.65rem] font-semibold text-ink-soft">
+                                          Provisional
                                         </span>
                                       ) : null}
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
+
+                                    <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+                                      {entryBId ? (
+                                        <FavoriteStar
+                                          eventSlug={event.slug}
+                                          entryId={entryBId}
+                                          label={getRelationshipLabel(match.participant_b_entry_id)}
+                                        />
+                                      ) : null}
+                                      <span
+                                        className={cn(
+                                          'truncate text-right text-sm sm:text-base',
+                                          bIsWinner ? 'font-extrabold text-ink'
+                                          : aIsWinner ? 'font-semibold text-ink-soft'
+                                          : 'font-bold text-ink',
+                                        )}
+                                        title={getRelationshipLabel(match.participant_b_entry_id)}
+                                      >
+                                        {getRelationshipLabel(match.participant_b_entry_id)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-ink-soft">
+                                    <span>{match.match_number} / {match.round_name || 'Scheduled Match'}</span>
+                                    <div className="flex flex-wrap items-center gap-3">
                                       <span className="inline-flex items-center gap-1">
                                         <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                                         {formatTimeOnly(match.scheduled_start_at, timezone)}
@@ -387,21 +402,9 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                         {getRelationshipLabel(match.court_id)}
                                       </span>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      <Button asChild variant="secondary" size="sm">
-                                        <Link href={`${eventPath}/matches/${match.match_number}`}>
-                                          Match detail
-                                        </Link>
-                                      </Button>
-                                      {categoryHref ? (
-                                        <Button asChild variant="ghost" size="sm">
-                                          <Link href={categoryHref}>Category page</Link>
-                                        </Button>
-                                      ) : null}
-                                    </div>
                                   </div>
-                                </div>
-                              </Card>
+                                </Card>
+                              </Link>
                             )
                           })}
                         </div>
