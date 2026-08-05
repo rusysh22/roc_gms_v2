@@ -1221,9 +1221,14 @@ const EventStep = ({
         <Field label="End">
           <Input name="eventEnd" type="datetime-local" required defaultValue={defaultEnd} />
         </Field>
+        {/* Full width, not paired with Location - its description is a full sentence that reads
+            as a cramped 3-line wrap in a half-width column, and (per NOVICE_ADMIN_FLOW_UX_REDESIGN)
+            time zone is consequential enough (it drives every schedule/match/bracket time on the
+            event) to earn the room rather than being squeezed next to a plain text field. */}
         <Field
           label="Time zone"
           description="Every schedule, match, and bracket time for this event is shown in this zone - on the public site and in the workspace."
+          className="sm:col-span-2"
         >
           <Select name="timezone" defaultValue={defaultTimezone || DEFAULT_EVENT_TIMEZONE}>
             {EVENT_TIMEZONE_OPTIONS.map((option) => (
@@ -1233,6 +1238,8 @@ const EventStep = ({
             ))}
           </Select>
         </Field>
+        {/* Paired with each other (not Organizer left dangling alone next to an empty half-row) -
+            both are plain single-line text inputs with no description, so the row comes out even. */}
         <Field label="Location">
           <Input name="location" placeholder="e.g. Main Sports Hall" defaultValue={defaultLocation} />
         </Field>
