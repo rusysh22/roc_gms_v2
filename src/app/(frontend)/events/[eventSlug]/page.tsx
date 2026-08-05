@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 
 import config from '@payload-config'
-import { cn } from '@/lib/utils'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
@@ -160,7 +159,6 @@ export default async function EventHomePage({
   const bannerImage =
     event.banner_image && typeof event.banner_image === 'object' ? event.banner_image : undefined
   const logoImage = event.logo && typeof event.logo === 'object' ? event.logo : undefined
-  const hasBanner = Boolean(bannerImage?.url)
 
   const eventWhere = { event_id: { equals: event.id } }
   const [liveNextResult, sportsResult, articles, upcomingMatchesResult, sponsorsResult] =
@@ -281,26 +279,18 @@ export default async function EventHomePage({
           to clear the floating nav pill) so this hero's background image runs edge-to-edge to the
           very top of the viewport, with the pill floating over it, instead of leaving a plain
           white strip between the nav and the image. */}
-      <section className="relative -mt-6 flex min-h-[85vh] items-end overflow-hidden px-4 pb-14 pt-28 sm:min-h-[90vh]">
+      <section className="relative -mt-6 flex min-h-svh items-end overflow-hidden px-4 pb-14 pt-28">
         {bannerImage?.url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
             <img
               src={bannerImage.url}
               alt={bannerImage.alt || event.name}
-              className="absolute inset-0 h-full w-full scale-105 object-cover saturate-110"
-            />
-            {/* Two stacked scrims instead of one flat wash: a diagonal one (dark where the text
-                sits, clearing toward the open corner) keeps the photo itself vivid rather than
-                bleaching it to near-white, and a second straight bottom-up one guarantees solid
-                contrast under the text regardless of what's in that corner of the photo. */}
-            <div
-              aria-hidden="true"
-              className="absolute inset-0 bg-gradient-to-tr from-ink via-ink/55 to-ink/10"
+              className="absolute inset-0 h-full w-full object-cover"
             />
             <div
               aria-hidden="true"
-              className="absolute inset-0 bg-gradient-to-t from-ink/85 via-transparent to-transparent"
+              className="absolute inset-0 bg-gradient-to-t from-paper via-paper/75 to-paper/10"
             />
           </>
         ) : (
@@ -319,14 +309,7 @@ export default async function EventHomePage({
 
         <div className="relative mx-auto flex w-full max-w-5xl flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p
-              className={cn(
-                'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide',
-                hasBanner ?
-                  'border-paper/30 bg-ink/40 text-paper backdrop-blur-sm'
-                : 'border-line bg-paper text-ink-soft',
-              )}
-            >
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
               {logoImage?.url ? (
                 // eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions
                 <img
@@ -335,10 +318,7 @@ export default async function EventHomePage({
                   className="h-4 w-4 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <Sparkles
-                  className={cn('h-3.5 w-3.5', hasBanner ? 'text-paper' : 'text-brand-primary')}
-                  aria-hidden="true"
-                />
+                <Sparkles className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
               )}
               {event.name}
             </p>
@@ -356,44 +336,25 @@ export default async function EventHomePage({
                 />
               }
             >
-              <h1
-                className={cn(
-                  'text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl',
-                  hasBanner ? 'text-paper drop-shadow-sm' : 'text-ink',
-                )}
-              >
+              <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl lg:text-6xl">
                 {event.hero_tagline || event.name}
               </h1>
             </EditableRegion>
 
-            <div
-              className={cn(
-                'mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold',
-                hasBanner ? 'text-paper/90' : 'text-ink-soft',
-              )}
-            >
+            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-ink-soft">
               <span className="inline-flex items-center gap-1.5">
-                <Calendar
-                  className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
-                  aria-hidden="true"
-                />
+                <Calendar className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                 {formatEventDateRange(event.event_start_at, event.event_end_at, timezone)}
               </span>
               {event.location ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin
-                    className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
-                    aria-hidden="true"
-                  />
+                  <MapPin className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                   {event.location}
                 </span>
               ) : null}
               {sportsSummary ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Trophy
-                    className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
-                    aria-hidden="true"
-                  />
+                  <Trophy className="h-4 w-4 text-brand-primary" aria-hidden="true" />
                   {sportsSummary}
                 </span>
               ) : null}
@@ -463,7 +424,7 @@ export default async function EventHomePage({
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-paper to-transparent"
               />
-              <div className="flex snap-x gap-4 overflow-x-auto px-4 pb-2">
+              <div className="flex snap-x gap-4 overflow-x-auto px-4 py-2">
               {orderedMatches.map((match) => {
                 const isLive = LIVE_STATUSES.includes(match.status)
 
@@ -534,7 +495,7 @@ export default async function EventHomePage({
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-paper to-transparent"
               />
-              <div className="flex gap-3 overflow-x-auto px-4 pb-2">
+              <div className="flex gap-3 overflow-x-auto px-4 py-2">
                 {calendarDays.map((day) => (
                   <Link
                     key={day.dateKey}
