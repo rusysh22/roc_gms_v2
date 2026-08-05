@@ -492,6 +492,7 @@ const seed = async () => {
           | 'preview_only'
           | 'published'
           | 'archived',
+        timezone: demoScenario.event.timezone as 'Asia/Jakarta' | 'Asia/Makassar' | 'Asia/Jayapura',
       },
     }))
   const eventId = getId(event)

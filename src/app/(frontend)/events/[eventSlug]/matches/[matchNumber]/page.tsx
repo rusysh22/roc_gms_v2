@@ -14,6 +14,7 @@ import {
   getScopedPublicAnnouncements,
 } from '../../../../contentData'
 import { getRelationshipLabel } from '../../../../workspaces/workspaceComponents'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   DocumentationGallery,
   MatchInfoStrip,
@@ -48,6 +49,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
   const matchBasePath = `${eventPath}/matches`
 
@@ -145,7 +147,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
 
       <section className="px-4 pb-8" aria-label="Schedule and venue">
         <div className="mx-auto max-w-3xl">
-          <MatchInfoStrip match={match} eventPath={eventPath} />
+          <MatchInfoStrip match={match} eventPath={eventPath} timezone={timezone} />
         </div>
       </section>
 
@@ -179,7 +181,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
       <section className="px-4 pb-8" aria-label="Comments">
         <div className="mx-auto max-w-3xl">
           <h2 className="mb-3 text-xl font-bold text-ink">Comments</h2>
-          <PublicCommentList comments={publicComments} />
+          <PublicCommentList comments={publicComments} timezone={timezone} />
         </div>
       </section>
 

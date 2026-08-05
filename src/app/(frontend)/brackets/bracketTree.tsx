@@ -10,6 +10,7 @@ import type { BracketChampion, BracketRound } from '@/lib/brackets'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 
 // Rebuilt against the library's own default Match/theme rendering instead of fighting it with a
 // fully custom match component - the previous build reimplemented our whole card design on top of
@@ -21,17 +22,18 @@ import { cn } from '@/lib/utils'
 // third and fourth state the theme system can't express - so CustomMatch reproduces the default's
 // exact layout/spacing/background colors and only replaces the color decision.
 
-const formatMatchDate = (value?: string) => {
+const formatMatchDate = (value: string | undefined, timezone: string) => {
   if (!value) {
     return ''
   }
 
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('en-GB', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'Asia/Bangkok',
+    hour12: false,
+    timeZone: timezone,
   }).format(new Date(value))
 }
 
@@ -111,7 +113,7 @@ const normalizeBracketRounds = (rounds: BracketRound[]) => {
   })
 }
 
-const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
+const transformToGLootData = (rounds: BracketRound[], timezone: string): GLootMatch[] => {
   const displayRounds = normalizeBracketRounds(rounds)
   const numRounds = displayRounds.length
   const flattened: GLootMatch[] = []
@@ -160,7 +162,7 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
           name: realMatch.match_number,
           nextMatchId,
           tournamentRoundText: String(r + 1),
-          startTime: formatMatchDate(realMatch.scheduled_start_at),
+          startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
           state: 'WALK_OVER',
           href: realMatch.detail_href,
           participantAName: realMatch.participant_a.label,
@@ -212,7 +214,7 @@ const transformToGLootData = (rounds: BracketRound[]): GLootMatch[] => {
         name: realMatch.match_number,
         nextMatchId,
         tournamentRoundText: String(r + 1),
-        startTime: formatMatchDate(realMatch.scheduled_start_at),
+        startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
         state: realMatch.status,
         href: realMatch.detail_href,
         participantAName: realMatch.participant_a.label,
@@ -421,9 +423,11 @@ const ChampionBanner = ({ champion }: { champion?: BracketChampion | null }) => 
 export const BracketTree = ({
   rounds,
   champion,
+  timezone = DEFAULT_EVENT_TIMEZONE,
 }: {
   rounds: BracketRound[]
   champion?: BracketChampion | null
+  timezone?: string
 }) => {
   const [isMounted, setIsMounted] = useState(false)
   const [containerRef, containerWidth] = useContainerWidth()
@@ -437,7 +441,7 @@ export const BracketTree = ({
     return null
   }
 
-  const matches = transformToGLootData(rounds)
+  const matches = transformToGLootData(rounds, timezone)
 
   return (
     <Dialog.Root open={Boolean(selectedMatch)} onOpenChange={(open) => !open && setSelectedMatch(null)}>

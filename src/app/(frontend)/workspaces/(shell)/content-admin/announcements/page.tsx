@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getActiveEvent } from '../../../activeEvent'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { NoActiveEventNotice, PageHero, formatDateTime, formatStatus } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 
@@ -40,6 +41,7 @@ export default async function AnnouncementsListPage({ searchParams }: { searchPa
   }
 
   const activeEvent = await getActiveEvent(access.payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -101,7 +103,7 @@ export default async function AnnouncementsListPage({ searchParams }: { searchPa
                   <StatusBadge tone={statusTone(announcement.status)}>{formatStatus(announcement.status)}</StatusBadge>
                 </TableCell>
                 <TableCell>
-                  {announcement.published_at ? formatDateTime(announcement.published_at) : 'Not published'}
+                  {announcement.published_at ? formatDateTime(announcement.published_at, timezone) : 'Not published'}
                 </TableCell>
                 <TableCell>
                   <Link

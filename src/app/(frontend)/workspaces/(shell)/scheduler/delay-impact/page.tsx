@@ -5,6 +5,7 @@ import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { computeDelayImpacts } from '@/lib/delayPropagation'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -37,6 +38,7 @@ export default async function DelayImpactPage() {
   }
 
   const activeEvent = await getActiveEvent(access.payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -110,9 +112,9 @@ export default async function DelayImpactPage() {
                           {suggestion.match.match_number}
                         </Link>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
-                          {formatDateTime(suggestion.match.scheduled_start_at)}
+                          {formatDateTime(suggestion.match.scheduled_start_at, timezone)}
                           <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                          <span className="font-bold text-ink">{formatDateTime(suggestion.suggestedStartAt)}</span>
+                          <span className="font-bold text-ink">{formatDateTime(suggestion.suggestedStartAt, timezone)}</span>
                         </p>
                       </div>
                       <form id={formId} action={rescheduleMatchAction}>
@@ -138,7 +140,7 @@ export default async function DelayImpactPage() {
                           formId={formId}
                           tone="default"
                           size="sm"
-                          confirmMessage={`Shift ${suggestion.match.match_number} to ${formatDateTime(suggestion.suggestedStartAt)}?`}
+                          confirmMessage={`Shift ${suggestion.match.match_number} to ${formatDateTime(suggestion.suggestedStartAt, timezone)}?`}
                         >
                           Apply suggested time
                         </ConfirmSubmitButton>

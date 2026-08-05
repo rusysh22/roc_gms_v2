@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
@@ -12,6 +13,7 @@ const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
 const statuses = new Set(['draft', 'setup', 'coming_soon', 'live', 'completed', 'archived'])
 const visibilities = new Set(['hidden', 'coming_soon', 'preview_only', 'published', 'archived'])
+const timezones = new Set<string>(EVENT_TIMEZONE_OPTIONS.map((option) => option.value))
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -56,6 +58,9 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
     redirect(`${page}?detailsError=duplicate_slug`)
   }
 
+  const timezoneInput = text(formData, 'timezone')
+  const timezone = timezones.has(timezoneInput) ? timezoneInput : DEFAULT_EVENT_TIMEZONE
+
   const data = {
     name,
     slug,
@@ -65,6 +70,7 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
     rules_summary: text(formData, 'rulesSummary') || undefined,
     event_start_at: new Date(start).toISOString(),
     event_end_at: new Date(end).toISOString(),
+    timezone: timezone as (typeof EVENT_TIMEZONE_OPTIONS)[number]['value'],
     public_open_at: toIso(text(formData, 'publicOpenAt')),
     registration_open_at: toIso(text(formData, 'registrationOpenAt')),
     registration_close_at: toIso(text(formData, 'registrationCloseAt')),

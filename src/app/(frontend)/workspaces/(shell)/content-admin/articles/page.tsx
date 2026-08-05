@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getActiveEvent } from '../../../activeEvent'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { NoActiveEventNotice, PageHero, formatDateTime, formatStatus } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 
@@ -37,6 +38,7 @@ export default async function ArticlesListPage({ searchParams }: { searchParams?
   }
 
   const activeEvent = await getActiveEvent(access.payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -92,8 +94,8 @@ export default async function ArticlesListPage({ searchParams }: { searchParams?
                 <TableCell>
                   <StatusBadge tone={statusTone(article.status)}>{formatStatus(article.status)}</StatusBadge>
                 </TableCell>
-                <TableCell>{article.published_at ? formatDateTime(article.published_at) : 'Not published'}</TableCell>
-                <TableCell>{formatDateTime(article.updatedAt)}</TableCell>
+                <TableCell>{article.published_at ? formatDateTime(article.published_at, timezone) : 'Not published'}</TableCell>
+                <TableCell>{formatDateTime(article.updatedAt, timezone)}</TableCell>
                 <TableCell>
                   <Link
                     href={`/workspaces/content-admin/articles/${article.id}`}

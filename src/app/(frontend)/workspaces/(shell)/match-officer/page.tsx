@@ -4,6 +4,7 @@ import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { getActiveEvent } from '../../activeEvent'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   MatchCard,
   NoActiveEventNotice,
@@ -39,6 +40,7 @@ export default async function MatchOfficerWorkspacePage() {
 
   const payload = access.payload
   const activeEvent = await getActiveEvent(payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <div className="mx-auto max-w-2xl">
@@ -111,7 +113,7 @@ export default async function MatchOfficerWorkspacePage() {
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Start</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(nextMatch.scheduled_start_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(nextMatch.scheduled_start_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Place</dt>
@@ -161,7 +163,7 @@ export default async function MatchOfficerWorkspacePage() {
           ) : (
             scheduledMatches.map((match) => (
               <div key={match.id} className="flex flex-col gap-2">
-                <MatchCard match={match} compact />
+                <MatchCard match={match} compact timezone={timezone} />
                 <Link
                   href={`/workspaces/matches/${match.match_number}/live-score`}
                   className="text-sm font-bold text-blue no-underline hover:underline"

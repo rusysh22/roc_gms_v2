@@ -94,6 +94,7 @@ export const demoScenario = {
       'Internal office olympiad demo event for validating core event structure, participants, venues, and courts.',
     event_start_at: '2026-08-17T08:00:00.000Z',
     event_end_at: '2026-08-21T17:00:00.000Z',
+    timezone: 'Asia/Jakarta',
     public_open_at: '2026-08-10T08:00:00.000Z',
     registration_open_at: '2026-07-06T08:00:00.000Z',
     registration_close_at: '2026-07-31T17:00:00.000Z',

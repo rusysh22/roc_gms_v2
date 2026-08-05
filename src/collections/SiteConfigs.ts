@@ -53,7 +53,11 @@ export const SiteConfigs: CollectionConfig = {
           name: 'timezone',
           type: 'text',
           required: true,
-          defaultValue: 'Asia/Bangkok',
+          defaultValue: 'Asia/Jakarta',
+          admin: {
+            description:
+              'Not currently read by any date/time display - each event now has its own timezone field (Events.timezone) that every schedule/match/bracket formatter actually uses. Kept here as a general site setting, not wired to formatting.',
+          },
         },
         {
           name: 'default_language',

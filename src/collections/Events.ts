@@ -2,6 +2,7 @@ import type { CollectionAfterChangeHook, CollectionConfig } from 'payload'
 
 import { publicReadEvents } from '@/access/eventVisibility'
 import { canManageEventStructure } from '@/access/roles'
+import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 
 // AUDIT_E2E AUTH-01: enrolls the creating user as this event's first EventMemberships row, so a
 // brand-new event starts life scoped to its own creator instead of open to every global role
@@ -105,6 +106,17 @@ export const Events: CollectionConfig = {
           },
         },
       ],
+    },
+    {
+      name: 'timezone',
+      type: 'select',
+      required: true,
+      defaultValue: DEFAULT_EVENT_TIMEZONE,
+      admin: {
+        description:
+          'Every schedule/match/bracket time shown for this event - both in the workspace and on its public pages - is rendered in this zone. Defaults to WIB; change it for an event actually run in a different Indonesian time zone.',
+      },
+      options: EVENT_TIMEZONE_OPTIONS.map((option) => ({ label: option.label, value: option.value })),
     },
     {
       type: 'row',

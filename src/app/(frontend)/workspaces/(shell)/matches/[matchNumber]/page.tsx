@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { getMatchAuditLog, getMatchDetail } from '../../../../matchDetailData'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
@@ -97,6 +98,11 @@ export default async function AdminMatchDetailPage({
     standingImpact,
     bracketImpact,
   } = result
+  const matchEventId = getRelationshipId(match.event_id)
+  const matchEventDoc = matchEventId
+    ? await access.payload.findByID({ collection: 'events', id: matchEventId, depth: 0 }).catch(() => null)
+    : null
+  const timezone = resolveEventTimezone(matchEventDoc?.timezone)
   const allowedTransitions = getAllowedTransitions(match.status)
   const canAssignOfficers = access.user.roles?.some((role) =>
     ['super_admin', 'event_admin', 'scheduler'].includes(role),
@@ -209,19 +215,19 @@ export default async function AdminMatchDetailPage({
           <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Starts</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Ends</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_end_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Actual Start</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(match.actual_start_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(match.actual_start_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Actual End</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(match.actual_end_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(match.actual_end_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Venue</dt>
@@ -564,7 +570,7 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Documentation</CardTitle>
-          <DocumentationAssetList assets={documentationAssets} showVisibility />
+          <DocumentationAssetList assets={documentationAssets} showVisibility timezone={timezone} />
           <form action={addDocumentationAssetAction} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <Field label="Asset Type">
@@ -604,7 +610,7 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Internal Comments</CardTitle>
-          <CommentList comments={internalComments} showStatus />
+          <CommentList comments={internalComments} showStatus timezone={timezone} />
           <form action={addMatchCommentAction} className="flex flex-col gap-4">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -631,7 +637,7 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-3 md:col-span-2">
           <CardTitle>Audit History</CardTitle>
-          <AuditLogPanel entries={auditLogEntries} />
+          <AuditLogPanel entries={auditLogEntries} timezone={timezone} />
         </Card>
       </section>
     </>

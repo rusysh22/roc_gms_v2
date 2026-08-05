@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Crown } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
@@ -113,15 +114,20 @@ export const getRelationshipId = (
   return value.id ? String(value.id) : ''
 }
 
-export const formatDateTime = (value?: string | null) => {
+// Every formatter below takes the event's IANA timezone as its last, optional parameter - see
+// src/lib/timezone.ts. Defaults to WIB (Asia/Jakarta) so a call site that hasn't been threaded
+// through to a specific event yet still renders the platform default instead of throwing. 24-hour
+// clock throughout (hour12: false) rather than AM/PM.
+export const formatDateTime = (value?: string | null, timezone: string = DEFAULT_EVENT_TIMEZONE) => {
   if (!value) {
     return 'Not scheduled'
   }
 
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('en-GB', {
     dateStyle: 'medium',
     timeStyle: 'short',
-    timeZone: 'Asia/Bangkok',
+    hour12: false,
+    timeZone: timezone,
   }).format(new Date(value))
 }
 
@@ -131,18 +137,19 @@ export const formatStatus = (value?: string | null) =>
 export const formatAuditAction = (value?: string | null) =>
   value ? value.replaceAll('.', ' ').replaceAll('_', ' ') : 'unknown action'
 
-export const formatTimeOnly = (value?: string | null) => {
+export const formatTimeOnly = (value?: string | null, timezone: string = DEFAULT_EVENT_TIMEZONE) => {
   if (!value) {
     return '--:--'
   }
 
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeStyle: 'short',
-    timeZone: 'Asia/Bangkok',
+    hour12: false,
+    timeZone: timezone,
   }).format(new Date(value))
 }
 
-export const formatDateLabel = (value?: string | null) => {
+export const formatDateLabel = (value?: string | null, timezone: string = DEFAULT_EVENT_TIMEZONE) => {
   if (!value) {
     return 'Unscheduled'
   }
@@ -151,17 +158,17 @@ export const formatDateLabel = (value?: string | null) => {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-    timeZone: 'Asia/Bangkok',
+    timeZone: timezone,
   }).format(new Date(value))
 }
 
-export const getDateKey = (value?: string | null) => {
+export const getDateKey = (value?: string | null, timezone: string = DEFAULT_EVENT_TIMEZONE) => {
   if (!value) {
     return null
   }
 
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
+    timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -269,10 +276,12 @@ export const MatchCard = ({
   match,
   compact = false,
   detailsHref,
+  timezone = DEFAULT_EVENT_TIMEZONE,
 }: {
   match: WorkspaceMatch
   compact?: boolean
   detailsHref?: string | null
+  timezone?: string
 }) => (
   <Card interactive={detailsHref !== null} className={cn('flex flex-col gap-3', compact && 'gap-2 p-3')}>
     <div className="flex items-center justify-between gap-2">
@@ -298,7 +307,7 @@ export const MatchCard = ({
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
         <div>
           <dt className="font-bold tracking-wide text-ink-soft uppercase">Time</dt>
-          <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
+          <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at, timezone)}</dd>
         </div>
         <div>
           <dt className="font-bold tracking-wide text-ink-soft uppercase">Venue</dt>
@@ -532,9 +541,11 @@ export type DocumentationAssetSummary = {
 export const DocumentationAssetList = ({
   assets,
   showVisibility = false,
+  timezone = DEFAULT_EVENT_TIMEZONE,
 }: {
   assets: DocumentationAssetSummary[]
   showVisibility?: boolean
+  timezone?: string
 }) => {
   if (assets.length === 0) {
     return <EmptyState>No documentation uploaded yet.</EmptyState>
@@ -569,7 +580,7 @@ export const DocumentationAssetList = ({
           {asset.caption ? <p className="mt-1 text-sm text-ink-soft">{asset.caption}</p> : null}
           <p className="mt-1 text-xs font-semibold text-ink-soft">
             {getRelationshipLabel(asset.uploaded_by, 'Unknown uploader')}
-            {asset.createdAt ? ` · ${formatDateTime(asset.createdAt)}` : ''}
+            {asset.createdAt ? ` · ${formatDateTime(asset.createdAt, timezone)}` : ''}
           </p>
         </li>
       ))}
@@ -611,9 +622,11 @@ const commentStatusTone: Record<string, StatusTone> = {
 export const CommentList = ({
   comments,
   showStatus = false,
+  timezone = DEFAULT_EVENT_TIMEZONE,
 }: {
   comments: CommentSummary[]
   showStatus?: boolean
+  timezone?: string
 }) => {
   if (comments.length === 0) {
     return <EmptyState>No comments yet.</EmptyState>
@@ -643,8 +656,8 @@ export const CommentList = ({
           <p className="mt-1 text-sm text-ink">{comment.body}</p>
           <p className="mt-1 text-xs font-semibold text-ink-soft">
             {comment.author_name || getRelationshipLabel(comment.author_user_id, 'System / Unknown')}
-            {comment.createdAt ? <> &middot; {formatDateTime(comment.createdAt)}</> : null}
-            {comment.resolved_at ? <> &middot; Resolved {formatDateTime(comment.resolved_at)}</> : null}
+            {comment.createdAt ? <> &middot; {formatDateTime(comment.createdAt, timezone)}</> : null}
+            {comment.resolved_at ? <> &middot; Resolved {formatDateTime(comment.resolved_at, timezone)}</> : null}
           </p>
         </li>
       ))}
@@ -652,7 +665,13 @@ export const CommentList = ({
   )
 }
 
-export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
+export const AuditLogPanel = ({
+  entries,
+  timezone = DEFAULT_EVENT_TIMEZONE,
+}: {
+  entries: AuditLogSummary[]
+  timezone?: string
+}) => {
   if (entries.length === 0) {
     return <EmptyState>No audited changes yet.</EmptyState>
   }
@@ -663,7 +682,7 @@ export const AuditLogPanel = ({ entries }: { entries: AuditLogSummary[] }) => {
         <li key={entry.id} className="rounded-card border border-line bg-paper p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-extrabold text-ink">{formatAuditAction(entry.action)}</span>
-            <span className="text-xs font-semibold text-ink-soft">{formatDateTime(entry.createdAt)}</span>
+            <span className="text-xs font-semibold text-ink-soft">{formatDateTime(entry.createdAt, timezone)}</span>
           </div>
           <p className="mt-1 text-xs font-semibold text-ink-soft">
             {getRelationshipLabel(entry.actor_user_id, 'System / Unknown')} &middot; {entry.entity_type} #

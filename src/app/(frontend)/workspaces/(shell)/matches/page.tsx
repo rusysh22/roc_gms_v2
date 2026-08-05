@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getActiveEvent } from '../../activeEvent'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   NoActiveEventNotice,
   PageHero,
@@ -45,6 +46,7 @@ export default async function MatchesListPage({ searchParams }: { searchParams?:
   }
 
   const activeEvent = await getActiveEvent(access.payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -133,7 +135,7 @@ export default async function MatchesListPage({ searchParams }: { searchParams?:
                   </TableCell>
                   <TableCell className="text-ink-soft">{match.score_summary || '—'}</TableCell>
                   <TableCell className="text-ink-soft whitespace-nowrap">
-                    {formatDateTime(match.scheduled_start_at)}
+                    {formatDateTime(match.scheduled_start_at, timezone)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button asChild size="sm" variant="ghost">

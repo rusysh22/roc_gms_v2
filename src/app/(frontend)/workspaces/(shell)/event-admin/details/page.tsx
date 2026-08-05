@@ -5,6 +5,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
@@ -36,6 +37,7 @@ type EventDetailsDoc = {
   organizer_name?: string | null
   event_start_at?: string | null
   event_end_at?: string | null
+  timezone?: string | null
   public_open_at?: string | null
   registration_open_at?: string | null
   registration_close_at?: string | null
@@ -156,6 +158,19 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
                 required
                 defaultValue={toDateTimeLocalValue(event.event_end_at)}
               />
+            </Field>
+            <Field
+              label="Time zone"
+              className="sm:col-span-2"
+              description="Every schedule, match, and bracket time for this event is shown in this zone - on the public site and in the workspace."
+            >
+              <Select name="timezone" defaultValue={event.timezone || DEFAULT_EVENT_TIMEZONE}>
+                {EVENT_TIMEZONE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="Public page opens">
               <Input

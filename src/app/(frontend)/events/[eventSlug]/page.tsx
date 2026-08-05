@@ -31,6 +31,7 @@ import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
 import { getPublicArticles, getScopedPublicAnnouncements } from '../../contentData'
 import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publicEditComponents'
 import { getPublicEditState } from '../../publicEditState'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   formatDateLabel,
   formatStatus,
@@ -93,27 +94,27 @@ const SPORT_ICONS: Record<string, LucideIcon> = {
   other: Trophy,
 }
 
-const formatMatchTime = (value?: string | null) => {
+const formatMatchTime = (value: string | null | undefined, tz: string) => {
   if (!value) {
     return 'Time TBD'
   }
 
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat('en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     hour: 'numeric',
     minute: '2-digit',
-    timeZone: 'Asia/Bangkok',
+    hour12: false,
+    timeZone: tz,
   }).format(new Date(value))
 }
 
 // A single line summary of when the event runs, e.g. "12-14 Feb 2026" or "28 Feb - 2 Mar 2026" -
 // used in the hero's "at a glance" line instead of the raw start/end timestamps.
-const formatEventDateRange = (startIso: string, endIso: string) => {
+const formatEventDateRange = (startIso: string, endIso: string, tz: string) => {
   const start = new Date(startIso)
   const end = new Date(endIso)
-  const tz = 'Asia/Bangkok'
   const day = (date: Date) => new Intl.DateTimeFormat('en', { day: 'numeric', timeZone: tz }).format(date)
   const monthYear = (date: Date) =>
     new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: tz }).format(date)
@@ -162,6 +163,7 @@ export default async function EventHomePage({
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
   const bannerImage =
     event.banner_image && typeof event.banner_image === 'object' ? event.banner_image : undefined
@@ -269,21 +271,21 @@ export default async function EventHomePage({
 
   const calendarDayCounts = (upcomingMatchesResult.docs as ScheduledMatch[]).reduce<Map<string, number>>(
     (map, match) => {
-      const dateKey = getDateKey(match.scheduled_start_at)
+      const dateKey = getDateKey(match.scheduled_start_at, timezone)
       if (!dateKey) return map
       map.set(dateKey, (map.get(dateKey) || 0) + 1)
       return map
     },
     new Map(),
   )
-  const todayKey = getDateKey(new Date().toISOString())
+  const todayKey = getDateKey(new Date().toISOString(), timezone)
   const calendarDays = Array.from(calendarDayCounts.entries())
     .filter(([dateKey]) => !todayKey || dateKey >= todayKey)
     .sort(([left], [right]) => left.localeCompare(right))
     .slice(0, 7)
     .map(([dateKey, count]) => ({
       dateKey,
-      label: formatDateLabel(`${dateKey}T00:00:00`),
+      label: formatDateLabel(`${dateKey}T00:00:00`, timezone),
       count,
     }))
 
@@ -356,7 +358,7 @@ export default async function EventHomePage({
             <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-ink-soft">
               <span className="inline-flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-brand-primary" aria-hidden="true" />
-                {formatEventDateRange(event.event_start_at, event.event_end_at)}
+                {formatEventDateRange(event.event_start_at, event.event_end_at, timezone)}
               </span>
               {event.location ? (
                 <span className="inline-flex items-center gap-1.5">
@@ -462,7 +464,7 @@ export default async function EventHomePage({
                       </CardHeader>
                       <CardContent className="flex items-center gap-2 text-sm text-ink-soft">
                         <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        {formatMatchTime(match.scheduled_start_at)}
+                        {formatMatchTime(match.scheduled_start_at, timezone)}
                       </CardContent>
                     </Card>
                   </Link>

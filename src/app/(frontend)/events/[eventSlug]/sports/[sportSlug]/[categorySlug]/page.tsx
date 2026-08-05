@@ -11,6 +11,7 @@ import { AnnouncementFeed, ArticleCard } from '../../../../../contentComponents'
 import { getRelatedPublicArticles, getScopedPublicAnnouncements } from '../../../../../contentData'
 import { BracketTree } from '../../../../../brackets/bracketTree'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   formatDateLabel,
   formatDateTime,
@@ -78,9 +79,9 @@ const getRulesetFacts = (ruleset?: RulesetDoc) => {
   ].filter(Boolean) as Array<[string, string | number]>
 }
 
-const groupMatchesByDate = (matches: PublicMatch[]) =>
+const groupMatchesByDate = (matches: PublicMatch[], timezone: string) =>
   matches.reduce<Map<string, PublicMatch[]>>((map, match) => {
-    const dateKey = getDateKey(match.scheduled_start_at) || 'unscheduled'
+    const dateKey = getDateKey(match.scheduled_start_at, timezone) || 'unscheduled'
     const rows = map.get(dateKey) || []
     rows.push(match)
     map.set(dateKey, rows)
@@ -250,7 +251,13 @@ const CategoryStandings = ({
 // DoubleEliminationBracketView in the wizard - same "three stacked BracketTree sections" approach
 // kept consistent across all three double-elimination bracket renderers rather than building a
 // shared component for what's currently three call sites.
-const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: DoubleEliminationBracketData }) => {
+const DoubleEliminationBracketSections = ({
+  bracketData,
+  timezone,
+}: {
+  bracketData: DoubleEliminationBracketData
+  timezone: string
+}) => {
   const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = bracketData
   const grandFinalRounds =
     grandFinal ?
@@ -270,18 +277,18 @@ const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: Double
     <div className="flex flex-col gap-6">
       <div>
         <h3 className="mb-2 text-sm font-extrabold text-ink">Winners bracket</h3>
-        <BracketTree rounds={bracketData.winners_rounds} champion={null} />
+        <BracketTree rounds={bracketData.winners_rounds} champion={null} timezone={timezone} />
       </div>
       {bracketData.losers_rounds.length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Losers bracket</h3>
-          <BracketTree rounds={bracketData.losers_rounds} champion={null} />
+          <BracketTree rounds={bracketData.losers_rounds} champion={null} timezone={timezone} />
         </div>
       ) : null}
       {grandFinalRounds.length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Grand final</h3>
-          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} />
+          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} timezone={timezone} />
         </div>
       ) : null}
     </div>
@@ -293,11 +300,13 @@ const CategorySchedule = ({
   eventPath,
   sportSlug,
   categorySlug,
+  timezone,
 }: {
   matches: PublicMatch[]
   eventPath: string
   sportSlug: string
   categorySlug: string
+  timezone: string
 }) => {
   if (matches.length === 0) {
     return (
@@ -308,7 +317,7 @@ const CategorySchedule = ({
     )
   }
 
-  const groups = groupMatchesByDate(matches)
+  const groups = groupMatchesByDate(matches, timezone)
   const orderedDateKeys = Array.from(groups.keys()).sort((left, right) => {
     if (left === 'unscheduled') return 1
     if (right === 'unscheduled') return -1
@@ -320,7 +329,7 @@ const CategorySchedule = ({
       {orderedDateKeys.map((dateKey) => {
         const rows = groups.get(dateKey) || []
         const label =
-          dateKey === 'unscheduled' ? 'Date to be confirmed' : formatDateLabel(rows[0]?.scheduled_start_at)
+          dateKey === 'unscheduled' ? 'Date to be confirmed' : formatDateLabel(rows[0]?.scheduled_start_at, timezone)
 
         return (
           <div key={dateKey}>
@@ -352,7 +361,7 @@ const CategorySchedule = ({
                       <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                          {formatTimeOnly(match.scheduled_start_at)}
+                          {formatTimeOnly(match.scheduled_start_at, timezone)}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
@@ -387,6 +396,7 @@ export default async function PublicSportCategoryPage({
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
 
   const data = await getCategoryDetail(event.id, sportSlug, categorySlug)
@@ -511,11 +521,12 @@ export default async function PublicSportCategoryPage({
 
               {usesBracket ?
                 bracket?.bracket_data?.format === 'double_elimination' ?
-                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} />
+                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} timezone={timezone} />
                 : bracket?.bracket_data && 'rounds' in bracket.bracket_data && bracket.bracket_data.rounds.length > 0 ?
                   <BracketTree
                     rounds={bracket.bracket_data.rounds}
                     champion={bracket.bracket_data.champion}
+                    timezone={timezone}
                   />
                 : <Card className="text-sm text-ink-soft">
                     This bracket is not available yet. It will appear once the category is seeded.
@@ -529,6 +540,7 @@ export default async function PublicSportCategoryPage({
                       <BracketTree
                         rounds={bracket.bracket_data.rounds}
                         champion={bracket.bracket_data.champion}
+                        timezone={timezone}
                       />
                     </div>
                   ) : null}
@@ -579,7 +591,7 @@ export default async function PublicSportCategoryPage({
                         {getRelationshipLabel(match.participant_b_entry_id)}
                       </p>
                       <p className="mt-1 text-xs text-ink-soft">
-                        {formatDateTime(match.scheduled_start_at)}
+                        {formatDateTime(match.scheduled_start_at, timezone)}
                       </p>
                     </Link>
                   ))}
@@ -605,6 +617,7 @@ export default async function PublicSportCategoryPage({
               eventPath={eventPath}
               sportSlug={sportSlug}
               categorySlug={categorySlug}
+              timezone={timezone}
             />
           </div>
         </section>

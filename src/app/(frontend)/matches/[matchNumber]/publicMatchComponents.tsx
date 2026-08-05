@@ -173,7 +173,15 @@ export const ScoreCard = ({
 // where do I need to be"), so splitting them into two same-weight cards made a spectator do the
 // work of mentally merging them back. "Not scheduled" repeated across four dt/dd pairs is also a
 // worse "not scheduled" state than one plain sentence saying so.
-export const MatchInfoStrip = ({ match, eventPath }: { match: MatchDetail; eventPath: string }) => {
+export const MatchInfoStrip = ({
+  match,
+  eventPath,
+  timezone,
+}: {
+  match: MatchDetail
+  eventPath: string
+  timezone: string
+}) => {
   const isScheduled = Boolean(match.scheduled_start_at)
 
   return (
@@ -184,7 +192,7 @@ export const MatchInfoStrip = ({ match, eventPath }: { match: MatchDetail; event
           <div className="min-w-0">
             <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Date</p>
             <p className="mt-0.5 truncate text-sm font-semibold text-ink">
-              {isScheduled ? formatDateLabel(match.scheduled_start_at) : 'Not scheduled yet'}
+              {isScheduled ? formatDateLabel(match.scheduled_start_at, timezone) : 'Not scheduled yet'}
             </p>
           </div>
         </div>
@@ -194,7 +202,7 @@ export const MatchInfoStrip = ({ match, eventPath }: { match: MatchDetail; event
             <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Time</p>
             <p className="mt-0.5 truncate text-sm font-semibold text-ink">
               {isScheduled
-                ? `${formatTimeOnly(match.scheduled_start_at)} – ${formatTimeOnly(match.scheduled_end_at)}`
+                ? `${formatTimeOnly(match.scheduled_start_at, timezone)} – ${formatTimeOnly(match.scheduled_end_at, timezone)}`
                 : '—'}
             </p>
           </div>
@@ -265,7 +273,7 @@ export const DocumentationGallery = ({ assets }: { assets: DocumentationAssetDet
   )
 }
 
-export const PublicCommentList = ({ comments }: { comments: CommentDetail[] }) => {
+export const PublicCommentList = ({ comments, timezone }: { comments: CommentDetail[]; timezone: string }) => {
   if (comments.length === 0) {
     return <Card className="text-sm text-ink-soft">No comments yet.</Card>
   }
@@ -277,7 +285,7 @@ export const PublicCommentList = ({ comments }: { comments: CommentDetail[] }) =
           <p className="text-sm text-ink">{comment.body}</p>
           <p className="mt-2 text-xs text-ink-soft">
             {comment.author_name || 'Committee'}
-            {comment.createdAt ? ` · ${formatDateTime(comment.createdAt)}` : ''}
+            {comment.createdAt ? ` · ${formatDateTime(comment.createdAt, timezone)}` : ''}
           </p>
         </Card>
       ))}

@@ -24,6 +24,10 @@ export type PublicEventDoc = {
   hero_tagline?: string | null
   event_start_at: string
   event_end_at: string
+  // Per-tournament timezone (IANA name, e.g. 'Asia/Jakarta') - every date/time formatter on this
+  // event's public pages should be called with resolveEventTimezone(event.timezone), not a
+  // hardcoded zone. See src/lib/timezone.ts.
+  timezone?: string | null
   registration_open_at?: string | null
   registration_close_at?: string | null
   visibility?: string | null

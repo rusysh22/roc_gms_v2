@@ -33,6 +33,7 @@ import { GlossaryHint } from '@/components/ui/glossary-hint'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { SelectAllCheckbox } from '@/components/ui/select-all-checkbox'
 import { Select } from '@/components/ui/select'
+import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
@@ -483,6 +484,7 @@ export default async function NewEventWizardPage({
               defaultSetupParticipantMode={get(params, 'setupParticipantMode')}
               defaultSetupParticipantSource={get(params, 'setupParticipantSource')}
               defaultSetupEventScale={get(params, 'setupEventScale')}
+              defaultTimezone={get(params, 'timezone')}
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
@@ -1175,6 +1177,7 @@ const EventStep = ({
   defaultSetupParticipantMode,
   defaultSetupParticipantSource,
   defaultSetupEventScale,
+  defaultTimezone,
 }: {
   defaultName: string
   defaultSlug: string
@@ -1187,6 +1190,7 @@ const EventStep = ({
   defaultSetupParticipantMode: string
   defaultSetupParticipantSource: string
   defaultSetupEventScale: string
+  defaultTimezone: string
 }) => (
   <Card className="flex flex-col gap-4">
     <div>
@@ -1216,6 +1220,18 @@ const EventStep = ({
         </Field>
         <Field label="End">
           <Input name="eventEnd" type="datetime-local" required defaultValue={defaultEnd} />
+        </Field>
+        <Field
+          label="Time zone"
+          description="Every schedule, match, and bracket time for this event is shown in this zone - on the public site and in the workspace."
+        >
+          <Select name="timezone" defaultValue={defaultTimezone || DEFAULT_EVENT_TIMEZONE}>
+            {EVENT_TIMEZONE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="Location">
           <Input name="location" placeholder="e.g. Main Sports Hall" defaultValue={defaultLocation} />

@@ -6,6 +6,7 @@ import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin } from 'lucide-re
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -121,6 +122,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
   const schedulePath = `${eventPath}/schedule`
   const activeTab = getActiveTab(tab)
@@ -168,7 +170,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     : allMatches
 
   const groups = matches.reduce<Map<string, ScheduleMatch[]>>((map, match) => {
-    const dateKey = getDateKey(match.scheduled_start_at) || 'unscheduled'
+    const dateKey = getDateKey(match.scheduled_start_at, timezone) || 'unscheduled'
     const rows = map.get(dateKey) || []
     rows.push(match)
     map.set(dateKey, rows)
@@ -299,7 +301,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                     const rows = groups.get(dateKey) || []
                     const label =
                       dateKey === 'unscheduled' ? 'Date to be confirmed' : (
-                        formatDateLabel(rows[0]?.scheduled_start_at)
+                        formatDateLabel(rows[0]?.scheduled_start_at, timezone)
                       )
 
                     return (
@@ -377,7 +379,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                     <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
                                       <span className="inline-flex items-center gap-1">
                                         <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                                        {formatTimeOnly(match.scheduled_start_at)}
+                                        {formatTimeOnly(match.scheduled_start_at, timezone)}
                                       </span>
                                       <span className="inline-flex items-center gap-1">
                                         <MapPin className="h-3.5 w-3.5" aria-hidden="true" />

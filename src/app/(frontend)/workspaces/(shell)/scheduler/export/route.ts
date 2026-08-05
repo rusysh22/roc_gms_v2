@@ -2,6 +2,7 @@ import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import type { WorkspaceMatch } from '../../../workspaceComponents'
 import { buildScheduleWorkbook } from '@/lib/scheduleExport'
+import { resolveEventTimezone } from '@/lib/timezone'
 
 const schedulerPage = '/workspaces/scheduler'
 
@@ -25,7 +26,7 @@ export async function GET() {
     where: { event_id: { equals: activeEvent.id } },
   })
 
-  const buffer = buildScheduleWorkbook(matches.docs as WorkspaceMatch[])
+  const buffer = buildScheduleWorkbook(matches.docs as WorkspaceMatch[], resolveEventTimezone(activeEvent.timezone))
   const filename = `${activeEvent.slug}-schedule.xlsx`
 
   return new Response(new Uint8Array(buffer), {

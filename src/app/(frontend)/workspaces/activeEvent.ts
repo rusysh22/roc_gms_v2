@@ -17,6 +17,9 @@ export type ActiveEventDoc = {
   status?: string | null
   event_start_at?: string | null
   event_end_at?: string | null
+  // Per-tournament timezone (IANA name) - pass through resolveEventTimezone() (src/lib/timezone.ts)
+  // before handing to any date/time formatter, rather than assuming WIB directly.
+  timezone?: string | null
 }
 
 // `depth` defaults to 0 (the shape every caller needing just the base scalar fields wants) but a

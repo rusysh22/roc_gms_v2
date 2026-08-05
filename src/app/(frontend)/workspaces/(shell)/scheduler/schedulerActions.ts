@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { postMatchAnnouncement } from '@/lib/matchNotifications'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
 import { detectScheduleConflicts } from './conflicts'
@@ -101,6 +102,8 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { status: isRecoveringFromPostponed ? 'scheduled' : match.status, scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
   const eventId = getRelationshipId(match.event_id)
   if (eventId) {
+    const eventDoc = await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+    const timezone = resolveEventTimezone(eventDoc?.timezone)
     await postMatchAnnouncement({
       payload,
       eventId,
@@ -108,7 +111,7 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
       matchId: match.id,
       matchNumber,
       title: `Schedule change: ${matchNumber}`,
-      summary: `${matchNumber} has a new time: ${formatDateTime(start)}–${formatDateTime(end)}. Reason: ${reason}`,
+      summary: `${matchNumber} has a new time: ${formatDateTime(start, timezone)}–${formatDateTime(end, timezone)}. Reason: ${reason}`,
       urgency: 'schedule_change',
     })
   }

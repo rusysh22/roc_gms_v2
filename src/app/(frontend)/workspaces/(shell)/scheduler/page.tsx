@@ -10,6 +10,7 @@ import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
 import { getMatchStatusTone, StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -98,6 +99,7 @@ export default async function SchedulerWorkspacePage({
 
   const payload = access.payload
   const activeEvent = await getActiveEvent(payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -155,19 +157,19 @@ export default async function SchedulerWorkspacePage({
 
   const dayKeys = Array.from(
     new Set(
-      scheduledMatches.map((match) => getDateKey(match.scheduled_start_at)).filter((key): key is string => Boolean(key)),
+      scheduledMatches.map((match) => getDateKey(match.scheduled_start_at, timezone)).filter((key): key is string => Boolean(key)),
     ),
   ).sort()
 
   const dayLanes = dayKeys.map((dayKey) => {
-    const dayMatches = scheduledMatches.filter((match) => getDateKey(match.scheduled_start_at) === dayKey)
+    const dayMatches = scheduledMatches.filter((match) => getDateKey(match.scheduled_start_at, timezone) === dayKey)
     const laneLabels = Array.from(
       new Set(dayMatches.map((match) => getRelationshipLabel(match.venue_id, 'Unassigned venue'))),
     )
 
     return {
       dayKey,
-      dateLabel: formatDateLabel(dayMatches[0]?.scheduled_start_at),
+      dateLabel: formatDateLabel(dayMatches[0]?.scheduled_start_at, timezone),
       lanes: laneLabels.map((label) => ({
         label,
         matches: dayMatches.filter((match) => getRelationshipLabel(match.venue_id, 'Unassigned venue') === label),
@@ -211,7 +213,7 @@ export default async function SchedulerWorkspacePage({
               <TableCell>
                 {match.scheduled_start_at ? (
                   <>
-                    <p className="font-semibold whitespace-nowrap">{formatDateTime(match.scheduled_start_at)}</p>
+                    <p className="font-semibold whitespace-nowrap">{formatDateTime(match.scheduled_start_at, timezone)}</p>
                     <p className="text-xs text-ink-soft">
                       {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
                     </p>
@@ -388,7 +390,7 @@ export default async function SchedulerWorkspacePage({
                             key={match.id}
                             className="flex items-center justify-between gap-2 rounded-card border border-line bg-paper px-3 py-2 text-xs"
                           >
-                            <span className="font-bold text-ink-soft">{formatTimeOnly(match.scheduled_start_at)}</span>
+                            <span className="font-bold text-ink-soft">{formatTimeOnly(match.scheduled_start_at, timezone)}</span>
                             <strong className="font-extrabold text-ink">{match.match_number}</strong>
                             <span className="min-w-0 truncate text-right font-semibold text-ink-soft">
                               {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}

@@ -6,9 +6,12 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
+import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
 import { slugify, text, wizardPage } from './wizardShared'
+
+const eventTimezones = new Set<string>(EVENT_TIMEZONE_OPTIONS.map((option) => option.value))
 
 // Tries base-2, base-3, ... until one isn't taken, so a duplicate-slug error can offer a ready-to-use
 // alternative instead of making the user guess-and-check. Capped at 50 attempts - if a base slug
@@ -45,6 +48,8 @@ export async function createEventAction(formData: FormData): Promise<void> {
   const end = text(formData, 'eventEnd')
   const location = text(formData, 'location')
   const organizerName = text(formData, 'organizerName')
+  const timezoneInput = text(formData, 'timezone')
+  const timezone = eventTimezones.has(timezoneInput) ? timezoneInput : DEFAULT_EVENT_TIMEZONE
   const setupTournamentTypeInput = text(formData, 'setupTournamentType')
   const setupParticipantModeInput = text(formData, 'setupParticipantMode')
   const setupParticipantSourceInput = text(formData, 'setupParticipantSource')
@@ -70,6 +75,7 @@ export async function createEventAction(formData: FormData): Promise<void> {
       eventEnd: end,
       location,
       organizerName,
+      timezone,
       setupTournamentType: setupTournamentTypeInput,
       setupParticipantMode: setupParticipantModeInput,
       setupParticipantSource: setupParticipantSourceInput,
@@ -118,6 +124,7 @@ export async function createEventAction(formData: FormData): Promise<void> {
     logo: logoId,
     event_start_at: new Date(start).toISOString(),
     event_end_at: new Date(end).toISOString(),
+    timezone: timezone as (typeof EVENT_TIMEZONE_OPTIONS)[number]['value'],
     location: location || undefined,
     organizer_name: organizerName || undefined,
     status: 'draft' as const,

@@ -10,6 +10,7 @@ import {
   type LexicalNode,
   type LexicalTextNode,
 } from '@/lib/richTextMarkdown'
+import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 import { toOptions, type RelationshipDoc, type WorkspaceOption } from './workspaces/workspaceComponents'
 
 export {
@@ -93,7 +94,7 @@ export const getMediaUrl = (value: MediaDoc | string | number | null | undefined
   return media?.url || ''
 }
 
-export const formatContentDate = (value?: string | null) => {
+export const formatContentDate = (value?: string | null, timezone: string = DEFAULT_EVENT_TIMEZONE) => {
   if (!value) {
     return 'Published date pending'
   }
@@ -102,7 +103,7 @@ export const formatContentDate = (value?: string | null) => {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-    timeZone: 'Asia/Bangkok',
+    timeZone: timezone,
   }).format(new Date(value))
 }
 

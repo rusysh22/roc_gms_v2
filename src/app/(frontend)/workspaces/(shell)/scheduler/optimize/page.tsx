@@ -7,6 +7,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { generateSchedulePlan, type SchedulePlanParams } from '@/lib/scheduleOptimizer'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -69,6 +70,7 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
 
   const payload = access.payload
   const activeEvent = await getActiveEvent(payload)
+  const timezone = resolveEventTimezone(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -257,8 +259,8 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
                         {assignment.matchNumber}
                         {assignment.isFeatured ? <span className="ml-2 text-xs font-bold text-gold">Featured</span> : null}
                       </TableCell>
-                      <TableCell>{formatDateTime(assignment.startAt)}</TableCell>
-                      <TableCell>{formatDateTime(assignment.endAt)}</TableCell>
+                      <TableCell>{formatDateTime(assignment.startAt, timezone)}</TableCell>
+                      <TableCell>{formatDateTime(assignment.endAt, timezone)}</TableCell>
                       <TableCell>{venueLabelById.get(String(assignment.venueId)) || getRelationshipLabel(undefined)}</TableCell>
                       <TableCell>{courtLabelById.get(String(assignment.courtId)) || getRelationshipLabel(undefined)}</TableCell>
                     </TableRow>

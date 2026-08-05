@@ -7,6 +7,7 @@ import { SubmitButton } from '@/components/ui/submit-button'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { getMatchDetail } from '../../../../../matchDetailData'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   WORKSPACE_ROLES,
   WorkspaceUnauthorized,
@@ -96,6 +97,11 @@ export default async function LiveScorePage({
 
   const { match, matchSets } = result
   const currentSet = matchSets[matchSets.length - 1]
+  const liveScoreEventId = getRelationshipId(match.event_id)
+  const liveScoreEventDoc = liveScoreEventId
+    ? await access.payload.findByID({ collection: 'events', id: liveScoreEventId, depth: 0 }).catch(() => null)
+    : null
+  const timezone = resolveEventTimezone(liveScoreEventDoc?.timezone)
 
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.2: "aturan target/deuce/timer terlihat
   // kontekstual" - a match officer entering scores shouldn't have to remember or go look up the
@@ -340,7 +346,7 @@ export default async function LiveScorePage({
             <dl className="mt-3 grid gap-2">
               <div>
                 <dt className="text-xs font-bold uppercase tracking-wide">Starts</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at)}</dd>
+                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at, timezone)}</dd>
               </div>
               <div>
                 <dt className="text-xs font-bold uppercase tracking-wide">Venue</dt>

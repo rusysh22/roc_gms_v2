@@ -4,6 +4,7 @@ import { Clock, MapPin, Radio } from 'lucide-react'
 
 import config from '@payload-config'
 import { AutoRefresh } from '@/components/auto-refresh'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   formatTimeOnly,
   getRelationshipLabel,
@@ -45,6 +46,7 @@ export default async function VenueDisplayPage({
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
 
   const eventWhere: Where = { and: [{ event_id: { equals: event.id } }, { is_public: { equals: true } }] }
   const [liveResult, nextUpResult] = await Promise.all([
@@ -137,7 +139,7 @@ export default async function VenueDisplayPage({
                   <div className="flex flex-wrap items-center gap-4 text-sm text-paper/70">
                     <span className="inline-flex items-center gap-1.5">
                       <Clock className="h-4 w-4" aria-hidden="true" />
-                      {formatTimeOnly(match.scheduled_start_at)}
+                      {formatTimeOnly(match.scheduled_start_at, timezone)}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <MapPin className="h-4 w-4" aria-hidden="true" />

@@ -6,6 +6,7 @@ import config from '@payload-config'
 import { getAbsolutePublicUrl } from '@/lib/shareMetadata'
 import { PrintButton } from './PrintButton'
 import { formatDateTime } from '../../../workspaces/workspaceComponents'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getPublicEventBySlug, type EventBannerImage } from '../../publicEvents'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,7 @@ export default async function EventPosterPage({
     notFound()
   }
 
+  const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
   const url = getAbsolutePublicUrl(eventPath)
   // No `width` option - the SVG then gets only a viewBox (no explicit pixel width/height), so it
@@ -63,7 +65,7 @@ export default async function EventPosterPage({
           <div>
             <dt className="sr-only">Dates</dt>
             <dd>
-              {formatDateTime(event.event_start_at)} — {formatDateTime(event.event_end_at)}
+              {formatDateTime(event.event_start_at, timezone)} — {formatDateTime(event.event_end_at, timezone)}
             </dd>
           </div>
           {event.location ? (

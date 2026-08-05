@@ -4,6 +4,7 @@ import { ArrowRight, CalendarClock, CheckCircle2, Circle, MapPinned, Trophy } fr
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { getActiveEvent } from '../../activeEvent'
+import { resolveEventTimezone } from '@/lib/timezone'
 import {
   PageHero,
   StatBlock,
@@ -25,6 +26,7 @@ type EventDoc = {
   event_end_at?: string
   public_open_at?: string
   location?: string
+  timezone?: string | null
 }
 
 type NextMatchDoc = {
@@ -57,6 +59,7 @@ export default async function EventAdminWorkspacePage() {
 
   const payload = access.payload
   const event = (await getActiveEvent(payload)) as EventDoc | null
+  const timezone = resolveEventTimezone(event?.timezone)
   // A where clause guaranteed to match nothing when there's no active event yet - otherwise an
   // unscoped `where: undefined` below would silently count every event's data, not zero.
   const eventWhere = event ? { event_id: { equals: event.id } } : { event_id: { equals: -1 } }
@@ -185,7 +188,7 @@ export default async function EventAdminWorkspacePage() {
               {nextMatchDoc
                 ? `Next: ${getRelationshipLabel(nextMatchDoc.participant_a_entry_id)} vs ${getRelationshipLabel(
                     nextMatchDoc.participant_b_entry_id,
-                  )} · ${formatDateTime(nextMatchDoc.scheduled_start_at)}`
+                  )} · ${formatDateTime(nextMatchDoc.scheduled_start_at, timezone)}`
                 : 'No match-day matches queued yet.'}
             </span>
           </Link>
@@ -257,11 +260,11 @@ export default async function EventAdminWorkspacePage() {
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Starts</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(event?.event_start_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(event?.event_start_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Public opens</dt>
-              <dd className="font-semibold text-ink">{formatDateTime(event?.public_open_at)}</dd>
+              <dd className="font-semibold text-ink">{formatDateTime(event?.public_open_at, timezone)}</dd>
             </div>
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Location</dt>

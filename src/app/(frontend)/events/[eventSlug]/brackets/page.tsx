@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { formatStatus, getRelationshipLabel } from '../../../workspaces/workspaceComponents'
 import { BracketTree } from '../../../brackets/bracketTree'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getPublicEventBySlug } from '../../publicEvents'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,7 @@ export default async function PublicBracketsPage({
   if (!event) {
     notFound()
   }
+  const timezone = resolveEventTimezone(event.timezone)
 
   const bracketsResult = await payload.find({
     collection: 'brackets',
@@ -91,13 +93,14 @@ export default async function PublicBracketsPage({
                 {!bracket.bracket_data ? (
                   <Card className="text-sm text-ink-soft">This bracket has no matches yet.</Card>
                 ) : bracket.bracket_data.format === 'double_elimination' ? (
-                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} />
+                  <DoubleEliminationBracketSections bracketData={bracket.bracket_data} timezone={timezone} />
                 ) : bracket.bracket_data.rounds.length === 0 ? (
                   <Card className="text-sm text-ink-soft">This bracket has no matches yet.</Card>
                 ) : (
                   <BracketTree
                     rounds={bracket.bracket_data.rounds}
                     champion={bracket.bracket_data.champion}
+                    timezone={timezone}
                   />
                 )}
               </div>
@@ -113,7 +116,13 @@ export default async function PublicBracketsPage({
 // (src/app/(frontend)/workspaces/(focus)/event-admin/new-event/page.tsx's
 // DoubleEliminationBracketView) - kept consistent rather than building a second, differently
 // shaped renderer for the public page.
-const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: DoubleEliminationBracketData }) => {
+const DoubleEliminationBracketSections = ({
+  bracketData,
+  timezone,
+}: {
+  bracketData: DoubleEliminationBracketData
+  timezone: string
+}) => {
   const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = bracketData
   const grandFinalRounds =
     grandFinal ?
@@ -133,18 +142,18 @@ const DoubleEliminationBracketSections = ({ bracketData }: { bracketData: Double
     <div className="flex flex-col gap-6">
       <div>
         <h3 className="mb-2 text-sm font-extrabold text-ink">Winners bracket</h3>
-        <BracketTree rounds={bracketData.winners_rounds} champion={null} />
+        <BracketTree rounds={bracketData.winners_rounds} champion={null} timezone={timezone} />
       </div>
       {bracketData.losers_rounds.length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Losers bracket</h3>
-          <BracketTree rounds={bracketData.losers_rounds} champion={null} />
+          <BracketTree rounds={bracketData.losers_rounds} champion={null} timezone={timezone} />
         </div>
       ) : null}
       {grandFinalRounds.length > 0 ? (
         <div>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Grand final</h3>
-          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} />
+          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} timezone={timezone} />
         </div>
       ) : null}
     </div>
