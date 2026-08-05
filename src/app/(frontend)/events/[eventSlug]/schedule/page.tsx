@@ -8,7 +8,11 @@ import { cn } from '@/lib/utils'
 import { collectEntryClubLabels, type SingleEliminationBracketData } from '@/lib/brackets'
 import { resolveEventTimezone } from '@/lib/timezone'
 import { AutoRefresh } from '@/components/auto-refresh'
+import { AutoSubmitForm } from '@/components/auto-submit-form'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
 import {
   formatDateLabel,
@@ -124,17 +128,6 @@ const SCHEDULE_STATUS_FILTERS: { key: ScheduleStatusFilter; label: string }[] = 
   { key: 'all', label: 'All' },
 ]
 
-// A player mainly wants "what day am I playing" - a flat, scrollable feed of every match on
-// every date makes them scroll past days that aren't theirs to find it. The date strip lets them
-// jump straight to one day; dateKey is the `getDateKey` "YYYY-MM-DD" (or 'unscheduled'), reused
-// as-is as the URL value since it's already unambiguous and timezone-resolved.
-const formatDateChipLabel = (dateKey: string) => {
-  const [year, month, day] = dateKey.split('-').map(Number)
-  return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
-    new Date(Date.UTC(year, month - 1, day)),
-  )
-}
-
 const getStandingScopeKey = (standing: StandingDoc) =>
   [
     getRelationshipLabel(standing.category_id, 'Category'),
@@ -177,14 +170,6 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   const schedulePath = `${eventPath}/schedule`
   const activeTab = getActiveTab(tab)
   const statusFilter = getStatusFilter(statusParam)
-
-  const buildScheduleHref = (opts: { sport?: string; status?: ScheduleStatusFilter; date?: string }) => {
-    const query = new URLSearchParams({ tab: 'schedule' })
-    if (opts.sport) query.set('sport', opts.sport)
-    if (opts.status && opts.status !== 'upcoming') query.set('status', opts.status)
-    if (opts.date) query.set('date', opts.date)
-    return `${schedulePath}?${query.toString()}`
-  }
 
   const [matchesResult, sportsResult, standingsResult, bracketsResult] = await Promise.all([
     payload.find({
@@ -372,92 +357,53 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
 
       {activeTab === 'schedule' ? (
         <>
-          <div className="border-b border-line bg-mist/50 px-4 py-3">
+          <div className="border-b border-line bg-mist/50 px-4 py-4">
             <div className="mx-auto flex max-w-4xl flex-col gap-3">
-              <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filter by status">
-                {SCHEDULE_STATUS_FILTERS.map((filter) => (
+              {/* Standard filter-bar shape (label + dropdown/date-picker, GET form, auto-applies
+                  on change) instead of rows of scrolling chip buttons - a native <input
+                  type="date"> gives every browser's own calendar picker for free, which is the
+                  "pick a date the way people already expect" UI a date chip strip can't match. */}
+              <AutoSubmitForm action={schedulePath} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <input type="hidden" name="tab" value="schedule" />
+                <Field label="Status" className="min-w-0">
+                  <Select name="status" defaultValue={statusFilter}>
+                    {SCHEDULE_STATUS_FILTERS.map((filter) => (
+                      <option key={filter.key} value={filter.key}>
+                        {filter.label} ({statusFilterCounts[filter.key]})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Sport" className="min-w-0">
+                  <Select name="sport" defaultValue={activeSport?.slug || ''}>
+                    <option value="">All Sports</option>
+                    {sports.map((sport) => (
+                      <option key={sport.id} value={sport.slug}>
+                        {sport.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Date" className="min-w-0">
+                  <Input
+                    type="date"
+                    name="date"
+                    defaultValue={dateFilter === 'all' || dateFilter === 'unscheduled' ? '' : dateFilter}
+                    min={availableDateKeys.find((key) => key !== 'unscheduled')}
+                    max={[...availableDateKeys].reverse().find((key) => key !== 'unscheduled')}
+                  />
+                </Field>
+                <div className="flex items-end">
                   <Link
-                    key={filter.key}
-                    href={buildScheduleHref({ sport: activeSport?.slug, status: filter.key })}
-                    aria-current={statusFilter === filter.key ? 'true' : undefined}
-                    className={cn(
-                      'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold no-underline transition-colors',
-                      statusFilter === filter.key ?
-                        'bg-ink text-paper'
-                      : 'bg-paper text-ink-soft ring-1 ring-inset ring-line hover:text-ink',
-                    )}
+                    href={`${schedulePath}?tab=schedule`}
+                    className="inline-flex h-11 w-full items-center justify-center rounded-[10px] border border-line bg-paper text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
                   >
-                    {filter.label} · {statusFilterCounts[filter.key]}
+                    Reset filters
                   </Link>
-                ))}
-              </div>
-
-              {availableDateKeys.length > 1 ? (
-                <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filter by date">
-                  <Link
-                    href={buildScheduleHref({ sport: activeSport?.slug, status: statusFilter })}
-                    aria-current={dateFilter === 'all' ? 'true' : undefined}
-                    className={cn(
-                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                      dateFilter === 'all' ?
-                        'border-brand-secondary bg-brand-secondary text-paper'
-                      : 'border-line bg-paper text-ink-soft hover:text-ink',
-                    )}
-                  >
-                    All Dates
-                  </Link>
-                  {availableDateKeys.map((key) => (
-                    <Link
-                      key={key}
-                      href={buildScheduleHref({ sport: activeSport?.slug, status: statusFilter, date: key })}
-                      aria-current={dateFilter === key ? 'true' : undefined}
-                      className={cn(
-                        'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                        dateFilter === key ?
-                          'border-brand-secondary bg-brand-secondary text-paper'
-                        : 'border-line bg-paper text-ink-soft hover:text-ink',
-                      )}
-                    >
-                      {key === 'unscheduled' ? 'TBC' : formatDateChipLabel(key)}
-                    </Link>
-                  ))}
                 </div>
-              ) : null}
+              </AutoSubmitForm>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex gap-2 overflow-x-auto">
-                  <Link
-                    href={buildScheduleHref({ status: statusFilter, date: dateFilter === 'all' ? undefined : dateFilter })}
-                    className={cn(
-                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                      !activeSport ?
-                        'border-brand-primary bg-brand-primary text-paper'
-                      : 'border-line bg-paper text-ink-soft hover:text-ink',
-                    )}
-                  >
-                    All Sports
-                  </Link>
-                  {sports.map((sport) => (
-                    <Link
-                      key={sport.id}
-                      href={buildScheduleHref({
-                        sport: sport.slug,
-                        status: statusFilter,
-                        date: dateFilter === 'all' ? undefined : dateFilter,
-                      })}
-                      className={cn(
-                        'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                        activeSport?.slug === sport.slug ?
-                          'border-brand-primary bg-brand-primary text-paper'
-                        : 'border-line bg-paper text-ink-soft hover:text-ink',
-                      )}
-                    >
-                      {sport.name}
-                    </Link>
-                  ))}
-                </div>
-                <ScheduleFavoritesToggle eventSlug={event.slug} containerId="schedule-matches" />
-              </div>
+              <ScheduleFavoritesToggle eventSlug={event.slug} containerId="schedule-matches" />
             </div>
           </div>
 
