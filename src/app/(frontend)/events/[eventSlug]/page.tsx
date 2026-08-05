@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Calendar,
   ChevronRight,
-  Circle,
   Clock,
   CircleDot,
   Crown,
@@ -23,11 +22,11 @@ import config from '@payload-config'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { ShareEventPanel } from '@/components/share-event-panel'
 import { SponsorStrip, type SponsorDoc } from '@/components/sponsor-strip'
-import { AnnouncementFeed, ArticleCard } from '../../contentComponents'
+import { ArticleCard, CompactAnnouncementList } from '../../contentComponents'
 import { getPublicArticles, getScopedPublicAnnouncements } from '../../contentData'
 import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publicEditComponents'
 import { getPublicEditState } from '../../publicEditState'
@@ -71,14 +70,6 @@ type HomeMatch = {
 type ScheduledMatch = {
   id: string | number
   scheduled_start_at?: string | null
-}
-
-type StandingPreviewRow = {
-  id: string | number
-  rank: number
-  points: number
-  category_id?: RelationshipDoc | string | number | null
-  entry_id?: RelationshipDoc | string | number | null
 }
 
 const LIVE_STATUSES = ['ongoing', 'paused']
@@ -170,7 +161,7 @@ export default async function EventHomePage({
   const logoImage = event.logo && typeof event.logo === 'object' ? event.logo : undefined
 
   const eventWhere = { event_id: { equals: event.id } }
-  const [liveNextResult, sportsResult, articles, standingsResult, upcomingMatchesResult, sponsorsResult] =
+  const [liveNextResult, sportsResult, articles, upcomingMatchesResult, sponsorsResult] =
     await Promise.all([
     payload.find({
       collection: 'matches',
@@ -203,13 +194,6 @@ export default async function EventHomePage({
       where: { and: [eventWhere, { is_active: { equals: true } }] },
     }),
     getPublicArticles(3, event.id),
-    payload.find({
-      collection: 'standings',
-      depth: 1,
-      limit: 5,
-      sort: 'rank',
-      where: eventWhere,
-    }),
     payload.find({
       collection: 'matches',
       depth: 0,
@@ -267,8 +251,6 @@ export default async function EventHomePage({
     limit: 3,
   })
 
-  const standings = standingsResult.docs as StandingPreviewRow[]
-
   const calendarDayCounts = (upcomingMatchesResult.docs as ScheduledMatch[]).reduce<Map<string, number>>(
     (map, match) => {
       const dateKey = getDateKey(match.scheduled_start_at, timezone)
@@ -293,7 +275,11 @@ export default async function EventHomePage({
     <main className="font-sans text-ink">
       <PublicEditToolbar state={editState} path={eventPath} />
       <AutoRefresh />
-      <section className="relative flex min-h-[85vh] items-end overflow-hidden px-4 pb-14 pt-28 sm:min-h-[90vh]">
+      {/* -mt-6 cancels PublicChrome's `pt-6` content-wrapper padding (needed on every other page
+          to clear the floating nav pill) so this hero's background image runs edge-to-edge to the
+          very top of the viewport, with the pill floating over it, instead of leaving a plain
+          white strip between the nav and the image. */}
+      <section className="relative -mt-6 flex min-h-[85vh] items-end overflow-hidden px-4 pb-14 pt-28 sm:min-h-[90vh]">
         {bannerImage?.url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
@@ -442,14 +428,17 @@ export default async function EventHomePage({
                     <Card interactive accent={isLive ? 'green' : 'blue'} className="h-full">
                       <CardHeader>
                         <div className="flex items-center justify-between gap-2">
-                          <CardDescription>
+                          <CardDescription className="truncate">
                             {getRelationshipLabel(match.sport_id)} /{' '}
                             {getRelationshipLabel(match.category_id)}
                           </CardDescription>
-                          <StatusBadge tone={isLive ? 'gold' : getMatchStatusTone(match.status)}>
+                          <StatusBadge tone={isLive ? 'gold' : getMatchStatusTone(match.status)} className="shrink-0">
                             {isLive ? (
-                              <span className="inline-flex items-center gap-1">
-                                <Circle className="h-2 w-2 fill-current" aria-hidden="true" />
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="relative flex h-2 w-2" aria-hidden="true">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-75" />
+                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
+                                </span>
                                 Live
                               </span>
                             ) : (
@@ -522,7 +511,10 @@ export default async function EventHomePage({
           {sports.length === 0 ? (
             <Card className="text-sm text-ink-soft">Sports have not been published yet.</Card>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/* One clickable destination per card instead of a card full of separate nested
+                  links - a sport with one category jumps straight there, otherwise to the sport
+                  browser. Simpler to scan, and there's nothing left to click "wrong". */}
               {sports.map((sport) => {
                 const Icon = SPORT_ICONS[sport.sport_type] || Trophy
                 const sportCategories = categoriesBySport.get(String(sport.id)) || []
@@ -532,85 +524,24 @@ export default async function EventHomePage({
                   : `${eventPath}/sports`
 
                 return (
-                  <Card key={sport.id} className="h-full">
-                    <CardHeader>
-                      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-mist text-brand-primary">
-                        <Icon className="h-5 w-5" aria-hidden="true" />
+                  <Link key={sport.id} href={primaryCategoryHref} className="block no-underline">
+                    <Card interactive accent="blue" className="flex items-center gap-4">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-mist text-brand-primary">
+                        <Icon className="h-6 w-6" aria-hidden="true" />
                       </span>
-                      <CardTitle>{sport.name}</CardTitle>
-                      <CardDescription>
-                        {sportCategories.length}{' '}
-                        {sportCategories.length === 1 ? 'category' : 'categories'}
-                      </CardDescription>
-                    </CardHeader>
-                    <div className="mt-3 flex flex-col gap-2">
-                      {sportCategories.slice(0, 3).map((category) => (
-                        <Link
-                          key={category.id}
-                          href={`${eventPath}/sports/${sport.slug}/${category.slug}`}
-                          className="group flex items-center justify-between gap-2 rounded-card border border-line px-3 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-secondary"
-                        >
-                          <span className="truncate">{category.name}</span>
-                          <ChevronRight
-                            className="h-4 w-4 shrink-0 text-ink-soft group-hover:text-brand-secondary"
-                            aria-hidden="true"
-                          />
-                        </Link>
-                      ))}
-                    </div>
-                    <CardFooter className="gap-4 text-sm font-semibold">
-                      <Link href={primaryCategoryHref} className="text-brand-secondary hover:underline">
-                        View categories
-                      </Link>
-                    </CardFooter>
-                  </Card>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-base font-bold text-ink">{sport.name}</p>
+                        <p className="text-sm text-ink-soft">
+                          {sportCategories.length}{' '}
+                          {sportCategories.length === 1 ? 'category' : 'categories'}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-ink-soft" aria-hidden="true" />
+                    </Card>
+                  </Link>
                 )
               })}
             </div>
-          )}
-        </div>
-      </section>
-
-      <section className="px-4 pb-16" aria-labelledby="standings-title">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 id="standings-title" className="text-xl font-bold text-ink sm:text-2xl">
-              Top Standings
-            </h2>
-            <Link
-              href={`${eventPath}/schedule?tab=standings`}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
-            >
-              Full standings
-              <ChevronRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </div>
-
-          {standings.length === 0 ? (
-            <Card className="text-sm text-ink-soft">
-              Standings will appear here once group or round-robin results are ready.
-            </Card>
-          ) : (
-            <Card className="flex flex-col divide-y divide-line p-0">
-              {standings.map((row) => (
-                <div key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mist text-sm font-extrabold tabular-nums text-ink">
-                      {row.rank}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-ink">
-                        {getRelationshipLabel(row.entry_id)}
-                      </p>
-                      <p className="truncate text-xs text-ink-soft">
-                        {getRelationshipLabel(row.category_id)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-sm font-bold text-ink">{row.points} pts</span>
-                </div>
-              ))}
-            </Card>
           )}
         </div>
       </section>
@@ -628,25 +559,12 @@ export default async function EventHomePage({
           ) : (
             <div className="flex flex-col gap-10">
               {announcements.length > 0 ? (
-                <div>
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-bold uppercase tracking-wide text-ink-soft">
-                      Announcements
-                    </h3>
-                    <Link
-                      href={`${eventPath}/updates?tab=announcements`}
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-brand-secondary hover:underline"
-                    >
-                      View all
-                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                    </Link>
-                  </div>
-                  <AnnouncementFeed
-                    announcements={announcements}
-                    compact
-                    basePath={`${eventPath}/updates?tab=announcements`}
-                  />
-                </div>
+                <CompactAnnouncementList
+                  announcements={announcements}
+                  title="Announcements"
+                  basePath={`${eventPath}/updates?tab=announcements`}
+                  timezone={timezone}
+                />
               ) : null}
 
               {articles.length > 0 ? (
