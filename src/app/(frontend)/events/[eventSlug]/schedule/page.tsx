@@ -83,7 +83,7 @@ type ChampionBracket = {
 
 type SchedulePageProps = {
   params: Promise<{ eventSlug: string }>
-  searchParams: Promise<{ sport?: string; tab?: string }>
+  searchParams: Promise<{ sport?: string; tab?: string; status?: string }>
 }
 
 const getActiveTab = (value?: string): ActiveTab => {
@@ -92,6 +92,37 @@ const getActiveTab = (value?: string): ActiveTab => {
   }
   return 'schedule'
 }
+
+// "Schedule" should mean matches still to be played by default - a match list that mixes
+// finished results into an undifferentiated feed reads wrong under that name. Statuses that mean
+// the match has already been decided (or is otherwise concluded, e.g. cancelled/walkover) bucket
+// into "results"; everything else - draft through ongoing/paused - is still "upcoming" (a live
+// match is still part of today's schedule, not a result yet).
+type ScheduleStatusFilter = 'upcoming' | 'results' | 'all'
+
+const RESULT_STATUSES = new Set([
+  'finished',
+  'result_published',
+  'under_review',
+  'disputed',
+  'cancelled',
+  'walkover',
+])
+
+const isResultStatus = (status: string) => RESULT_STATUSES.has(status)
+
+const getStatusFilter = (value?: string): ScheduleStatusFilter => {
+  if (value === 'results' || value === 'all') {
+    return value
+  }
+  return 'upcoming'
+}
+
+const SCHEDULE_STATUS_FILTERS: { key: ScheduleStatusFilter; label: string }[] = [
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'results', label: 'Results' },
+  { key: 'all', label: 'All' },
+]
 
 const getStandingScopeKey = (standing: StandingDoc) =>
   [
@@ -124,7 +155,7 @@ const getChampion = (bracketData?: SingleEliminationBracketData | null) =>
 
 export default async function PublicSchedulePage({ params, searchParams }: SchedulePageProps) {
   const { eventSlug } = await params
-  const { sport: sportSlug, tab } = await searchParams
+  const { sport: sportSlug, tab, status: statusParam } = await searchParams
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
@@ -134,6 +165,14 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   const eventPath = `/events/${event.slug}`
   const schedulePath = `${eventPath}/schedule`
   const activeTab = getActiveTab(tab)
+  const statusFilter = getStatusFilter(statusParam)
+
+  const buildScheduleHref = (opts: { sport?: string; status?: ScheduleStatusFilter }) => {
+    const query = new URLSearchParams({ tab: 'schedule' })
+    if (opts.sport) query.set('sport', opts.sport)
+    if (opts.status && opts.status !== 'upcoming') query.set('status', opts.status)
+    return `${schedulePath}?${query.toString()}`
+  }
 
   const [matchesResult, sportsResult, standingsResult, bracketsResult] = await Promise.all([
     payload.find({
@@ -203,17 +242,32 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
       )
     : allMatches
 
-  const groups = matches.reduce<Map<string, ScheduleMatch[]>>((map, match) => {
+  const upcomingMatches = matches.filter((match) => !isResultStatus(match.status))
+  const resultMatches = matches.filter((match) => isResultStatus(match.status))
+  const statusFilterCounts: Record<ScheduleStatusFilter, number> = {
+    upcoming: upcomingMatches.length,
+    results: resultMatches.length,
+    all: matches.length,
+  }
+  const visibleMatches =
+    statusFilter === 'results' ? resultMatches
+    : statusFilter === 'all' ? matches
+    : upcomingMatches
+
+  const groups = visibleMatches.reduce<Map<string, ScheduleMatch[]>>((map, match) => {
     const dateKey = getDateKey(match.scheduled_start_at, timezone) || 'unscheduled'
     const rows = map.get(dateKey) || []
     rows.push(match)
     map.set(dateKey, rows)
     return map
   }, new Map())
+  // Results read naturally newest-first (what just happened, at the top); an upcoming/all queue
+  // reads naturally soonest-first. "Unscheduled" (no date yet) always sinks to the bottom either
+  // way - it isn't part of either chronology.
   const orderedDateKeys = Array.from(groups.keys()).sort((left, right) => {
     if (left === 'unscheduled') return 1
     if (right === 'unscheduled') return -1
-    return left.localeCompare(right)
+    return statusFilter === 'results' ? right.localeCompare(left) : left.localeCompare(right)
   })
   const standings = standingsResult.docs as StandingDoc[]
   const standingScopes = standings.reduce<Map<string, StandingDoc[]>>((map, standing) => {
@@ -245,91 +299,111 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
 
   return (
     <main className="font-sans text-ink">
-      <section className="px-4 pt-4 pb-6">
-        <div className="mx-auto max-w-4xl">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-              Schedule, Standings &amp; Champions
-            </p>
-            <AutoRefresh showIndicator className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink-soft" />
+      <div className="sticky top-20 z-40 bg-paper">
+        <section className="border-b border-line px-4 py-3">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+            <h1 className="min-w-0 truncate text-lg font-extrabold sm:text-xl">{event.name}</h1>
+            <AutoRefresh
+              showIndicator
+              className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-ink-soft"
+            />
           </div>
-          <h1 className="mt-2 text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
-          <p className="mt-3 max-w-xl text-base text-ink-soft">
-            Every published match, live rankings, and decided champions for this event, in one
-            place.
-          </p>
-        </div>
-      </section>
+        </section>
 
-      <div className="sticky top-20 z-40 border-y border-line bg-paper px-4 py-3">
-        <nav className="mx-auto flex max-w-4xl gap-2 overflow-x-auto" aria-label="Sections">
-          {[
-            { key: 'schedule' as const, label: 'Schedule', icon: Calendar },
-            { key: 'standings' as const, label: 'Standings', icon: BarChart3 },
-            { key: 'champions' as const, label: 'Champions', icon: Crown },
-          ].map((item) => {
-            const Icon = item.icon
-            const isActive = activeTab === item.key
-            return (
-              <Link
-                key={item.key}
-                href={`${schedulePath}?tab=${item.key}`}
-                aria-current={isActive ? 'page' : undefined}
-                className={cn(
-                  'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold no-underline transition-colors',
-                  isActive ?
-                    'border-brand-primary bg-brand-primary text-paper'
-                  : 'border-line bg-paper text-ink-soft hover:text-ink',
-                )}
-              >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav className="flex border-b border-line bg-paper" aria-label="Sections">
+          <div className="mx-auto flex w-full max-w-4xl">
+            {[
+              { key: 'schedule' as const, label: 'Schedule', icon: Calendar },
+              { key: 'standings' as const, label: 'Standings', icon: BarChart3 },
+              { key: 'champions' as const, label: 'Champions', icon: Crown },
+            ].map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.key
+              return (
+                <Link
+                  key={item.key}
+                  href={`${schedulePath}?tab=${item.key}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    'flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-3 text-sm font-bold no-underline transition-colors',
+                    isActive ?
+                      'border-brand-primary text-ink'
+                    : 'border-transparent text-ink-soft hover:border-line hover:text-ink',
+                  )}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
         </nav>
       </div>
 
       {activeTab === 'schedule' ? (
         <>
           <div className="border-b border-line bg-mist/50 px-4 py-3">
-            <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-              <div className="flex gap-2 overflow-x-auto">
-                <Link
-                  href={`${schedulePath}?tab=schedule`}
-                  className={cn(
-                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                    !activeSport ?
-                      'border-brand-primary bg-brand-primary text-paper'
-                    : 'border-line bg-paper text-ink-soft hover:text-ink',
-                  )}
-                >
-                  All Sports
-                </Link>
-                {sports.map((sport) => (
+            <div className="mx-auto flex max-w-4xl flex-col gap-3">
+              <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filter by status">
+                {SCHEDULE_STATUS_FILTERS.map((filter) => (
                   <Link
-                    key={sport.id}
-                    href={`${schedulePath}?tab=schedule&sport=${sport.slug}`}
+                    key={filter.key}
+                    href={buildScheduleHref({ sport: activeSport?.slug, status: filter.key })}
+                    aria-current={statusFilter === filter.key ? 'true' : undefined}
+                    className={cn(
+                      'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold no-underline transition-colors',
+                      statusFilter === filter.key ?
+                        'bg-ink text-paper'
+                      : 'bg-paper text-ink-soft ring-1 ring-inset ring-line hover:text-ink',
+                    )}
+                  >
+                    {filter.label} · {statusFilterCounts[filter.key]}
+                  </Link>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex gap-2 overflow-x-auto">
+                  <Link
+                    href={buildScheduleHref({ status: statusFilter })}
                     className={cn(
                       'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
-                      activeSport?.slug === sport.slug ?
+                      !activeSport ?
                         'border-brand-primary bg-brand-primary text-paper'
                       : 'border-line bg-paper text-ink-soft hover:text-ink',
                     )}
                   >
-                    {sport.name}
+                    All Sports
                   </Link>
-                ))}
+                  {sports.map((sport) => (
+                    <Link
+                      key={sport.id}
+                      href={buildScheduleHref({ sport: sport.slug, status: statusFilter })}
+                      className={cn(
+                        'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
+                        activeSport?.slug === sport.slug ?
+                          'border-brand-primary bg-brand-primary text-paper'
+                        : 'border-line bg-paper text-ink-soft hover:text-ink',
+                      )}
+                    >
+                      {sport.name}
+                    </Link>
+                  ))}
+                </div>
+                <ScheduleFavoritesToggle eventSlug={event.slug} containerId="schedule-matches" />
               </div>
-              <ScheduleFavoritesToggle eventSlug={event.slug} containerId="schedule-matches" />
             </div>
           </div>
 
           <section className="px-4 py-8" aria-label="Published matches">
             <div className="mx-auto max-w-4xl" id="schedule-matches">
-              {matches.length === 0 ? (
+              {visibleMatches.length === 0 ? (
                 <Card className="text-sm text-ink-soft">
-                  No public matches match this filter yet. Check back closer to the event.
+                  {statusFilter === 'results' ?
+                    'No results published yet for this filter. Check back once matches are finished.'
+                  : statusFilter === 'upcoming' ?
+                    'No upcoming matches for this filter right now.'
+                  : 'No public matches match this filter yet. Check back closer to the event.'}
                 </Card>
               ) : (
                 <div className="flex flex-col gap-8">
