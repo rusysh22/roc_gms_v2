@@ -22,7 +22,7 @@ import config from '@payload-config'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardDescription } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { ShareEventPanel } from '@/components/share-event-panel'
 import { SponsorStrip, type SponsorDoc } from '@/components/sponsor-strip'
@@ -32,7 +32,6 @@ import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publ
 import { getPublicEditState } from '../../publicEditState'
 import { resolveEventTimezone } from '@/lib/timezone'
 import {
-  formatDateLabel,
   formatStatus,
   getDateKey,
   getRelationshipLabel,
@@ -261,25 +260,39 @@ export default async function EventHomePage({
     new Map(),
   )
   const todayKey = getDateKey(new Date().toISOString(), timezone)
+  // Weekday and calendar date as two separate strings (not one "Sunday, August 9" label split by
+  // the card's own line-wrapping, which wraps unpredictably mid-phrase depending on how long the
+  // weekday name is) - each gets its own line, sized for what it is.
   const calendarDays = Array.from(calendarDayCounts.entries())
     .filter(([dateKey]) => !todayKey || dateKey >= todayKey)
     .sort(([left], [right]) => left.localeCompare(right))
     .slice(0, 7)
-    .map(([dateKey, count]) => ({
-      dateKey,
-      label: formatDateLabel(`${dateKey}T00:00:00`, timezone),
-      count,
-    }))
+    .map(([dateKey, count]) => {
+      const date = new Date(`${dateKey}T00:00:00`)
+      return {
+        dateKey,
+        weekday: new Intl.DateTimeFormat('en', { weekday: 'long', timeZone: timezone }).format(date),
+        dateLabel: new Intl.DateTimeFormat('en', { month: 'long', day: 'numeric', timeZone: timezone }).format(
+          date,
+        ),
+        count,
+      }
+    })
 
   return (
     <main className="font-sans text-ink">
       <PublicEditToolbar state={editState} path={eventPath} />
       <AutoRefresh />
-      {/* -mt-6 cancels PublicChrome's `pt-6` content-wrapper padding (needed on every other page
-          to clear the floating nav pill) so this hero's background image runs edge-to-edge to the
-          very top of the viewport, with the pill floating over it, instead of leaving a plain
-          white strip between the nav and the image. */}
-      <section className="relative -mt-6 flex min-h-svh items-end overflow-hidden px-4 pb-14 pt-28">
+      {/* The floating nav pill is `position: sticky`, which still reserves its own height in
+          normal flow (measured: ~62px on mobile below the `md:` nav breakpoint where the full
+          item row collapses to a hamburger, ~54px at `md:` and up) - on top of PublicChrome's own
+          `pt-6` (24px) content-wrapper padding. Left uncancelled, min-h-svh on this section would
+          make it exactly one viewport tall starting *after* that ~78-86px of reserved space, so
+          its bottom (the CTA row) would sit that far past the fold instead of the section filling
+          the actual first screen with the pill floating over the image. Negative margin equal to
+          reserved-space + padding pulls the section's top back up to y=0 so the two - together -
+          fill exactly one screen; the pill still renders on top via its own z-50. */}
+      <section className="relative -mt-[5.375rem] flex min-h-svh items-end overflow-hidden px-4 pb-14 pt-28 md:-mt-[4.875rem]">
         {bannerImage?.url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions */}
@@ -432,38 +445,50 @@ export default async function EventHomePage({
                   <Link
                     key={match.id}
                     href={`${eventPath}/matches/${match.match_number}`}
-                    className="block w-72 shrink-0 snap-start"
+                    className="block w-80 shrink-0 snap-start"
                   >
-                    <Card interactive accent={isLive ? 'green' : 'blue'} className="h-full">
-                      <CardHeader>
-                        <div className="flex items-center justify-between gap-2">
-                          <CardDescription className="truncate">
-                            {getRelationshipLabel(match.sport_id)} /{' '}
-                            {getRelationshipLabel(match.category_id)}
-                          </CardDescription>
-                          <StatusBadge tone={isLive ? 'gold' : getMatchStatusTone(match.status)} className="shrink-0">
-                            {isLive ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                <span className="relative flex h-2 w-2" aria-hidden="true">
-                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-75" />
-                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
-                                </span>
-                                Live
+                    <Card interactive accent={isLive ? 'green' : 'blue'} className="flex h-full flex-col gap-3">
+                      <div className="flex items-start justify-between gap-2">
+                        {/* line-clamp-2 (not truncate) - "what competition" matters as much as
+                            "who's playing", so it gets to wrap onto a second line instead of
+                            being cut off mid-word. */}
+                        <CardDescription className="line-clamp-2">
+                          {getRelationshipLabel(match.sport_id)} /{' '}
+                          {getRelationshipLabel(match.category_id)}
+                        </CardDescription>
+                        <StatusBadge tone={isLive ? 'gold' : getMatchStatusTone(match.status)} className="shrink-0">
+                          {isLive ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="relative flex h-2 w-2" aria-hidden="true">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
                               </span>
-                            ) : (
-                              formatStatus(match.status)
-                            )}
-                          </StatusBadge>
-                        </div>
-                        <CardTitle className="text-base">
-                          {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                              Live
+                            </span>
+                          ) : (
+                            formatStatus(match.status)
+                          )}
+                        </StatusBadge>
+                      </div>
+
+                      {/* Name / "vs" / name stacked on their own lines - "A vs B" run together in
+                          one line reads fine for two short names, but the moment either side gets
+                          long (a full team name, a doubles pair) it stops being obvious at a
+                          glance which words belong to which side. */}
+                      <div className="flex flex-col items-start gap-1">
+                        <p className="w-full truncate text-base font-extrabold text-ink">
+                          {getRelationshipLabel(match.participant_a_entry_id)}
+                        </p>
+                        <p className="text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">vs</p>
+                        <p className="w-full truncate text-base font-extrabold text-ink">
                           {getRelationshipLabel(match.participant_b_entry_id)}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="flex items-center gap-2 text-sm text-ink-soft">
+                        </p>
+                      </div>
+
+                      <div className="mt-auto flex items-center gap-2 border-t border-line pt-3 text-sm text-ink-soft">
                         <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
                         {formatMatchTime(match.scheduled_start_at, timezone)}
-                      </CardContent>
+                      </div>
                     </Card>
                   </Link>
                 )
@@ -500,12 +525,13 @@ export default async function EventHomePage({
                   <Link
                     key={day.dateKey}
                     href={`${eventPath}/schedule`}
-                    className="block w-36 shrink-0"
+                    className="block w-40 shrink-0"
                   >
-                    <Card interactive accent="blue" className="flex h-full flex-col items-center gap-2 py-5 text-center">
-                      <Calendar className="h-5 w-5 text-blue" aria-hidden="true" />
-                      <p className="text-sm font-bold text-ink">{day.label}</p>
-                      <p className="text-xs font-semibold text-ink-soft">
+                    <Card interactive accent="blue" className="flex h-full flex-col items-center gap-1 py-5 text-center">
+                      <Calendar className="mb-1 h-5 w-5 text-blue" aria-hidden="true" />
+                      <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">{day.weekday}</p>
+                      <p className="text-base font-extrabold text-ink">{day.dateLabel}</p>
+                      <p className="mt-1 text-xs font-semibold text-ink-soft">
                         {day.count} {day.count === 1 ? 'match' : 'matches'}
                       </p>
                     </Card>
