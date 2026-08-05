@@ -11,10 +11,12 @@ import { useRouter } from 'next/navigation'
 export function AutoRefresh({
   intervalMs = 15000,
   showIndicator = false,
+  compact = false,
   className,
 }: {
   intervalMs?: number
   showIndicator?: boolean
+  compact?: boolean
   className?: string
 }) {
   const router = useRouter()
@@ -45,16 +47,19 @@ export function AutoRefresh({
     return null
   }
 
+  const updatedLabel = secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`
+
   return (
     <p
       className={
         className ||
         'inline-flex items-center gap-1.5 text-xs font-semibold text-ink-soft'
       }
+      title={compact ? `Live · Updated ${updatedLabel}` : undefined}
       suppressHydrationWarning
     >
       <span className="h-1.5 w-1.5 rounded-full bg-green" aria-hidden="true" />
-      Live · Updated {secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`}
+      {compact ? 'Live' : `Live · Updated ${updatedLabel}`}
     </p>
   )
 }

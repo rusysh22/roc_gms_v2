@@ -4,20 +4,23 @@ import { getPayload } from 'payload'
 import { ArrowLeft, ChevronRight } from 'lucide-react'
 
 import config from '@payload-config'
+import { cn } from '@/lib/utils'
 import { getMatchDetail } from '../../../../matchDetailData'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { ShareButtons } from '@/components/share-buttons'
-import { AnnouncementFeed, ArticleCard } from '../../../../contentComponents'
+import { ArticleCard } from '../../../../contentComponents'
 import {
   getRelatedPublicArticles,
   getRelationshipId,
   getScopedPublicAnnouncements,
 } from '../../../../contentData'
+import { Card, CardTitle } from '@/components/ui/card'
 import { getRelationshipLabel } from '../../../../workspaces/workspaceComponents'
 import { resolveEventTimezone } from '@/lib/timezone'
 import {
   DocumentationGallery,
   MatchInfoStrip,
+  MatchUpdatesPanel,
   PublicBracketImpactPanel,
   PublicCommentList,
   PublicStandingImpactPanel,
@@ -87,7 +90,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
       sportId,
       categoryId,
       matchId: match.id,
-      limit: 4,
+      limit: 3,
     }),
     getRelatedPublicArticles({
       eventId: event.id,
@@ -97,12 +100,21 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
       limit: 3,
     }),
   ])
+  const hasCompetitionImpact = Boolean(standingImpact || bracketImpact)
+  const hasDocumentation = publicDocumentationAssets.length > 0
+  const hasComments = publicComments.length > 0
 
   return (
     <main className="font-sans text-ink">
-      <section className="px-4 pt-4 pb-6">
+      {/* Breadcrumb + a single compact meta line stand in for what used to be a second full-size
+          "Team A vs Team B" heading here - the ScoreCard right below already says that, bigger and
+          with avatars/club names attached, so repeating it as a giant H1 only pushed the actual
+          score further down the page for no new information. The H1 still carries the literal
+          "Team A vs Team B" text (for accessibility/SEO), just sized as a page title rather than a
+          second scoreboard. */}
+      <section className="px-4 pt-4 pb-3">
         <div className="mx-auto max-w-3xl">
-          <nav aria-label="Breadcrumb" className="mb-4 flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm">
+          <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
             <Link
               href={`${eventPath}/schedule`}
               className="inline-flex items-center gap-1 font-semibold text-brand-secondary hover:underline"
@@ -119,105 +131,91 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
               </>
             ) : null}
           </nav>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-              {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
-            </p>
-            {LIVE_POLL_STATUSES.has(match.status) ? (
-              <AutoRefresh
-                showIndicator
-                intervalMs={10000}
-                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1 text-xs font-semibold text-ink-soft"
-              />
-            ) : null}
-          </div>
-          <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">
+          <p className="truncate text-xs font-bold tracking-wide text-ink-soft uppercase">
+            {getRelationshipLabel(match.sport_id)} / {getRelationshipLabel(match.category_id)}
+            {match.round_name ? ` · ${match.round_name}` : ''} · {match.match_number}
+          </p>
+          <h1 className="mt-1 line-clamp-2 text-lg font-extrabold text-ink sm:text-xl">
             {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
             {getRelationshipLabel(match.participant_b_entry_id)}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-bold text-ink-soft">
-              {match.match_number}
-            </span>
-            {match.round_name ? (
-              <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-xs font-bold text-ink-soft">
-                {match.round_name}
-              </span>
-            ) : null}
-          </div>
         </div>
       </section>
 
-      <section className="px-4 pb-6" aria-label="Score">
-        <div className="mx-auto max-w-3xl">
+      <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pt-2 pb-16">
+        <section aria-label="Score">
           <ScoreCard
             match={match}
             matchSets={matchSets}
             participantAClub={participantAClub}
             participantBClub={participantBClub}
+            liveIndicator={
+              LIVE_POLL_STATUSES.has(match.status) ? (
+                <AutoRefresh
+                  showIndicator
+                  compact
+                  intervalMs={10000}
+                  className="inline-flex items-center gap-1 text-[0.7rem] font-semibold text-ink-soft/80"
+                />
+              ) : null
+            }
           />
-        </div>
-      </section>
+        </section>
 
-      <section className="px-4 pb-8" aria-label="Schedule and venue">
-        <div className="mx-auto max-w-3xl">
+        <section aria-label="Schedule and venue">
           <MatchInfoStrip match={match} eventPath={eventPath} timezone={timezone} />
-        </div>
-      </section>
+        </section>
 
-      {standingImpact || bracketImpact ? (
-        <section className="px-4 pb-8" aria-label="Competition impact">
-          <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        {hasCompetitionImpact ? (
+          <section
+            aria-label="Competition impact"
+            className={cn('grid gap-4 grid-cols-1', standingImpact && bracketImpact && 'lg:grid-cols-2')}
+          >
             <PublicStandingImpactPanel impact={standingImpact} />
             <PublicBracketImpactPanel impact={bracketImpact} />
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      <section className="px-4 pb-8" aria-label="Match announcements">
-        <div className="mx-auto max-w-3xl">
-          <AnnouncementFeed
-            announcements={announcements}
-            title="Match Updates"
-            compact
-            basePath={`${eventPath}/updates?tab=announcements`}
-          />
-        </div>
-      </section>
+        <MatchUpdatesPanel
+          announcements={announcements}
+          basePath={`${eventPath}/updates?tab=announcements`}
+          timezone={timezone}
+        />
 
-      <section className="px-4 pb-8" aria-label="Documentation">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-3 text-xl font-bold text-ink">Documentation</h2>
-          <DocumentationGallery assets={publicDocumentationAssets} />
-        </div>
-      </section>
+        {hasDocumentation ? (
+          <section aria-label="Documentation">
+            <Card>
+              <CardTitle>Documentation</CardTitle>
+              <div className="mt-3">
+                <DocumentationGallery assets={publicDocumentationAssets} />
+              </div>
+            </Card>
+          </section>
+        ) : null}
 
-      <section className="px-4 pb-8" aria-label="Comments">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-3 text-xl font-bold text-ink">Comments</h2>
-          <PublicCommentList comments={publicComments} timezone={timezone} />
-        </div>
-      </section>
+        {hasComments ? (
+          <section aria-label="Comments">
+            <h2 className="mb-3 text-base font-bold text-ink">Comments</h2>
+            <PublicCommentList comments={publicComments} timezone={timezone} />
+          </section>
+        ) : null}
 
-      {relatedArticles.length > 0 ? (
-        <section className="px-4 pb-8" aria-label="Related articles">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="mb-3 text-xl font-bold text-ink">Related Articles</h2>
+        {relatedArticles.length > 0 ? (
+          <section aria-label="Related articles">
+            <h2 className="mb-3 text-base font-bold text-ink">Related Articles</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {relatedArticles.map((article) => (
                 <ArticleCard key={article.id} article={article} basePath={`${eventPath}/articles`} />
               ))}
             </div>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      <section className="px-4 pb-16" aria-label="Share this match">
-        <div className="mx-auto max-w-3xl">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Share</p>
+        <section aria-label="Share this match" className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+          <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Share</p>
           <ShareButtons title={shareTitle} />
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
   )
 }
