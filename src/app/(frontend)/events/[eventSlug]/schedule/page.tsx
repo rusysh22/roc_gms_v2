@@ -83,7 +83,7 @@ type ChampionBracket = {
 
 type SchedulePageProps = {
   params: Promise<{ eventSlug: string }>
-  searchParams: Promise<{ sport?: string; tab?: string; status?: string }>
+  searchParams: Promise<{ sport?: string; tab?: string; status?: string; date?: string }>
 }
 
 const getActiveTab = (value?: string): ActiveTab => {
@@ -124,6 +124,17 @@ const SCHEDULE_STATUS_FILTERS: { key: ScheduleStatusFilter; label: string }[] = 
   { key: 'all', label: 'All' },
 ]
 
+// A player mainly wants "what day am I playing" - a flat, scrollable feed of every match on
+// every date makes them scroll past days that aren't theirs to find it. The date strip lets them
+// jump straight to one day; dateKey is the `getDateKey` "YYYY-MM-DD" (or 'unscheduled'), reused
+// as-is as the URL value since it's already unambiguous and timezone-resolved.
+const formatDateChipLabel = (dateKey: string) => {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(year, month - 1, day)),
+  )
+}
+
 const getStandingScopeKey = (standing: StandingDoc) =>
   [
     getRelationshipLabel(standing.category_id, 'Category'),
@@ -155,7 +166,7 @@ const getChampion = (bracketData?: SingleEliminationBracketData | null) =>
 
 export default async function PublicSchedulePage({ params, searchParams }: SchedulePageProps) {
   const { eventSlug } = await params
-  const { sport: sportSlug, tab, status: statusParam } = await searchParams
+  const { sport: sportSlug, tab, status: statusParam, date: dateParam } = await searchParams
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
@@ -167,10 +178,11 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   const activeTab = getActiveTab(tab)
   const statusFilter = getStatusFilter(statusParam)
 
-  const buildScheduleHref = (opts: { sport?: string; status?: ScheduleStatusFilter }) => {
+  const buildScheduleHref = (opts: { sport?: string; status?: ScheduleStatusFilter; date?: string }) => {
     const query = new URLSearchParams({ tab: 'schedule' })
     if (opts.sport) query.set('sport', opts.sport)
     if (opts.status && opts.status !== 'upcoming') query.set('status', opts.status)
+    if (opts.date) query.set('date', opts.date)
     return `${schedulePath}?${query.toString()}`
   }
 
@@ -249,10 +261,30 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     results: resultMatches.length,
     all: matches.length,
   }
-  const visibleMatches =
+  const statusFilteredMatches =
     statusFilter === 'results' ? resultMatches
     : statusFilter === 'all' ? matches
     : upcomingMatches
+
+  // Date options are scoped to the current status+sport filter, so the strip never offers a date
+  // with zero matches for what's currently selected.
+  const availableDateKeys = Array.from(
+    new Set(
+      statusFilteredMatches.map((match) => getDateKey(match.scheduled_start_at, timezone) || 'unscheduled'),
+    ),
+  ).sort((left, right) => {
+    if (left === 'unscheduled') return 1
+    if (right === 'unscheduled') return -1
+    return left.localeCompare(right)
+  })
+  const dateFilter =
+    dateParam && (dateParam === 'unscheduled' || availableDateKeys.includes(dateParam)) ? dateParam : 'all'
+  const visibleMatches =
+    dateFilter === 'all' ?
+      statusFilteredMatches
+    : statusFilteredMatches.filter(
+        (match) => (getDateKey(match.scheduled_start_at, timezone) || 'unscheduled') === dateFilter,
+      )
 
   const groups = visibleMatches.reduce<Map<string, ScheduleMatch[]>>((map, match) => {
     const dateKey = getDateKey(match.scheduled_start_at, timezone) || 'unscheduled'
@@ -299,46 +331,44 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
 
   return (
     <main className="font-sans text-ink">
-      <div className="sticky top-20 z-40 bg-paper">
-        <section className="border-b border-line px-4 py-3">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-            <h1 className="min-w-0 truncate text-lg font-extrabold sm:text-xl">{event.name}</h1>
-            <AutoRefresh
-              showIndicator
-              className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-ink-soft"
-            />
-          </div>
-        </section>
+      <section className="border-b border-line px-4 py-3">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+          <h1 className="min-w-0 truncate text-lg font-extrabold sm:text-xl">{event.name}</h1>
+          <AutoRefresh
+            showIndicator
+            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-ink-soft"
+          />
+        </div>
+      </section>
 
-        <nav className="flex border-b border-line bg-paper" aria-label="Sections">
-          <div className="mx-auto flex w-full max-w-4xl">
-            {[
-              { key: 'schedule' as const, label: 'Schedule', icon: Calendar },
-              { key: 'standings' as const, label: 'Standings', icon: BarChart3 },
-              { key: 'champions' as const, label: 'Champions', icon: Crown },
-            ].map((item) => {
-              const Icon = item.icon
-              const isActive = activeTab === item.key
-              return (
-                <Link
-                  key={item.key}
-                  href={`${schedulePath}?tab=${item.key}`}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={cn(
-                    'flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-3 text-sm font-bold no-underline transition-colors',
-                    isActive ?
-                      'border-brand-primary text-ink'
-                    : 'border-transparent text-ink-soft hover:border-line hover:text-ink',
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {item.label}
-                </Link>
-              )
-            })}
-          </div>
-        </nav>
-      </div>
+      <nav className="flex border-b border-line bg-paper" aria-label="Sections">
+        <div className="mx-auto flex w-full max-w-4xl">
+          {[
+            { key: 'schedule' as const, label: 'Schedule', icon: Calendar },
+            { key: 'standings' as const, label: 'Standings', icon: BarChart3 },
+            { key: 'champions' as const, label: 'Champions', icon: Crown },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = activeTab === item.key
+            return (
+              <Link
+                key={item.key}
+                href={`${schedulePath}?tab=${item.key}`}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-3 text-sm font-bold no-underline transition-colors',
+                  isActive ?
+                    'border-brand-primary text-ink'
+                  : 'border-transparent text-ink-soft hover:border-line hover:text-ink',
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
 
       {activeTab === 'schedule' ? (
         <>
@@ -362,10 +392,42 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                 ))}
               </div>
 
+              {availableDateKeys.length > 1 ? (
+                <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filter by date">
+                  <Link
+                    href={buildScheduleHref({ sport: activeSport?.slug, status: statusFilter })}
+                    aria-current={dateFilter === 'all' ? 'true' : undefined}
+                    className={cn(
+                      'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
+                      dateFilter === 'all' ?
+                        'border-brand-secondary bg-brand-secondary text-paper'
+                      : 'border-line bg-paper text-ink-soft hover:text-ink',
+                    )}
+                  >
+                    All Dates
+                  </Link>
+                  {availableDateKeys.map((key) => (
+                    <Link
+                      key={key}
+                      href={buildScheduleHref({ sport: activeSport?.slug, status: statusFilter, date: key })}
+                      aria-current={dateFilter === key ? 'true' : undefined}
+                      className={cn(
+                        'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
+                        dateFilter === key ?
+                          'border-brand-secondary bg-brand-secondary text-paper'
+                        : 'border-line bg-paper text-ink-soft hover:text-ink',
+                      )}
+                    >
+                      {key === 'unscheduled' ? 'TBC' : formatDateChipLabel(key)}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex gap-2 overflow-x-auto">
                   <Link
-                    href={buildScheduleHref({ status: statusFilter })}
+                    href={buildScheduleHref({ status: statusFilter, date: dateFilter === 'all' ? undefined : dateFilter })}
                     className={cn(
                       'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
                       !activeSport ?
@@ -378,7 +440,11 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                   {sports.map((sport) => (
                     <Link
                       key={sport.id}
-                      href={buildScheduleHref({ sport: sport.slug, status: statusFilter })}
+                      href={buildScheduleHref({
+                        sport: sport.slug,
+                        status: statusFilter,
+                        date: dateFilter === 'all' ? undefined : dateFilter,
+                      })}
                       className={cn(
                         'shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold no-underline transition-colors',
                         activeSport?.slug === sport.slug ?
