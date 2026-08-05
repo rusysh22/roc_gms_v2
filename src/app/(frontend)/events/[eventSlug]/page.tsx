@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 
 import config from '@payload-config'
+import { cn } from '@/lib/utils'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
@@ -159,6 +160,7 @@ export default async function EventHomePage({
   const bannerImage =
     event.banner_image && typeof event.banner_image === 'object' ? event.banner_image : undefined
   const logoImage = event.logo && typeof event.logo === 'object' ? event.logo : undefined
+  const hasBanner = Boolean(bannerImage?.url)
 
   const eventWhere = { event_id: { equals: event.id } }
   const [liveNextResult, sportsResult, articles, upcomingMatchesResult, sponsorsResult] =
@@ -286,11 +288,19 @@ export default async function EventHomePage({
             <img
               src={bannerImage.url}
               alt={bannerImage.alt || event.name}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full scale-105 object-cover saturate-110"
+            />
+            {/* Two stacked scrims instead of one flat wash: a diagonal one (dark where the text
+                sits, clearing toward the open corner) keeps the photo itself vivid rather than
+                bleaching it to near-white, and a second straight bottom-up one guarantees solid
+                contrast under the text regardless of what's in that corner of the photo. */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-gradient-to-tr from-ink via-ink/55 to-ink/10"
             />
             <div
               aria-hidden="true"
-              className="absolute inset-0 bg-gradient-to-t from-paper via-paper/75 to-paper/10"
+              className="absolute inset-0 bg-gradient-to-t from-ink/85 via-transparent to-transparent"
             />
           </>
         ) : (
@@ -309,7 +319,14 @@ export default async function EventHomePage({
 
         <div className="relative mx-auto flex w-full max-w-5xl flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
+            <p
+              className={cn(
+                'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide',
+                hasBanner ?
+                  'border-paper/30 bg-ink/40 text-paper backdrop-blur-sm'
+                : 'border-line bg-paper text-ink-soft',
+              )}
+            >
               {logoImage?.url ? (
                 // eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions
                 <img
@@ -318,7 +335,10 @@ export default async function EventHomePage({
                   className="h-4 w-4 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <Sparkles className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
+                <Sparkles
+                  className={cn('h-3.5 w-3.5', hasBanner ? 'text-paper' : 'text-brand-primary')}
+                  aria-hidden="true"
+                />
               )}
               {event.name}
             </p>
@@ -336,25 +356,44 @@ export default async function EventHomePage({
                 />
               }
             >
-              <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl lg:text-6xl">
+              <h1
+                className={cn(
+                  'text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl',
+                  hasBanner ? 'text-paper drop-shadow-sm' : 'text-ink',
+                )}
+              >
                 {event.hero_tagline || event.name}
               </h1>
             </EditableRegion>
 
-            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold text-ink-soft">
+            <div
+              className={cn(
+                'mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm font-semibold',
+                hasBanner ? 'text-paper/90' : 'text-ink-soft',
+              )}
+            >
               <span className="inline-flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+                <Calendar
+                  className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
+                  aria-hidden="true"
+                />
                 {formatEventDateRange(event.event_start_at, event.event_end_at, timezone)}
               </span>
               {event.location ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+                  <MapPin
+                    className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
+                    aria-hidden="true"
+                  />
                   {event.location}
                 </span>
               ) : null}
               {sportsSummary ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Trophy className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+                  <Trophy
+                    className={cn('h-4 w-4', hasBanner ? 'text-paper' : 'text-brand-primary')}
+                    aria-hidden="true"
+                  />
                   {sportsSummary}
                 </span>
               ) : null}
@@ -394,7 +433,9 @@ export default async function EventHomePage({
         </div>
       </section>
 
-      <section className="px-4 pb-16" aria-labelledby="live-next-title">
+      {/* A subtle tint (not another hard border) breaks up an otherwise unbroken run of white
+          sections without adding more visual noise than the content itself needs. */}
+      <section className="bg-mist/40 px-4 py-14" aria-labelledby="live-next-title">
         <div className="mx-auto flex max-w-5xl flex-col gap-10">
         <div>
           <div className="mb-5 flex items-center justify-between gap-3">
@@ -415,7 +456,14 @@ export default async function EventHomePage({
               No public matches are live or upcoming right now. Check back closer to the event.
             </Card>
           ) : (
-            <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2">
+            // The fade hints there's more to scroll to - without it, a row that just ends at the
+            // viewport edge doesn't read as a carousel at all, it reads as a cut-off list.
+            <div className="relative -mx-4">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-paper to-transparent"
+              />
+              <div className="flex snap-x gap-4 overflow-x-auto px-4 pb-2">
               {orderedMatches.map((match) => {
                 const isLive = LIVE_STATUSES.includes(match.status)
 
@@ -459,6 +507,7 @@ export default async function EventHomePage({
                   </Link>
                 )
               })}
+              </div>
             </div>
           )}
         </div>
@@ -480,22 +529,28 @@ export default async function EventHomePage({
           {calendarDays.length === 0 ? (
             <Card className="text-sm text-ink-soft">No match days are scheduled yet.</Card>
           ) : (
-            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
-              {calendarDays.map((day) => (
-                <Link
-                  key={day.dateKey}
-                  href={`${eventPath}/schedule`}
-                  className="block w-36 shrink-0"
-                >
-                  <Card interactive accent="blue" className="flex h-full flex-col items-center gap-2 py-5 text-center">
-                    <Calendar className="h-5 w-5 text-blue" aria-hidden="true" />
-                    <p className="text-sm font-bold text-ink">{day.label}</p>
-                    <p className="text-xs font-semibold text-ink-soft">
-                      {day.count} {day.count === 1 ? 'match' : 'matches'}
-                    </p>
-                  </Card>
-                </Link>
-              ))}
+            <div className="relative -mx-4">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-paper to-transparent"
+              />
+              <div className="flex gap-3 overflow-x-auto px-4 pb-2">
+                {calendarDays.map((day) => (
+                  <Link
+                    key={day.dateKey}
+                    href={`${eventPath}/schedule`}
+                    className="block w-36 shrink-0"
+                  >
+                    <Card interactive accent="blue" className="flex h-full flex-col items-center gap-2 py-5 text-center">
+                      <Calendar className="h-5 w-5 text-blue" aria-hidden="true" />
+                      <p className="text-sm font-bold text-ink">{day.label}</p>
+                      <p className="text-xs font-semibold text-ink-soft">
+                        {day.count} {day.count === 1 ? 'match' : 'matches'}
+                      </p>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -546,7 +601,7 @@ export default async function EventHomePage({
         </div>
       </section>
 
-      <section className="px-4 pb-16" aria-labelledby="updates-title">
+      <section className="bg-mist/40 px-4 py-14" aria-labelledby="updates-title">
         <div className="mx-auto max-w-5xl">
           <h2 id="updates-title" className="mb-6 text-xl font-bold text-ink sm:text-2xl">
             Latest Updates
