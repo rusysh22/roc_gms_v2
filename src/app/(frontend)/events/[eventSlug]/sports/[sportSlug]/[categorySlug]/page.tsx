@@ -152,7 +152,12 @@ const CategoryStandings = ({
                     {rows.map((row) => (
                       <tr key={row.id} className="border-b border-line last:border-0">
                         <td className="px-4 py-3 font-bold tabular-nums">{row.rank}</td>
-                        <td className="px-4 py-3 font-semibold">{getRelationshipLabel(row.entry_id)}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          {getRelationshipLabel(row.entry_id)}
+                          {row.clubLabel ? (
+                            <span className="block text-xs font-semibold text-ink-soft">{row.clubLabel}</span>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-3 text-right font-bold tabular-nums">{formatRankingResult(row, resultUnit)}</td>
                         <td className="px-4 py-3">
                           <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
@@ -172,6 +177,9 @@ const CategoryStandings = ({
                         <p className="truncate text-sm font-bold text-ink">
                           #{row.rank} {getRelationshipLabel(row.entry_id)}
                         </p>
+                        {row.clubLabel ? (
+                          <p className="truncate text-xs text-ink-soft">{row.clubLabel}</p>
+                        ) : null}
                         <p className="mt-1 text-xs text-ink-soft">{formatRankingResult(row, resultUnit)}</p>
                       </div>
                       <StatusBadge tone={getQualifiedTone(row.qualified_status)}>
@@ -203,7 +211,12 @@ const CategoryStandings = ({
                     {rows.map((row) => (
                       <tr key={row.id} className="border-b border-line last:border-0">
                         <td className="px-4 py-3 font-bold tabular-nums">{row.rank}</td>
-                        <td className="px-4 py-3 font-semibold">{getRelationshipLabel(row.entry_id)}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          {getRelationshipLabel(row.entry_id)}
+                          {row.clubLabel ? (
+                            <span className="block text-xs font-semibold text-ink-soft">{row.clubLabel}</span>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-3 text-right tabular-nums">{row.played}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{row.won}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{row.drawn}</td>
@@ -228,6 +241,9 @@ const CategoryStandings = ({
                         <p className="truncate text-sm font-bold text-ink">
                           #{row.rank} {getRelationshipLabel(row.entry_id)}
                         </p>
+                        {row.clubLabel ? (
+                          <p className="truncate text-xs text-ink-soft">{row.clubLabel}</p>
+                        ) : null}
                         <p className="mt-1 text-xs text-ink-soft">
                           {row.played} played / {row.won}-{row.drawn}-{row.lost} / {row.points} pts
                         </p>
@@ -341,8 +357,23 @@ const CategorySchedule = ({
                     <div className="min-w-0">
                       <CardDescription>{match.round_name || 'Match'}</CardDescription>
                       <CardTitle className="mt-1">
-                        {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
-                        {getRelationshipLabel(match.participant_b_entry_id)}
+                        <span>
+                          {getRelationshipLabel(match.participant_a_entry_id)}
+                          {match.participantAClub ? (
+                            <span className="block text-xs font-semibold text-ink-soft">
+                              {match.participantAClub}
+                            </span>
+                          ) : null}
+                        </span>{' '}
+                        vs{' '}
+                        <span>
+                          {getRelationshipLabel(match.participant_b_entry_id)}
+                          {match.participantBClub ? (
+                            <span className="block text-xs font-semibold text-ink-soft">
+                              {match.participantBClub}
+                            </span>
+                          ) : null}
+                        </span>
                       </CardTitle>
                       <p className="mt-1 text-xs font-semibold text-ink-soft">
                         {match.match_number} /{' '}
@@ -587,8 +618,10 @@ export default async function PublicSportCategoryPage({
                       className="rounded-card border border-line px-3 py-2 transition-colors hover:border-brand-secondary"
                     >
                       <p className="truncate text-sm font-bold text-ink">
-                        {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                        {getRelationshipLabel(match.participant_a_entry_id)}
+                        {match.participantAClub ? ` (${match.participantAClub})` : ''} vs{' '}
                         {getRelationshipLabel(match.participant_b_entry_id)}
+                        {match.participantBClub ? ` (${match.participantBClub})` : ''}
                       </p>
                       <p className="mt-1 text-xs text-ink-soft">
                         {formatDateTime(match.scheduled_start_at, timezone)}

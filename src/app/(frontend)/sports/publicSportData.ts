@@ -1,7 +1,7 @@
 import { getPayload } from 'payload'
 
 import config from '@payload-config'
-import type { SingleEliminationBracketData } from '@/lib/brackets'
+import { collectEntryClubLabels, getRelationshipId, type SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import type { RelationshipDoc } from '../workspaces/workspaceComponents'
 
@@ -62,6 +62,9 @@ export type PublicMatch = {
   participant_b_entry_id?: RelationshipDoc | string | number | null
   venue_id?: RelationshipDoc | string | number | null
   court_id?: RelationshipDoc | string | number | null
+  // Parent club (team_id.club_id / player_id.club_id) - see collectEntryClubLabels.
+  participantAClub?: string
+  participantBClub?: string
 }
 
 export type StandingRow = {
@@ -83,6 +86,8 @@ export type StandingRow = {
   stage_id?: RelationshipDoc | string | number | null
   group_id?: RelationshipDoc | string | number | null
   entry_id?: RelationshipDoc | string | number | null
+  // See collectEntryClubLabels - the entry's parent club, if any.
+  clubLabel?: string
 }
 
 export type PublicBracket = {
@@ -220,12 +225,35 @@ export const getCategoryDetail = async (
     }),
   ])
 
+  const matches = matchesResult.docs as PublicMatch[]
+  const standings = standingsResult.docs as StandingRow[]
+
+  const clubEntryIds = [
+    ...matches.flatMap((match) => [
+      getRelationshipId(match.participant_a_entry_id),
+      getRelationshipId(match.participant_b_entry_id),
+    ]),
+    ...standings.map((row) => getRelationshipId(row.entry_id)),
+  ].filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, clubEntryIds)
+
+  for (const match of matches) {
+    const aId = getRelationshipId(match.participant_a_entry_id)
+    const bId = getRelationshipId(match.participant_b_entry_id)
+    match.participantAClub = aId !== undefined ? clubLabelByEntryId.get(String(aId)) : undefined
+    match.participantBClub = bId !== undefined ? clubLabelByEntryId.get(String(bId)) : undefined
+  }
+  for (const row of standings) {
+    const entryId = getRelationshipId(row.entry_id)
+    row.clubLabel = entryId !== undefined ? clubLabelByEntryId.get(String(entryId)) : undefined
+  }
+
   return {
     sport,
     category,
     stages: stagesResult.docs as StageDoc[],
-    matches: matchesResult.docs as PublicMatch[],
-    standings: standingsResult.docs as StandingRow[],
+    matches,
+    standings,
     bracket: bracketsResult.docs[0] as PublicBracket | undefined,
   }
 }

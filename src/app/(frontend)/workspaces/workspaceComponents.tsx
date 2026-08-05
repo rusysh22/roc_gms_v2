@@ -65,6 +65,9 @@ export type StandingImpactSummaryRow = {
   score_difference: number
   qualified_status: string
   entry_id?: RelationshipDoc | string | number | null
+  // See collectEntryClubLabels (src/lib/brackets.ts) - the team/player's own parent club, absent
+  // for club-mode entries (their own name already IS the club) or entries with no club set.
+  clubLabel?: string
 }
 
 export type StandingImpactSummary = {
@@ -394,6 +397,9 @@ export const StandingImpactPanel = ({
               {impact.participantRows.map((row) => (
                 <div key={row.id} className="rounded-card border border-line bg-mist px-3 py-2">
                   <p className="truncate text-sm font-bold text-ink">{getRelationshipLabel(row.entry_id)}</p>
+                  {row.clubLabel ? (
+                    <p className="truncate text-xs font-semibold text-ink-soft">{row.clubLabel}</p>
+                  ) : null}
                   <p className="text-lg font-extrabold text-green">#{row.rank}</p>
                   <p className="text-xs font-semibold text-ink-soft">
                     {row.points} pts / {row.played} played / SD {row.score_difference}
@@ -417,7 +423,12 @@ export const StandingImpactPanel = ({
               {impact.rows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-extrabold">{row.rank}</TableCell>
-                  <TableCell>{getRelationshipLabel(row.entry_id)}</TableCell>
+                  <TableCell>
+                    {getRelationshipLabel(row.entry_id)}
+                    {row.clubLabel ? (
+                      <span className="block text-xs font-semibold text-ink-soft">{row.clubLabel}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="tabular-nums">{row.played}</TableCell>
                   <TableCell className="tabular-nums">{row.points}</TableCell>
                   <TableCell className="tabular-nums">{row.score_difference}</TableCell>

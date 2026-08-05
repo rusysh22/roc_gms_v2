@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { collectEntryClubLabels } from '@/lib/brackets'
 import { getActiveEvent } from '../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -105,6 +106,8 @@ export default async function StandingsWorkspacePage({
   const stages = stagesResult.docs as WorkspaceStage[]
   const groups = groupsResult.docs as WorkspaceGroup[]
   const standings = standingsResult.docs as WorkspaceStanding[]
+  const standingEntryIds = standings.map((standing) => getRelationshipId(standing.entry_id)).filter(Boolean)
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, standingEntryIds)
   const firstGroupStage = stages.find((stage) => stage.stage_type === 'group_stage') || stages[0]
   const firstGroup = firstGroupStage
     ? groups.find((group) => getRelationshipId(group.stage_id) === String(firstGroupStage.id))
@@ -177,17 +180,24 @@ export default async function StandingsWorkspacePage({
             <EmptyState>No cached standings yet.</EmptyState>
           ) : (
             <ul className="flex flex-col gap-2">
-              {standings.slice(0, 8).map((standing) => (
-                <li key={standing.id} className="rounded-card border border-line bg-paper px-4 py-3">
-                  <strong className="block text-sm font-bold text-ink">
-                    #{standing.rank} {getRelationshipLabel(standing.entry_id)}
-                  </strong>
-                  <span className="text-xs font-semibold text-ink-soft">
-                    {getRelationshipLabel(standing.category_id)} /{' '}
-                    {getRelationshipLabel(standing.group_id, 'No group')} / {standing.points} pts
-                  </span>
-                </li>
-              ))}
+              {standings.slice(0, 8).map((standing) => {
+                const standingEntryId = getRelationshipId(standing.entry_id)
+                const standingClub = standingEntryId !== undefined ? clubLabelByEntryId.get(String(standingEntryId)) : undefined
+                return (
+                  <li key={standing.id} className="rounded-card border border-line bg-paper px-4 py-3">
+                    <strong className="block text-sm font-bold text-ink">
+                      #{standing.rank} {getRelationshipLabel(standing.entry_id)}
+                    </strong>
+                    {standingClub ? (
+                      <span className="block text-xs font-semibold text-ink-soft">{standingClub}</span>
+                    ) : null}
+                    <span className="text-xs font-semibold text-ink-soft">
+                      {getRelationshipLabel(standing.category_id)} /{' '}
+                      {getRelationshipLabel(standing.group_id, 'No group')} / {standing.points} pts
+                    </span>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>

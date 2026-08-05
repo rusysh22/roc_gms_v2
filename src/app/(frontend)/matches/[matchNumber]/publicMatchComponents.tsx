@@ -39,10 +39,12 @@ const LIVE_STATUSES = new Set(['ongoing', 'paused'])
 
 const ParticipantBlock = ({
   label,
+  clubLabel,
   isWinner,
   align,
 }: {
   label: string
+  clubLabel?: string
   isWinner: boolean
   align: 'left' | 'right'
 }) => (
@@ -67,6 +69,14 @@ const ParticipantBlock = ({
     >
       {label}
     </span>
+    {/* The team/player's parent club (via team_id.club_id / player_id.club_id) - a club-mode
+        entry has no separate parent, so this is only ever shown for team/pair/individual
+        entries that actually belong to one. */}
+    {clubLabel ? (
+      <span className="truncate text-xs font-semibold text-ink-soft" title={clubLabel}>
+        {clubLabel}
+      </span>
+    ) : null}
   </div>
 )
 
@@ -94,9 +104,13 @@ const ScoreCenter = ({ hasSets, aSetsWon, bSetsWon }: { hasSets: boolean; aSetsW
 export const ScoreCard = ({
   match,
   matchSets,
+  participantAClub,
+  participantBClub,
 }: {
   match: MatchDetail
   matchSets: MatchSetDetail[]
+  participantAClub?: string
+  participantBClub?: string
 }) => {
   const winnerId = getRelationshipId(match.winner_entry_id)
   const aId = getRelationshipId(match.participant_a_entry_id)
@@ -131,12 +145,14 @@ export const ScoreCard = ({
       <div className="flex items-center gap-2 px-5 py-6 sm:gap-6 sm:py-8">
         <ParticipantBlock
           label={getRelationshipLabel(match.participant_a_entry_id)}
+          clubLabel={participantAClub}
           isWinner={aIsWinner}
           align="left"
         />
         <ScoreCenter hasSets={matchSets.length > 0} aSetsWon={aSetsWon} bSetsWon={bSetsWon} />
         <ParticipantBlock
           label={getRelationshipLabel(match.participant_b_entry_id)}
+          clubLabel={participantBClub}
           isWinner={bIsWinner}
           align="right"
         />
@@ -323,6 +339,9 @@ export const PublicStandingImpactPanel = ({
               <p className="truncate text-sm font-semibold text-ink">
                 {getRelationshipLabel(row.entry_id)}
               </p>
+              {row.clubLabel ? (
+                <p className="truncate text-xs text-ink-soft">{row.clubLabel}</p>
+              ) : null}
               <p className="text-xs text-ink-soft">
                 Rank #{row.rank} · {row.points} pts · {row.played} played
               </p>

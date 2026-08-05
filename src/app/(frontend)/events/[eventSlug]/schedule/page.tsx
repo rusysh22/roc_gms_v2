@@ -5,7 +5,7 @@ import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin } from 'lucide-re
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
-import type { SingleEliminationBracketData } from '@/lib/brackets'
+import { collectEntryClubLabels, type SingleEliminationBracketData } from '@/lib/brackets'
 import { resolveEventTimezone } from '@/lib/timezone'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -225,6 +225,23 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   }, new Map())
 
   const brackets = bracketsResult.docs as ChampionBracket[]
+  const championEntryIds = brackets
+    .map((bracket) => getChampion(bracket.bracket_data).entry_id)
+    .filter((id): id is string | number => Boolean(id))
+
+  // Parent club (team_id.club_id / player_id.club_id) for every participant/standing-row/champion
+  // entry this page is about to render - one batched lookup covering the whole page rather than
+  // one query per card/row. See collectEntryClubLabels (src/lib/brackets.ts): absent from the map
+  // means "no club to show" (a club-mode entry, or a team/player with no club_id set).
+  const clubLookupEntryIds = [
+    ...allMatches.flatMap((match) => [
+      getRelationshipId(match.participant_a_entry_id),
+      getRelationshipId(match.participant_b_entry_id),
+    ]),
+    ...standings.map((standing) => getRelationshipId(standing.entry_id)),
+    ...championEntryIds,
+  ].filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, clubLookupEntryIds)
 
   return (
     <main className="font-sans text-ink">
@@ -344,6 +361,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                 key: 'a',
                                 id: entryAId,
                                 label: getRelationshipLabel(match.participant_a_entry_id),
+                                clubLabel: entryAId !== undefined ? clubLabelByEntryId.get(String(entryAId)) : undefined,
                                 isWinner: aIsWinner,
                                 scores: matchSets.map((set) => set.participant_a_score),
                               },
@@ -351,6 +369,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                 key: 'b',
                                 id: entryBId,
                                 label: getRelationshipLabel(match.participant_b_entry_id),
+                                clubLabel: entryBId !== undefined ? clubLabelByEntryId.get(String(entryBId)) : undefined,
                                 isWinner: bIsWinner,
                                 scores: matchSets.map((set) => set.participant_b_score),
                               },
@@ -392,18 +411,25 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                             row.isWinner && 'bg-mist',
                                           )}
                                         >
-                                          <span className="flex min-w-0 items-center gap-1">
-                                            <span
-                                              className={cn(
-                                                'truncate text-sm sm:text-base',
-                                                row.isWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
-                                              )}
-                                              title={row.label}
-                                            >
-                                              {row.label}
+                                          <span className="flex min-w-0 flex-col">
+                                            <span className="flex min-w-0 items-center gap-1">
+                                              <span
+                                                className={cn(
+                                                  'truncate text-sm sm:text-base',
+                                                  row.isWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
+                                                )}
+                                                title={row.label}
+                                              >
+                                                {row.label}
+                                              </span>
+                                              {row.id ? (
+                                                <FavoriteStar eventSlug={event.slug} entryId={row.id} label={row.label} />
+                                              ) : null}
                                             </span>
-                                            {row.id ? (
-                                              <FavoriteStar eventSlug={event.slug} entryId={row.id} label={row.label} />
+                                            {row.clubLabel ? (
+                                              <span className="truncate text-xs text-ink-soft" title={row.clubLabel}>
+                                                {row.clubLabel}
+                                              </span>
                                             ) : null}
                                           </span>
                                           <div className="flex shrink-0 gap-2.5">
@@ -424,30 +450,44 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-2 sm:gap-3">
-                                      <div className="flex min-w-0 flex-1 items-center gap-1">
-                                        <span
-                                          className="truncate text-sm font-bold text-ink sm:text-base"
-                                          title={rowsData[0].label}
-                                        >
-                                          {rowsData[0].label}
-                                        </span>
-                                        {entryAId ? (
-                                          <FavoriteStar eventSlug={event.slug} entryId={entryAId} label={rowsData[0].label} />
+                                      <div className="flex min-w-0 flex-1 flex-col">
+                                        <div className="flex min-w-0 items-center gap-1">
+                                          <span
+                                            className="truncate text-sm font-bold text-ink sm:text-base"
+                                            title={rowsData[0].label}
+                                          >
+                                            {rowsData[0].label}
+                                          </span>
+                                          {entryAId ? (
+                                            <FavoriteStar eventSlug={event.slug} entryId={entryAId} label={rowsData[0].label} />
+                                          ) : null}
+                                        </div>
+                                        {rowsData[0].clubLabel ? (
+                                          <span className="truncate text-xs text-ink-soft" title={rowsData[0].clubLabel}>
+                                            {rowsData[0].clubLabel}
+                                          </span>
                                         ) : null}
                                       </div>
                                       <span className="shrink-0 rounded-full border border-line bg-mist px-2.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
                                         vs
                                       </span>
-                                      <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-                                        {entryBId ? (
-                                          <FavoriteStar eventSlug={event.slug} entryId={entryBId} label={rowsData[1].label} />
+                                      <div className="flex min-w-0 flex-1 flex-col items-end">
+                                        <div className="flex min-w-0 items-center gap-1">
+                                          {entryBId ? (
+                                            <FavoriteStar eventSlug={event.slug} entryId={entryBId} label={rowsData[1].label} />
+                                          ) : null}
+                                          <span
+                                            className="truncate text-right text-sm font-bold text-ink sm:text-base"
+                                            title={rowsData[1].label}
+                                          >
+                                            {rowsData[1].label}
+                                          </span>
+                                        </div>
+                                        {rowsData[1].clubLabel ? (
+                                          <span className="truncate text-right text-xs text-ink-soft" title={rowsData[1].clubLabel}>
+                                            {rowsData[1].clubLabel}
+                                          </span>
                                         ) : null}
-                                        <span
-                                          className="truncate text-right text-sm font-bold text-ink sm:text-base"
-                                          title={rowsData[1].label}
-                                        >
-                                          {rowsData[1].label}
-                                        </span>
                                       </div>
                                     </div>
                                   )}
@@ -518,11 +558,18 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((standing) => (
+                        {rows.map((standing) => {
+                          const standingEntryId = getRelationshipId(standing.entry_id)
+                          const standingClub =
+                            standingEntryId !== undefined ? clubLabelByEntryId.get(String(standingEntryId)) : undefined
+                          return (
                           <tr key={standing.id} className="border-b border-line last:border-0">
                             <td className="px-4 py-3 font-bold tabular-nums">{standing.rank}</td>
                             <td className="px-4 py-3 font-semibold">
                               {getRelationshipLabel(standing.entry_id)}
+                              {standingClub ? (
+                                <span className="block text-xs font-semibold text-ink-soft">{standingClub}</span>
+                              ) : null}
                             </td>
                             <td className="px-3 py-3 text-right tabular-nums">{standing.played}</td>
                             <td className="px-3 py-3 text-right tabular-nums">{standing.won}</td>
@@ -543,20 +590,30 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                               </StatusBadge>
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </Card>
 
                   <div className="flex flex-col gap-3 sm:hidden">
-                    {rows.map((standing) => (
+                    {rows.map((standing) => {
+                      const standingEntryId = getRelationshipId(standing.entry_id)
+                      const standingClub =
+                        standingEntryId !== undefined ? clubLabelByEntryId.get(String(standingEntryId)) : undefined
+                      return (
                       <Card key={standing.id}>
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mist text-sm font-extrabold tabular-nums text-ink">
                               {standing.rank}
                             </span>
-                            <CardTitle>{getRelationshipLabel(standing.entry_id)}</CardTitle>
+                            <div>
+                              <CardTitle>{getRelationshipLabel(standing.entry_id)}</CardTitle>
+                              {standingClub ? (
+                                <p className="text-xs font-semibold text-ink-soft">{standingClub}</p>
+                              ) : null}
+                            </div>
                           </div>
                           <StatusBadge tone={getQualifiedTone(standing.qualified_status)}>
                             {formatStatus(standing.qualified_status)}
@@ -585,7 +642,8 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                           </div>
                         </dl>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               ))
@@ -607,6 +665,10 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                 {brackets.map((bracket) => {
                   const champion = getChampion(bracket.bracket_data)
                   const isDecided = champion.status === 'decided'
+                  const championClub =
+                    isDecided && champion.entry_id !== undefined
+                      ? clubLabelByEntryId.get(String(champion.entry_id))
+                      : undefined
 
                   return (
                     <Card
@@ -634,6 +696,9 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                       <h2 className={cn('text-2xl font-extrabold', !isDecided && 'text-ink-soft')}>
                         {isDecided ? champion.label : 'Not decided yet'}
                       </h2>
+                      {championClub ? (
+                        <p className="-mt-2 text-sm font-semibold text-ink-soft">{championClub}</p>
+                      ) : null}
                       <p className="text-sm text-ink-soft">{champion.reason}</p>
 
                       {champion.match_number ? (

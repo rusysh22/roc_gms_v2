@@ -59,7 +59,16 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
     notFound()
   }
 
-  const { match, matchSets, documentationAssets, comments, standingImpact, bracketImpact } = result
+  const {
+    match,
+    matchSets,
+    documentationAssets,
+    comments,
+    standingImpact,
+    bracketImpact,
+    participantAClub,
+    participantBClub,
+  } = result
   const publicDocumentationAssets = documentationAssets.filter(
     (asset) => asset.visibility === 'public',
   )
@@ -141,7 +150,12 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
 
       <section className="px-4 pb-6" aria-label="Score">
         <div className="mx-auto max-w-3xl">
-          <ScoreCard match={match} matchSets={matchSets} />
+          <ScoreCard
+            match={match}
+            matchSets={matchSets}
+            participantAClub={participantAClub}
+            participantBClub={participantBClub}
+          />
         </div>
       </section>
 

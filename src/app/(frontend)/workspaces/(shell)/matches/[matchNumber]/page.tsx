@@ -97,6 +97,8 @@ export default async function AdminMatchDetailPage({
     champion,
     standingImpact,
     bracketImpact,
+    participantAClub,
+    participantBClub,
   } = result
   const matchEventId = getRelationshipId(match.event_id)
   const matchEventDoc = matchEventId
@@ -201,9 +203,19 @@ export default async function AdminMatchDetailPage({
         <Card className="flex flex-col gap-3">
           <CardTitle>Participants</CardTitle>
           <div className="flex items-center justify-between gap-3 rounded-card bg-mist px-3 py-2 text-sm font-bold text-ink">
-            <span className="min-w-0 truncate">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+            <span className="min-w-0">
+              <span className="block truncate">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+              {participantAClub ? (
+                <span className="block truncate text-xs font-semibold text-ink-soft">{participantAClub}</span>
+              ) : null}
+            </span>
             <span className="shrink-0 text-xs text-ink-soft">vs</span>
-            <span className="min-w-0 truncate text-right">{getRelationshipLabel(match.participant_b_entry_id)}</span>
+            <span className="min-w-0 text-right">
+              <span className="block truncate">{getRelationshipLabel(match.participant_b_entry_id)}</span>
+              {participantBClub ? (
+                <span className="block truncate text-xs font-semibold text-ink-soft">{participantBClub}</span>
+              ) : null}
+            </span>
           </div>
           {match.winner_entry_id ? (
             <p className="text-sm font-bold text-green">Winner: {getRelationshipLabel(match.winner_entry_id)}</p>

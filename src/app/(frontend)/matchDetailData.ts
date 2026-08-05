@@ -1,7 +1,12 @@
 import { getPayload, type Where } from 'payload'
 
 import config from '@payload-config'
-import type { BracketChampion, BracketMatchCard, SingleEliminationBracketData } from '@/lib/brackets'
+import {
+  collectEntryClubLabels,
+  type BracketChampion,
+  type BracketMatchCard,
+  type SingleEliminationBracketData,
+} from '@/lib/brackets'
 import {
   getSingleEliminationAdvancementPreview,
   type WinnerAdvancementResult,
@@ -110,6 +115,10 @@ export type StandingImpactRow = {
   set_difference: number
   qualified_status: string
   entry_id?: EntryDoc | string | number | null
+  // Populated from collectEntryClubLabels (src/lib/brackets.ts) - the team/player's own club, not
+  // a raw relationship field on Standings itself. Absent when the entry has no club (club-mode
+  // entries skip this - their own name already IS the club name).
+  clubLabel?: string
 }
 
 export type StandingImpact = {
@@ -139,6 +148,11 @@ export type MatchDetailResult = {
   champion?: BracketChampion | null
   standingImpact?: StandingImpact | null
   bracketImpact?: BracketImpact | null
+  // The two participants' parent club (team_id.club_id / player_id.club_id), if any - see
+  // collectEntryClubLabels. undefined when that participant has no club (a club-mode entry, an
+  // entry with no club_id set, or no participant at all).
+  participantAClub?: string
+  participantBClub?: string
 }
 
 const getRelationshipId = (value: RelationshipDoc | string | number | null | undefined) => {
@@ -188,6 +202,12 @@ const getStandingImpact = async (
     },
   })
   const rows = standings.docs as StandingImpactRow[]
+  const rowEntryIds = rows.map((row) => getRelationshipId(row.entry_id)).filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, rowEntryIds)
+  for (const row of rows) {
+    const entryId = getRelationshipId(row.entry_id)
+    row.clubLabel = entryId !== undefined ? clubLabelByEntryId.get(String(entryId)) : undefined
+  }
   const participantAId = getRelationshipId(match.participant_a_entry_id)
   const participantBId = getRelationshipId(match.participant_b_entry_id)
   const participantRows = rows.filter((row) => {
@@ -270,6 +290,17 @@ export const getMatchDetail = async (
   if (!match) {
     return null
   }
+
+  const participantEntryIds = [match.participant_a_entry_id, match.participant_b_entry_id]
+    .map((value) => getRelationshipId(value))
+    .filter((id): id is string | number => Boolean(id))
+  const participantClubLabelByEntryId = await collectEntryClubLabels(payload, participantEntryIds)
+  const participantAEntryId = getRelationshipId(match.participant_a_entry_id)
+  const participantBEntryId = getRelationshipId(match.participant_b_entry_id)
+  const participantAClub =
+    participantAEntryId !== undefined ? participantClubLabelByEntryId.get(String(participantAEntryId)) : undefined
+  const participantBClub =
+    participantBEntryId !== undefined ? participantClubLabelByEntryId.get(String(participantBEntryId)) : undefined
 
   const matchSets = await payload.find({
     collection: 'match-sets',
@@ -368,6 +399,8 @@ export const getMatchDetail = async (
     champion,
     standingImpact,
     bracketImpact,
+    participantAClub,
+    participantBClub,
   }
 }
 

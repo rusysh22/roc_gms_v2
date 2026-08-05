@@ -11,6 +11,7 @@ import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getActiveEvent } from '../../activeEvent'
 import { resolveEventTimezone } from '@/lib/timezone'
+import { collectEntryClubLabels, getRelationshipId } from '@/lib/brackets'
 import {
   NoActiveEventNotice,
   PageHero,
@@ -78,6 +79,10 @@ export default async function MatchesListPage({ searchParams }: { searchParams?:
     where,
   })
   const docs = matches.docs as WorkspaceMatch[]
+  const matchEntryIds = docs
+    .flatMap((match) => [getRelationshipId(match.participant_a_entry_id), getRelationshipId(match.participant_b_entry_id)])
+    .filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(access.payload, matchEntryIds)
 
   return (
     <>
@@ -120,11 +125,19 @@ export default async function MatchesListPage({ searchParams }: { searchParams?:
               </TableRow>
             </TableHeader>
             <TableBody>
-              {docs.map((match) => (
+              {docs.map((match) => {
+                const entryAId = getRelationshipId(match.participant_a_entry_id)
+                const entryBId = getRelationshipId(match.participant_b_entry_id)
+                const clubA = entryAId !== undefined ? clubLabelByEntryId.get(String(entryAId)) : undefined
+                const clubB = entryBId !== undefined ? clubLabelByEntryId.get(String(entryBId)) : undefined
+                return (
                 <TableRow key={match.id}>
                   <TableCell className="font-bold">
-                    {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                    {getRelationshipLabel(match.participant_a_entry_id)}
+                    {clubA ? <span className="block text-xs font-semibold text-ink-soft">{clubA}</span> : null}
+                    <span className="font-normal"> vs </span>
                     {getRelationshipLabel(match.participant_b_entry_id)}
+                    {clubB ? <span className="block text-xs font-semibold text-ink-soft">{clubB}</span> : null}
                     <span className="block text-xs font-normal text-ink-soft">{match.match_number}</span>
                   </TableCell>
                   <TableCell className="text-ink-soft">
@@ -146,7 +159,8 @@ export default async function MatchesListPage({ searchParams }: { searchParams?:
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
           <Pagination

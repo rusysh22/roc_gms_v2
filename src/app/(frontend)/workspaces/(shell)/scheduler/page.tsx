@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select'
 import { getMatchStatusTone, StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { resolveEventTimezone } from '@/lib/timezone'
+import { collectEntryClubLabels, getRelationshipId } from '@/lib/brackets'
 import { getActiveEvent } from '../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -152,7 +153,13 @@ export default async function SchedulerWorkspacePage({
   const venueOptions = toOptions(venues.docs)
   const courtOptions = toOptions(courts.docs)
 
-  const conflicts = detectScheduleConflicts(allMatches.docs as WorkspaceMatch[])
+  const allMatchesDocs = allMatches.docs as WorkspaceMatch[]
+  const schedulerEntryIds = allMatchesDocs
+    .flatMap((match) => [getRelationshipId(match.participant_a_entry_id), getRelationshipId(match.participant_b_entry_id)])
+    .filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, schedulerEntryIds)
+
+  const conflicts = detectScheduleConflicts(allMatchesDocs)
   const alertConflicts = conflicts.filter((conflict) => conflict.severity === 'alert')
 
   const dayKeys = Array.from(
@@ -192,7 +199,12 @@ export default async function SchedulerWorkspacePage({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((match) => (
+          {rows.map((match) => {
+            const entryAId = getRelationshipId(match.participant_a_entry_id)
+            const entryBId = getRelationshipId(match.participant_b_entry_id)
+            const clubA = entryAId !== undefined ? clubLabelByEntryId.get(String(entryAId)) : undefined
+            const clubB = entryBId !== undefined ? clubLabelByEntryId.get(String(entryBId)) : undefined
+            return (
             <TableRow key={match.id}>
               <TableCell>
                 <Link
@@ -206,9 +218,15 @@ export default async function SchedulerWorkspacePage({
                 </p>
               </TableCell>
               <TableCell>
-                <span className="font-semibold">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+                <span>
+                  <span className="font-semibold">{getRelationshipLabel(match.participant_a_entry_id)}</span>
+                  {clubA ? <span className="block text-xs font-semibold text-ink-soft">{clubA}</span> : null}
+                </span>
                 <span className="text-ink-soft"> vs </span>
-                <span className="font-semibold">{getRelationshipLabel(match.participant_b_entry_id)}</span>
+                <span>
+                  <span className="font-semibold">{getRelationshipLabel(match.participant_b_entry_id)}</span>
+                  {clubB ? <span className="block text-xs font-semibold text-ink-soft">{clubB}</span> : null}
+                </span>
               </TableCell>
               <TableCell>
                 {match.scheduled_start_at ? (
@@ -231,7 +249,8 @@ export default async function SchedulerWorkspacePage({
                 ) : null}
               </TableCell>
             </TableRow>
-          ))}
+            )
+          })}
         </TableBody>
       </Table>
     )
@@ -385,7 +404,12 @@ export default async function SchedulerWorkspacePage({
                     <div key={lane.label} className="rounded-card border border-line bg-mist p-3">
                       <p className="mb-2 text-xs font-bold tracking-wide text-ink-soft uppercase">{lane.label}</p>
                       <div className="flex flex-col gap-2">
-                        {lane.matches.map((match) => (
+                        {lane.matches.map((match) => {
+                          const entryAId = getRelationshipId(match.participant_a_entry_id)
+                          const entryBId = getRelationshipId(match.participant_b_entry_id)
+                          const clubA = entryAId !== undefined ? clubLabelByEntryId.get(String(entryAId)) : undefined
+                          const clubB = entryBId !== undefined ? clubLabelByEntryId.get(String(entryBId)) : undefined
+                          return (
                           <div
                             key={match.id}
                             className="flex items-center justify-between gap-2 rounded-card border border-line bg-paper px-3 py-2 text-xs"
@@ -393,11 +417,14 @@ export default async function SchedulerWorkspacePage({
                             <span className="font-bold text-ink-soft">{formatTimeOnly(match.scheduled_start_at, timezone)}</span>
                             <strong className="font-extrabold text-ink">{match.match_number}</strong>
                             <span className="min-w-0 truncate text-right font-semibold text-ink-soft">
-                              {getRelationshipLabel(match.participant_a_entry_id)} vs{' '}
+                              {getRelationshipLabel(match.participant_a_entry_id)}
+                              {clubA ? ` (${clubA})` : ''} vs{' '}
                               {getRelationshipLabel(match.participant_b_entry_id)}
+                              {clubB ? ` (${clubB})` : ''}
                             </span>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ))}
