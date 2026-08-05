@@ -196,6 +196,60 @@ export const AnnouncementFeed = ({
   )
 }
 
+// AnnouncementFeed/AnnouncementCard are built for a page where announcements ARE the content
+// (event home) - full body text, a CTA, an icon badge per item. On a match or category detail
+// page they're a minor supporting fact ("kickoff moved 30 minutes"), not the reason someone's
+// here - a stack of full-size cards at the top of the page reads like a wall of spam before a
+// visitor even reaches the competition itself. This renders each one as a single scannable row
+// instead: a status dot, the title, the date. No body text, no per-item card border - the whole
+// list stays inside one small Card rather than stacking a full card per announcement.
+export const CompactAnnouncementList = ({
+  announcements,
+  title,
+  basePath,
+  timezone,
+}: {
+  announcements: PublicAnnouncement[]
+  title: string
+  basePath: string
+  timezone?: string
+}) => {
+  if (announcements.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-3">
+        <CardTitle>{title}</CardTitle>
+        <Link href={basePath} className="shrink-0 text-xs font-semibold text-brand-secondary hover:underline">
+          View all
+        </Link>
+      </div>
+      <ul className="mt-1 flex flex-col divide-y divide-line">
+        {announcements.map((announcement) => (
+          <li key={announcement.id} className="flex items-center gap-2.5 py-2 first:pt-2 last:pb-0">
+            <span
+              className={
+                announcement.urgency === 'urgent' ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-gold'
+                : announcement.urgency === 'result' ? 'h-1.5 w-1.5 shrink-0 rounded-full bg-green'
+                : 'h-1.5 w-1.5 shrink-0 rounded-full bg-ink-soft/40'
+              }
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+              {announcement.title}
+            </span>
+            <span className="shrink-0 text-xs text-ink-soft">
+              {formatContentDate(announcement.published_at, timezone)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
 export const ArticleSharePanel = ({
   article,
   url,

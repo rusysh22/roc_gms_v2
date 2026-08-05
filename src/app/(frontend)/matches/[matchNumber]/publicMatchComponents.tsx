@@ -5,7 +5,6 @@ import { Calendar, Clock, FileText, MapPin, Trophy, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
-import { formatContentDate, type PublicAnnouncement } from '../../contentData'
 import type {
   BracketImpact,
   CommentDetail,
@@ -286,58 +285,6 @@ export const MatchInfoStrip = ({
           This match hasn&apos;t been scheduled yet - check back for updates.
         </p>
       )}
-    </Card>
-  )
-}
-
-// The shared AnnouncementFeed/AnnouncementCard (contentComponents.tsx) is built for a page where
-// announcements ARE the content (event home, category page) - full body text, a CTA, an icon
-// badge per item. On a match detail page they're a minor supporting fact ("kickoff moved 30
-// minutes"), not the reason someone's here, so this renders each one as a single scannable row
-// instead: a status dot, the title, the date. No body text, no per-item card border - the whole
-// list stays inside one small Card rather than stacking a full card per announcement.
-export const MatchUpdatesPanel = ({
-  announcements,
-  basePath,
-  timezone,
-}: {
-  announcements: PublicAnnouncement[]
-  basePath: string
-  timezone?: string
-}) => {
-  if (announcements.length === 0) {
-    return null
-  }
-
-  return (
-    <Card>
-      <div className="flex items-center justify-between gap-3">
-        <CardTitle>Match Updates</CardTitle>
-        <Link href={basePath} className="shrink-0 text-xs font-semibold text-brand-secondary hover:underline">
-          View all
-        </Link>
-      </div>
-      <ul className="mt-1 flex flex-col divide-y divide-line">
-        {announcements.map((announcement) => (
-          <li key={announcement.id} className="flex items-center gap-2.5 py-2 first:pt-2 last:pb-0">
-            <span
-              className={cn(
-                'h-1.5 w-1.5 shrink-0 rounded-full',
-                announcement.urgency === 'urgent' ? 'bg-gold'
-                : announcement.urgency === 'result' ? 'bg-green'
-                : 'bg-ink-soft/40',
-              )}
-              aria-hidden="true"
-            />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-              {announcement.title}
-            </span>
-            <span className="shrink-0 text-xs text-ink-soft">
-              {formatContentDate(announcement.published_at, timezone)}
-            </span>
-          </li>
-        ))}
-      </ul>
     </Card>
   )
 }

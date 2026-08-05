@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getMatchDetail } from '../../../../matchDetailData'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { ShareButtons } from '@/components/share-buttons'
-import { ArticleCard } from '../../../../contentComponents'
+import { ArticleCard, CompactAnnouncementList } from '../../../../contentComponents'
 import {
   getRelatedPublicArticles,
   getRelationshipId,
@@ -20,7 +20,6 @@ import { resolveEventTimezone } from '@/lib/timezone'
 import {
   DocumentationGallery,
   MatchInfoStrip,
-  MatchUpdatesPanel,
   PublicBracketImpactPanel,
   PublicCommentList,
   PublicStandingImpactPanel,
@@ -176,8 +175,9 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
           </section>
         ) : null}
 
-        <MatchUpdatesPanel
+        <CompactAnnouncementList
           announcements={announcements}
+          title="Match Updates"
           basePath={`${eventPath}/updates?tab=announcements`}
           timezone={timezone}
         />

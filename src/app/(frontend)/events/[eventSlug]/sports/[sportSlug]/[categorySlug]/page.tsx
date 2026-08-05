@@ -4,10 +4,11 @@ import { getPayload } from 'payload'
 import { ArrowLeft, CalendarDays, Clock, Info, MapPin, ScrollText, Trophy } from 'lucide-react'
 
 import config from '@payload-config'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
-import { AnnouncementFeed, ArticleCard } from '../../../../../contentComponents'
+import { ArticleCard, CompactAnnouncementList } from '../../../../../contentComponents'
 import { getRelatedPublicArticles, getScopedPublicAnnouncements } from '../../../../../contentData'
 import { BracketTree } from '../../../../../brackets/bracketTree'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
@@ -452,7 +453,7 @@ export default async function PublicSportCategoryPage({
       eventId: event.id,
       sportId: sport.id,
       categoryId: category.id,
-      limit: 4,
+      limit: 3,
     }),
     getRelatedPublicArticles({
       eventId: event.id,
@@ -493,19 +494,11 @@ export default async function PublicSportCategoryPage({
         </div>
       </section>
 
-      <section className="px-4 pb-8">
-        <div className="mx-auto max-w-7xl">
-          <AnnouncementFeed
-            announcements={announcements}
-            title="Category Announcements"
-            compact
-            basePath={`${eventPath}/updates?tab=announcements`}
-          />
-        </div>
-      </section>
-
-      <div className="sticky top-20 z-40 border-y border-line bg-paper px-4 py-3">
-        <nav className="mx-auto flex max-w-7xl gap-2 overflow-x-auto" aria-label="Category sections">
+      {/* Primary navigation right after the header - a visitor's first move is picking Bracket/
+          Standings, Schedule, or Details, not reading announcements. A full-width underline strip
+          (not a floating/sticky pill row) matches the tab style used across the rest of the site. */}
+      <nav className="flex border-b border-line bg-paper" aria-label="Category sections">
+        <div className="mx-auto flex w-full max-w-7xl px-4">
           {[
             { key: 'competition', label: competitionLabel, icon: Trophy },
             { key: 'schedule', label: 'Schedule', icon: CalendarDays },
@@ -518,19 +511,20 @@ export default async function PublicSportCategoryPage({
                 key={item.key}
                 href={`${eventPath}/sports/${sportSlug}/${categorySlug}?tab=${item.key}`}
                 aria-current={isActive ? 'page' : undefined}
-                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold no-underline transition-colors ${
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 border-b-2 px-3 py-3 text-sm font-bold no-underline transition-colors',
                   isActive ?
-                    'border-brand-primary bg-brand-primary text-paper'
-                  : 'border-line bg-paper text-ink-soft hover:text-ink'
-                }`}
+                    'border-brand-primary text-ink'
+                  : 'border-transparent text-ink-soft hover:border-line hover:text-ink',
+                )}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
                 {item.label}
               </Link>
             )
           })}
-        </nav>
-      </div>
+        </div>
+      </nav>
 
       {activeTab === 'competition' ? (
         <section className="px-4 py-8" aria-label={competitionLabel}>
@@ -723,18 +717,29 @@ export default async function PublicSportCategoryPage({
         </section>
       ) : null}
 
-      {relatedArticles.length > 0 ? (
-        <section className="px-4 pb-16" aria-labelledby="category-articles-title">
-          <div className="mx-auto max-w-5xl">
-            <h2 id="category-articles-title" className="mb-4 text-xl font-bold text-ink">
-              Related Articles
-            </h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              {relatedArticles.map((article) => (
-                <ArticleCard key={article.id} article={article} basePath={`${eventPath}/articles`} />
-              ))}
-            </div>
+      {announcements.length > 0 || relatedArticles.length > 0 ? (
+        <section className="flex flex-col gap-8 px-4 pb-16" aria-label="Category updates and articles">
+          <div className="mx-auto w-full max-w-5xl">
+            <CompactAnnouncementList
+              announcements={announcements}
+              title="Category Announcements"
+              basePath={`${eventPath}/updates?tab=announcements`}
+              timezone={timezone}
+            />
           </div>
+
+          {relatedArticles.length > 0 ? (
+            <div className="mx-auto w-full max-w-5xl" aria-labelledby="category-articles-title">
+              <h2 id="category-articles-title" className="mb-4 text-xl font-bold text-ink">
+                Related Articles
+              </h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {relatedArticles.map((article) => (
+                  <ArticleCard key={article.id} article={article} basePath={`${eventPath}/articles`} />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>
