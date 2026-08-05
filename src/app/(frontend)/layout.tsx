@@ -15,8 +15,12 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   display: 'swap',
 })
 
+// A page-level `title` (a plain string, e.g. from an event/article's own generateMetadata)
+// automatically becomes "<title> | InTourney" via this template - so the browser tab reflects
+// whichever event/article is actually open instead of every tab reading the same static
+// "InTourney". `default` only applies where nothing in the tree sets a title at all.
 export const metadata: Metadata = {
-  title: 'InTourney',
+  title: { template: '%s | InTourney', default: 'InTourney' },
   description: "InTourney - Hosting your Tournament's",
 }
 

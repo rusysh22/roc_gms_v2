@@ -6,8 +6,10 @@ import { Trophy } from 'lucide-react'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { LoginForm } from './LoginForm'
 
+// Root layout's title template already appends " | InTourney" - a plain 'Sign in' here avoids
+// doubling up into "Sign in | InTourney | InTourney".
 export const metadata: Metadata = {
-  title: 'Sign in | InTourney',
+  title: 'Sign in',
 }
 
 // Only ever redirect within the app - an unvalidated `redirect` query param would otherwise be an
