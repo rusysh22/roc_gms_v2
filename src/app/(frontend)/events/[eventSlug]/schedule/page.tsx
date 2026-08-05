@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
-import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin } from 'lucide-react'
+import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin, Search } from 'lucide-react'
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
@@ -87,7 +87,7 @@ type ChampionBracket = {
 
 type SchedulePageProps = {
   params: Promise<{ eventSlug: string }>
-  searchParams: Promise<{ sport?: string; tab?: string; status?: string; date?: string }>
+  searchParams: Promise<{ sport?: string; tab?: string; status?: string; date?: string; q?: string }>
 }
 
 const getActiveTab = (value?: string): ActiveTab => {
@@ -159,7 +159,7 @@ const getChampion = (bracketData?: SingleEliminationBracketData | null) =>
 
 export default async function PublicSchedulePage({ params, searchParams }: SchedulePageProps) {
   const { eventSlug } = await params
-  const { sport: sportSlug, tab, status: statusParam, date: dateParam } = await searchParams
+  const { sport: sportSlug, tab, status: statusParam, date: dateParam, q: rawSearchQuery } = await searchParams
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
@@ -232,12 +232,50 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
   const sports = sportsResult.docs as SportDoc[]
   const activeSport = sportSlug ? sports.find((sport) => sport.slug === sportSlug) : undefined
 
-  const matches =
-    activeSport ?
-      allMatches.filter(
-        (match) => typeof match.sport_id === 'object' && match.sport_id?.slug === activeSport.slug,
-      )
-    : allMatches
+  const standings = standingsResult.docs as StandingDoc[]
+  const brackets = bracketsResult.docs as ChampionBracket[]
+  const championEntryIds = brackets
+    .map((bracket) => getChampion(bracket.bracket_data).entry_id)
+    .filter((id): id is string | number => Boolean(id))
+
+  // Parent club (team_id.club_id / player_id.club_id) for every participant/standing-row/champion
+  // entry this page is about to render - one batched lookup covering the whole page rather than
+  // one query per card/row. See collectEntryClubLabels (src/lib/brackets.ts): absent from the map
+  // means "no club to show" (a club-mode entry, or a team/player with no club_id set). Computed
+  // here (rather than where it's first consumed further down) because the search box below needs
+  // it too - a club-name search has to match against the same labels the page displays.
+  const clubLookupEntryIds = [
+    ...allMatches.flatMap((match) => [
+      getRelationshipId(match.participant_a_entry_id),
+      getRelationshipId(match.participant_b_entry_id),
+    ]),
+    ...standings.map((standing) => getRelationshipId(standing.entry_id)),
+    ...championEntryIds,
+  ].filter((id): id is string | number => Boolean(id))
+  const clubLabelByEntryId = await collectEntryClubLabels(payload, clubLookupEntryIds)
+
+  const searchQuery = (rawSearchQuery || '').trim()
+  const normalizedSearchQuery = searchQuery.toLowerCase()
+  const matchesSearchQuery = (match: ScheduleMatch) => {
+    if (!normalizedSearchQuery) {
+      return true
+    }
+    const entryAId = getRelationshipId(match.participant_a_entry_id)
+    const entryBId = getRelationshipId(match.participant_b_entry_id)
+    const candidates = [
+      getRelationshipLabel(match.participant_a_entry_id),
+      getRelationshipLabel(match.participant_b_entry_id),
+      entryAId !== undefined ? clubLabelByEntryId.get(String(entryAId)) : undefined,
+      entryBId !== undefined ? clubLabelByEntryId.get(String(entryBId)) : undefined,
+    ]
+    return candidates.some((label) => label?.toLowerCase().includes(normalizedSearchQuery))
+  }
+
+  const matches = allMatches
+    .filter((match) =>
+      activeSport ? typeof match.sport_id === 'object' && match.sport_id?.slug === activeSport.slug : true,
+    )
+    .filter(matchesSearchQuery)
 
   const upcomingMatches = matches.filter((match) => !isResultStatus(match.status))
   const resultMatches = matches.filter((match) => isResultStatus(match.status))
@@ -286,7 +324,6 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     if (right === 'unscheduled') return -1
     return statusFilter === 'results' ? right.localeCompare(left) : left.localeCompare(right)
   })
-  const standings = standingsResult.docs as StandingDoc[]
   const standingScopes = standings.reduce<Map<string, StandingDoc[]>>((map, standing) => {
     const scopeKey = getStandingScopeKey(standing)
     const rows = map.get(scopeKey) || []
@@ -294,25 +331,6 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
     map.set(scopeKey, rows)
     return map
   }, new Map())
-
-  const brackets = bracketsResult.docs as ChampionBracket[]
-  const championEntryIds = brackets
-    .map((bracket) => getChampion(bracket.bracket_data).entry_id)
-    .filter((id): id is string | number => Boolean(id))
-
-  // Parent club (team_id.club_id / player_id.club_id) for every participant/standing-row/champion
-  // entry this page is about to render - one batched lookup covering the whole page rather than
-  // one query per card/row. See collectEntryClubLabels (src/lib/brackets.ts): absent from the map
-  // means "no club to show" (a club-mode entry, or a team/player with no club_id set).
-  const clubLookupEntryIds = [
-    ...allMatches.flatMap((match) => [
-      getRelationshipId(match.participant_a_entry_id),
-      getRelationshipId(match.participant_b_entry_id),
-    ]),
-    ...standings.map((standing) => getRelationshipId(standing.entry_id)),
-    ...championEntryIds,
-  ].filter((id): id is string | number => Boolean(id))
-  const clubLabelByEntryId = await collectEntryClubLabels(payload, clubLookupEntryIds)
 
   return (
     <main className="font-sans text-ink">
@@ -363,43 +381,69 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                   on change) instead of rows of scrolling chip buttons - a native <input
                   type="date"> gives every browser's own calendar picker for free, which is the
                   "pick a date the way people already expect" UI a date chip strip can't match. */}
-              <AutoSubmitForm action={schedulePath} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <AutoSubmitForm action={schedulePath} className="flex flex-col gap-3">
                 <input type="hidden" name="tab" value="schedule" />
-                <Field label="Status" className="min-w-0">
-                  <Select name="status" defaultValue={statusFilter}>
-                    {SCHEDULE_STATUS_FILTERS.map((filter) => (
-                      <option key={filter.key} value={filter.key}>
-                        {filter.label} ({statusFilterCounts[filter.key]})
-                      </option>
-                    ))}
-                  </Select>
+                {/* A live text field can't safely reuse AutoSubmitForm's auto-apply-on-change
+                    behavior - resubmitting on every keystroke would reload the page mid-word. It
+                    still submits the normal way (Enter, or the search button), same GET form. */}
+                <Field label="Search" className="min-w-0">
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-soft"
+                      aria-hidden="true"
+                    />
+                    <Input
+                      type="search"
+                      name="q"
+                      defaultValue={searchQuery}
+                      placeholder="Search player, team, or club"
+                      className="pl-9"
+                    />
+                  </div>
                 </Field>
-                <Field label="Sport" className="min-w-0">
-                  <Select name="sport" defaultValue={activeSport?.slug || ''}>
-                    <option value="">All Sports</option>
-                    {sports.map((sport) => (
-                      <option key={sport.id} value={sport.slug}>
-                        {sport.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Date" className="min-w-0">
-                  <Input
-                    type="date"
-                    name="date"
-                    defaultValue={dateFilter === 'all' || dateFilter === 'unscheduled' ? '' : dateFilter}
-                    min={availableDateKeys.find((key) => key !== 'unscheduled')}
-                    max={[...availableDateKeys].reverse().find((key) => key !== 'unscheduled')}
-                  />
-                </Field>
-                <div className="flex items-end">
-                  <Link
-                    href={`${schedulePath}?tab=schedule`}
-                    className="inline-flex h-11 w-full items-center justify-center rounded-[10px] border border-line bg-paper text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
-                  >
-                    Reset filters
-                  </Link>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Field label="Status" className="min-w-0">
+                    <Select name="status" defaultValue={statusFilter}>
+                      {SCHEDULE_STATUS_FILTERS.map((filter) => (
+                        <option key={filter.key} value={filter.key}>
+                          {filter.label} ({statusFilterCounts[filter.key]})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Sport" className="min-w-0">
+                    <Select name="sport" defaultValue={activeSport?.slug || ''}>
+                      <option value="">All Sports</option>
+                      {sports.map((sport) => (
+                        <option key={sport.id} value={sport.slug}>
+                          {sport.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Date" className="min-w-0">
+                    <Input
+                      type="date"
+                      name="date"
+                      defaultValue={dateFilter === 'all' || dateFilter === 'unscheduled' ? '' : dateFilter}
+                      min={availableDateKeys.find((key) => key !== 'unscheduled')}
+                      max={[...availableDateKeys].reverse().find((key) => key !== 'unscheduled')}
+                    />
+                  </Field>
+                  <div className="flex items-end gap-2">
+                    <button
+                      type="submit"
+                      className="inline-flex h-11 flex-1 items-center justify-center rounded-[10px] bg-brand-primary text-sm font-bold text-paper transition-colors hover:bg-brand-primary/90"
+                    >
+                      Search
+                    </button>
+                    <Link
+                      href={`${schedulePath}?tab=schedule`}
+                      className="inline-flex h-11 flex-1 items-center justify-center rounded-[10px] border border-line bg-paper text-sm font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
+                    >
+                      Reset
+                    </Link>
+                  </div>
                 </div>
               </AutoSubmitForm>
 
@@ -411,7 +455,9 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
             <div className="mx-auto max-w-4xl" id="schedule-matches">
               {visibleMatches.length === 0 ? (
                 <Card className="text-sm text-ink-soft">
-                  {statusFilter === 'results' ?
+                  {searchQuery ?
+                    `No matches found for "${searchQuery}". Try a different player, team, or club name.`
+                  : statusFilter === 'results' ?
                     'No results published yet for this filter. Check back once matches are finished.'
                   : statusFilter === 'upcoming' ?
                     'No upcoming matches for this filter right now.'
