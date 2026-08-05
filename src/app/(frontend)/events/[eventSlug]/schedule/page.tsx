@@ -430,6 +430,17 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                               .slice()
                               .sort((left, right) => left.set_number - right.set_number)
                             const hasSets = matchSets.length > 0
+                            // Which side won each individual set - independent of who won the
+                            // match overall (the eventual loser can still take a set or two in a
+                            // multi-set match), so each set-score gets its own winner highlight
+                            // rather than inheriting the whole row's winner styling.
+                            const setWinners = matchSets.map((set) => {
+                              const aScore = set.participant_a_score ?? 0
+                              const bScore = set.participant_b_score ?? 0
+                              if (aScore > bScore) return 'a'
+                              if (bScore > aScore) return 'b'
+                              return null
+                            })
                             const rowsData = [
                               {
                                 key: 'a',
@@ -506,18 +517,24 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                                               </span>
                                             ) : null}
                                           </span>
-                                          <div className="flex shrink-0 gap-2.5">
-                                            {row.scores.map((score, index) => (
-                                              <span
-                                                key={index}
-                                                className={cn(
-                                                  'w-5 text-center text-sm font-bold tabular-nums sm:text-base',
-                                                  row.isWinner ? 'text-ink' : 'text-ink-soft',
-                                                )}
-                                              >
-                                                {score ?? '–'}
-                                              </span>
-                                            ))}
+                                          <div className="flex shrink-0 gap-1.5">
+                                            {row.scores.map((score, index) => {
+                                              const wonThisSet = setWinners[index] === row.key
+                                              return (
+                                                <span
+                                                  key={index}
+                                                  className={cn(
+                                                    'flex w-6 items-center justify-center rounded-full text-center text-sm font-bold tabular-nums sm:text-base',
+                                                    wonThisSet ?
+                                                      'bg-green/15 text-green'
+                                                    : row.isWinner ? 'text-ink'
+                                                    : 'text-ink-soft',
+                                                  )}
+                                                >
+                                                  {score ?? '–'}
+                                                </span>
+                                              )
+                                            })}
                                           </div>
                                         </div>
                                       ))}
