@@ -5,8 +5,10 @@ import { ArrowLeft, CalendarDays, Clock, Info, MapPin, ScrollText, Trophy } from
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { AutoSubmitForm } from '@/components/auto-submit-form'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
+import { Select } from '@/components/ui/select'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
 import { ArticleCard, CompactAnnouncementList } from '../../../../../contentComponents'
 import { getRelatedPublicArticles, getScopedPublicAnnouncements } from '../../../../../contentData'
@@ -19,8 +21,10 @@ import {
   formatStatus,
   formatTimeOnly,
   getDateKey,
+  getRelationshipId,
   getRelationshipLabel,
 } from '../../../../../workspaces/workspaceComponents'
+import type { MatchSetDetail } from '../../../../../matchDetailData'
 import {
   getCategoryDetail,
   rankingFormatTypes,
@@ -34,7 +38,7 @@ import { getPublicEventBySlug } from '../../../../publicEvents'
 export const dynamic = 'force-dynamic'
 
 type PageParams = Promise<{ eventSlug: string; sportSlug: string; categorySlug: string }>
-type PageSearchParams = Promise<{ tab?: string }>
+type PageSearchParams = Promise<{ tab?: string; status?: string }>
 type ActiveTab = 'competition' | 'schedule' | 'details'
 
 const getActiveTab = (value?: string): ActiveTab => {
@@ -44,6 +48,36 @@ const getActiveTab = (value?: string): ActiveTab => {
 
   return 'competition'
 }
+
+// "Schedule" should default to matches still to be played, same reasoning and status buckets as
+// the main events/[eventSlug]/schedule/page.tsx: a match list that opens on a mix of upcoming and
+// already-decided results reads wrong under that name, and a spectator's first look should be
+// "what's coming up," not last week's scores.
+type ScheduleStatusFilter = 'upcoming' | 'results' | 'all'
+
+const RESULT_STATUSES = new Set([
+  'finished',
+  'result_published',
+  'under_review',
+  'disputed',
+  'cancelled',
+  'walkover',
+])
+
+const isResultStatus = (status: string) => RESULT_STATUSES.has(status)
+
+const getScheduleStatusFilter = (value?: string): ScheduleStatusFilter => {
+  if (value === 'results' || value === 'all') {
+    return value
+  }
+  return 'upcoming'
+}
+
+const SCHEDULE_STATUS_FILTERS: { key: ScheduleStatusFilter; label: string }[] = [
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'results', label: 'Results' },
+  { key: 'all', label: 'All' },
+]
 
 const getQualifiedTone = (status: string): StatusTone => {
   switch (status) {
@@ -312,33 +346,43 @@ const DoubleEliminationBracketSections = ({
   )
 }
 
+// Mirrors the match card design on events/[eventSlug]/schedule/page.tsx - a real per-set scoreline
+// (one row per participant, one column per set, the winning score of each set picked out with a
+// light-green pill) instead of a plain name-only "vs" row with a separate "Match detail" button,
+// so every schedule surface in the app reads the same way rather than this one looking like an
+// older, unfinished design next to the others.
 const CategorySchedule = ({
   matches,
+  setsByMatch,
   eventPath,
-  sportSlug,
-  categorySlug,
   timezone,
+  statusFilter,
 }: {
   matches: PublicMatch[]
+  setsByMatch: Map<string, MatchSetDetail[]>
   eventPath: string
-  sportSlug: string
-  categorySlug: string
   timezone: string
+  statusFilter: ScheduleStatusFilter
 }) => {
   if (matches.length === 0) {
     return (
       <Card className="text-sm text-ink-soft">
-        No public matches are scheduled for this category yet. Please check again closer to match
-        day.
+        {statusFilter === 'results' ?
+          'No results published yet for this category. Check back once matches are finished.'
+        : statusFilter === 'upcoming' ?
+          'No upcoming matches for this category right now.'
+        : 'No public matches are scheduled for this category yet. Please check again closer to match day.'}
       </Card>
     )
   }
 
   const groups = groupMatchesByDate(matches, timezone)
+  // Results read newest-first (what just happened, at the top); an upcoming/all queue reads
+  // soonest-first - same convention as the main schedule page.
   const orderedDateKeys = Array.from(groups.keys()).sort((left, right) => {
     if (left === 'unscheduled') return 1
     if (right === 'unscheduled') return -1
-    return left.localeCompare(right)
+    return statusFilter === 'results' ? right.localeCompare(left) : left.localeCompare(right)
   })
 
   return (
@@ -352,61 +396,155 @@ const CategorySchedule = ({
           <div key={dateKey}>
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">{label}</h3>
             <div className="flex flex-col gap-3">
-              {rows.map((match) => (
-                <Card key={match.id} interactive accent="blue">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="min-w-0">
-                      <CardDescription>{match.round_name || 'Match'}</CardDescription>
-                      <CardTitle className="mt-1">
-                        <span>
-                          {getRelationshipLabel(match.participant_a_entry_id)}
-                          {match.participantAClub ? (
-                            <span className="block text-xs font-semibold text-ink-soft">
-                              {match.participantAClub}
-                            </span>
-                          ) : null}
-                        </span>{' '}
-                        vs{' '}
-                        <span>
-                          {getRelationshipLabel(match.participant_b_entry_id)}
-                          {match.participantBClub ? (
-                            <span className="block text-xs font-semibold text-ink-soft">
-                              {match.participantBClub}
-                            </span>
-                          ) : null}
-                        </span>
-                      </CardTitle>
-                      <p className="mt-1 text-xs font-semibold text-ink-soft">
-                        {match.match_number} /{' '}
-                        <Link
-                          href={`${eventPath}/sports/${sportSlug}/${categorySlug}`}
-                          className="text-brand-secondary hover:underline"
-                        >
-                          category page
-                        </Link>
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-start gap-2 lg:items-end">
-                      <StatusBadge tone={getMatchStatusTone(match.status)}>
-                        {formatStatus(match.status)}
-                      </StatusBadge>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-ink-soft">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                          {formatTimeOnly(match.scheduled_start_at, timezone)}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                          {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
-                        </span>
+              {rows.map((match) => {
+                const entryAId = getRelationshipId(match.participant_a_entry_id)
+                const entryBId = getRelationshipId(match.participant_b_entry_id)
+                const winnerId = getRelationshipId(match.winner_entry_id)
+                const aIsWinner = Boolean(winnerId) && winnerId === entryAId
+                const bIsWinner = Boolean(winnerId) && winnerId === entryBId
+                const matchSets = (setsByMatch.get(String(match.id)) || [])
+                  .slice()
+                  .sort((left, right) => left.set_number - right.set_number)
+                const hasSets = matchSets.length > 0
+                const setWinners = matchSets.map((set) => {
+                  const aScore = set.participant_a_score ?? 0
+                  const bScore = set.participant_b_score ?? 0
+                  if (aScore > bScore) return 'a'
+                  if (bScore > aScore) return 'b'
+                  return null
+                })
+                const rowsData = [
+                  {
+                    key: 'a',
+                    label: getRelationshipLabel(match.participant_a_entry_id),
+                    clubLabel: match.participantAClub,
+                    isWinner: aIsWinner,
+                    scores: matchSets.map((set) => set.participant_a_score),
+                  },
+                  {
+                    key: 'b',
+                    label: getRelationshipLabel(match.participant_b_entry_id),
+                    clubLabel: match.participantBClub,
+                    isWinner: bIsWinner,
+                    scores: matchSets.map((set) => set.participant_b_score),
+                  },
+                ]
+
+                return (
+                  <Link
+                    key={match.id}
+                    href={`${eventPath}/matches/${match.match_number}`}
+                    className="block no-underline"
+                  >
+                    <Card interactive accent="blue" className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <CardDescription>{match.round_name || 'Scheduled Match'}</CardDescription>
+                        <StatusBadge tone={getMatchStatusTone(match.status)}>
+                          {formatStatus(match.status)}
+                        </StatusBadge>
                       </div>
-                      <Button asChild variant="secondary" size="sm">
-                        <Link href={`${eventPath}/matches/${match.match_number}`}>Match detail</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+
+                      {hasSets ? (
+                        <div className="flex flex-col divide-y divide-line rounded-card border border-line">
+                          {rowsData.map((row) => (
+                            <div
+                              key={row.key}
+                              className={cn(
+                                'flex items-center justify-between gap-3 px-3 py-1.5',
+                                row.isWinner && 'bg-mist',
+                              )}
+                            >
+                              <span className="flex min-w-0 flex-col">
+                                <span
+                                  className={cn(
+                                    'truncate text-sm sm:text-base',
+                                    row.isWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
+                                  )}
+                                  title={row.label}
+                                >
+                                  {row.label}
+                                </span>
+                                {row.clubLabel ? (
+                                  <span className="truncate text-xs text-ink-soft" title={row.clubLabel}>
+                                    {row.clubLabel}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <div className="flex shrink-0 gap-1.5">
+                                {row.scores.map((score, index) => {
+                                  const wonThisSet = setWinners[index] === row.key
+                                  return (
+                                    <span
+                                      key={index}
+                                      className={cn(
+                                        'flex w-6 items-center justify-center rounded-full text-center text-sm font-bold tabular-nums sm:text-base',
+                                        wonThisSet ?
+                                          'bg-green/15 text-green'
+                                        : row.isWinner ? 'text-ink'
+                                        : 'text-ink-soft',
+                                      )}
+                                    >
+                                      {score ?? '–'}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-ink sm:text-base" title={rowsData[0].label}>
+                              {rowsData[0].label}
+                            </p>
+                            {rowsData[0].clubLabel ? (
+                              <p className="truncate text-xs text-ink-soft" title={rowsData[0].clubLabel}>
+                                {rowsData[0].clubLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                          <span className="shrink-0 rounded-full border border-line bg-mist px-2.5 py-0.5 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+                            vs
+                          </span>
+                          <div className="min-w-0 flex-1 text-right">
+                            <p
+                              className="truncate text-right text-sm font-bold text-ink sm:text-base"
+                              title={rowsData[1].label}
+                            >
+                              {rowsData[1].label}
+                            </p>
+                            {rowsData[1].clubLabel ? (
+                              <p className="truncate text-right text-xs text-ink-soft" title={rowsData[1].clubLabel}>
+                                {rowsData[1].clubLabel}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
+                      {hasSets && match.status === 'finished' ? (
+                        <p className="text-[0.65rem] font-semibold text-ink-soft">
+                          Provisional - pending official publication
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-ink-soft">
+                        <span>{match.match_number} / {match.round_name || 'Scheduled Match'}</span>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                            {formatTimeOnly(match.scheduled_start_at, timezone)}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                            {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
+                )
+              })}
             </div>
           </div>
         )
@@ -422,7 +560,10 @@ export default async function PublicSportCategoryPage({
   params: PageParams
   searchParams: PageSearchParams
 }) {
-  const [{ eventSlug, sportSlug, categorySlug }, { tab }] = await Promise.all([params, searchParams])
+  const [{ eventSlug, sportSlug, categorySlug }, { tab, status: statusParam }] = await Promise.all([
+    params,
+    searchParams,
+  ])
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
@@ -436,7 +577,7 @@ export default async function PublicSportCategoryPage({
     notFound()
   }
 
-  const { sport, category, stages, matches, standings, bracket } = data
+  const { sport, category, stages, matches, standings, bracket, setsByMatch } = data
   const activeTab = getActiveTab(tab)
   const ruleset = getRuleset(category.ruleset_id)
   const usesBracket = category.format_type === 'single_elimination' || category.format_type === 'double_elimination'
@@ -448,6 +589,18 @@ export default async function PublicSportCategoryPage({
   const showsStandingsAndBracket = category.format_type === 'group_stage_to_knockout'
   const competitionLabel = showsStandingsAndBracket ? 'Standings & Bracket' : usesBracket ? 'Bracket' : 'Standings'
   const rulesetFacts = getRulesetFacts(ruleset)
+  const scheduleStatusFilter = getScheduleStatusFilter(statusParam)
+  const upcomingMatches = matches.filter((match) => !isResultStatus(match.status))
+  const resultMatches = matches.filter((match) => isResultStatus(match.status))
+  const scheduleStatusCounts: Record<ScheduleStatusFilter, number> = {
+    upcoming: upcomingMatches.length,
+    results: resultMatches.length,
+    all: matches.length,
+  }
+  const scheduleMatches =
+    scheduleStatusFilter === 'results' ? resultMatches
+    : scheduleStatusFilter === 'all' ? matches
+    : upcomingMatches
   const [announcements, relatedArticles] = await Promise.all([
     getScopedPublicAnnouncements({
       eventId: event.id,
@@ -639,12 +792,29 @@ export default async function PublicSportCategoryPage({
               <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Schedule</p>
               <h2 className="text-2xl font-extrabold">Matches in This Category</h2>
             </div>
+
+            <AutoSubmitForm
+              action={`${eventPath}/sports/${sportSlug}/${categorySlug}`}
+              className="mb-4 max-w-xs"
+            >
+              <input type="hidden" name="tab" value="schedule" />
+              <Field label="Status" className="min-w-0">
+                <Select name="status" defaultValue={scheduleStatusFilter}>
+                  {SCHEDULE_STATUS_FILTERS.map((filter) => (
+                    <option key={filter.key} value={filter.key}>
+                      {filter.label} ({scheduleStatusCounts[filter.key]})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </AutoSubmitForm>
+
             <CategorySchedule
-              matches={matches}
+              matches={scheduleMatches}
+              setsByMatch={setsByMatch}
               eventPath={eventPath}
-              sportSlug={sportSlug}
-              categorySlug={categorySlug}
               timezone={timezone}
+              statusFilter={scheduleStatusFilter}
             />
           </div>
         </section>

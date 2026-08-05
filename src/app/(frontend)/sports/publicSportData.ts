@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { collectEntryClubLabels, getRelationshipId, type SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
+import type { MatchSetDetail } from '../matchDetailData'
 import type { RelationshipDoc } from '../workspaces/workspaceComponents'
 
 export type SportDoc = RelationshipDoc & {
@@ -56,10 +57,12 @@ export type PublicMatch = {
   scheduled_start_at?: string | null
   scheduled_end_at?: string | null
   status: string
+  score_summary?: string | null
   sport_id?: RelationshipDoc | string | number | null
   category_id?: RelationshipDoc | string | number | null
   participant_a_entry_id?: RelationshipDoc | string | number | null
   participant_b_entry_id?: RelationshipDoc | string | number | null
+  winner_entry_id?: RelationshipDoc | string | number | null
   venue_id?: RelationshipDoc | string | number | null
   court_id?: RelationshipDoc | string | number | null
   // Parent club (team_id.club_id / player_id.club_id) - see collectEntryClubLabels.
@@ -106,6 +109,9 @@ export type CategoryDetailData = {
   matches: PublicMatch[]
   standings: StandingRow[]
   bracket?: PublicBracket
+  // Per-set score rows, keyed by String(match.id) - see matches/[matchNumber]/publicMatchComponents
+  // and schedule/page.tsx's own "Set by set" table which this powers the same rendering for.
+  setsByMatch: Map<string, MatchSetDetail[]>
 }
 
 export const standingFormatTypes = new Set([
@@ -228,6 +234,30 @@ export const getCategoryDetail = async (
   const matches = matchesResult.docs as PublicMatch[]
   const standings = standingsResult.docs as StandingRow[]
 
+  // Same reasoning as schedule/page.tsx: `score_summary` is a freeform recap string, not a real
+  // per-set breakdown - fetching the actual match-sets rows lets the category schedule render one
+  // row per participant with one column per set, matching every other schedule surface in the app.
+  const matchIdsWithSets = matches.filter((match) => match.score_summary).map((match) => match.id)
+  const matchSetsResult =
+    matchIdsWithSets.length > 0 ?
+      await payload.find({
+        collection: 'match-sets',
+        depth: 0,
+        limit: 500,
+        sort: 'set_number',
+        where: { match_id: { in: matchIdsWithSets } },
+      })
+    : null
+  const setsByMatch = new Map<string, MatchSetDetail[]>()
+  for (const set of (matchSetsResult?.docs ?? []) as (MatchSetDetail & {
+    match_id?: RelationshipDoc | string | number | null
+  })[]) {
+    const matchKey = String(getRelationshipId(set.match_id))
+    const rows = setsByMatch.get(matchKey) || []
+    rows.push(set)
+    setsByMatch.set(matchKey, rows)
+  }
+
   const clubEntryIds = [
     ...matches.flatMap((match) => [
       getRelationshipId(match.participant_a_entry_id),
@@ -255,5 +285,6 @@ export const getCategoryDetail = async (
     matches,
     standings,
     bracket: bracketsResult.docs[0] as PublicBracket | undefined,
+    setsByMatch,
   }
 }
