@@ -46,6 +46,11 @@ type EventDetailsDoc = {
   status?: string | null
   visibility?: string | null
   rules_summary?: string | null
+  medal_tally_enabled?: boolean | null
+  medal_ranking_method?: string | null
+  medal_points_gold?: number | null
+  medal_points_silver?: number | null
+  medal_points_bronze?: number | null
 }
 
 // Payload stores dates as UTC ISO strings; datetime-local inputs need "YYYY-MM-DDTHH:mm" in
@@ -233,6 +238,60 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
                 <option value="published">Published</option>
                 <option value="archived">Archived</option>
               </Select>
+            </Field>
+          </div>
+        </Card>
+
+        <Card className="flex flex-col gap-4">
+          <div>
+            <CardTitle>Medal tally</CardTitle>
+            <p className="mt-1 text-sm text-ink-soft">
+              Turns on the public and workspace medal tally (gold/silver/bronze derived from
+              finished categories, ranked by contingent - the Olympic-style overall standings).
+              The Medals workspace page points here to turn it on.
+            </p>
+          </div>
+          <label className="flex h-11 items-center gap-2 text-sm font-semibold text-ink">
+            <input
+              type="checkbox"
+              name="medalTallyEnabled"
+              defaultChecked={Boolean(event.medal_tally_enabled)}
+              className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+            />
+            Enable medal tally for this event
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Ranking method">
+              <Select name="medalRankingMethod" defaultValue={event.medal_ranking_method || 'gold_first'}>
+                <option value="gold_first">Most gold first (Olympic-style)</option>
+                <option value="weighted_points">Weighted points</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Gold points" description="Only used when ranking method is Weighted points.">
+              <Input
+                name="medalPointsGold"
+                type="number"
+                min={0}
+                defaultValue={event.medal_points_gold ?? 3}
+              />
+            </Field>
+            <Field label="Silver points" description="Only used when ranking method is Weighted points.">
+              <Input
+                name="medalPointsSilver"
+                type="number"
+                min={0}
+                defaultValue={event.medal_points_silver ?? 2}
+              />
+            </Field>
+            <Field label="Bronze points" description="Only used when ranking method is Weighted points.">
+              <Input
+                name="medalPointsBronze"
+                type="number"
+                min={0}
+                defaultValue={event.medal_points_bronze ?? 1}
+              />
             </Field>
           </div>
         </Card>

@@ -19,21 +19,9 @@ import {
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
-import { MATCH_TRANSITIONS, isValidTransition } from './matchLifecycle'
+import { MATCH_TRANSITIONS, PUBLIC_STATUS_NOTICES, isValidTransition } from './matchLifecycle'
 
-// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.6: only status changes a spectator would actually care
-// about post to the public "Match Updates" feed - ongoing/paused/finished/under_review are
-// internal operating states with no public-facing meaning of their own (finished still says
-// "Provisional" until result_published; under_review shouldn't alarm anyone).
-const PUBLIC_STATUS_NOTICES: Record<string, { urgency: 'warning' | 'urgent' | 'result'; displayMode: 'banner' | 'urgent_alert' | 'feed'; label: string }> = {
-  postponed: { urgency: 'warning', displayMode: 'banner', label: 'postponed' },
-  cancelled: { urgency: 'warning', displayMode: 'banner', label: 'cancelled' },
-  disputed: { urgency: 'urgent', displayMode: 'urgent_alert', label: 'marked disputed' },
-  result_published: { urgency: 'result', displayMode: 'feed', label: 'result published' },
-  walkover: { urgency: 'result', displayMode: 'feed', label: 'decided by walkover' },
-}
-
-type MinimalMatch = {
+export type MinimalMatch = {
   id: string | number
   event_id?: string | number | null
   category_id?: string | number | null
@@ -107,7 +95,11 @@ const revalidateMatch = (matchNumber: string) => {
 }
 
 const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
-const standingResultStatuses = new Set(['finished', 'result_published'])
+// 'walkover' included alongside 'finished'/'result_published' - live testing confirmed a
+// round-robin match marked Walkover (a real, decided outcome with a winner_entry_id already set)
+// left the standings table showing pre-walkover numbers indefinitely, since this gate previously
+// never recognized that status.
+const standingResultStatuses = new Set(['finished', 'result_published', 'walkover'])
 const ACTIVE_SCORE_ENTRY_STATUSES = new Set(['ongoing', 'paused', 'under_review'])
 const rankingStageTypes = new Set(['time_trial', 'score_ranking'])
 
@@ -162,7 +154,11 @@ const recalculateMedalsBestEffort = async ({
   }
 }
 
-const recalculateResultCachesBestEffort = async ({
+// Exported so schedulerActions.ts's bulk Excel import can keep standings/bracket/medal caches
+// consistent after a status transition, the same way every single-match transition already does -
+// reimplementing this per-stage-type recalculation logic a second time for the bulk path would be
+// exactly the kind of divergence that quietly breaks one path and not the other.
+export const recalculateResultCachesBestEffort = async ({
   payload,
   match,
   matchNumber,
@@ -231,7 +227,11 @@ const recalculateResultCachesBestEffort = async ({
   }
 
   if (stage.stage_type === 'single_elimination') {
-    if (match.status === 'result_published' && match.winner_entry_id) {
+    // 'walkover' has a real winner_entry_id (requiresWinnerSelection on that transition already
+    // enforces it) and needs to advance into the next round exactly like a result_published win -
+    // otherwise a walkover'd match leaves its next-round slot empty forever. The seed script for
+    // Nusantara Grand Games had to hand-wire bracket byes past this exact gap.
+    if ((match.status === 'result_published' || match.status === 'walkover') && match.winner_entry_id) {
       try {
         const advancement = await attemptSingleEliminationWinnerAdvancement(payload, match.id)
 
@@ -310,7 +310,7 @@ const recalculateResultCachesBestEffort = async ({
     // double-elimination strategy yet (winners/losers bracket + grand final reset has no clean
     // gold/silver/bronze mapping without more design work), so a category on this stage type
     // never produces medals even with medal_tally_enabled on.
-    if (match.status === 'result_published' && match.winner_entry_id) {
+    if ((match.status === 'result_published' || match.status === 'walkover') && match.winner_entry_id) {
       try {
         const advancement = await attemptDoubleEliminationAdvancement(payload, match.id)
 

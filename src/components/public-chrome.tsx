@@ -13,7 +13,10 @@ import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
 // genuinely public destinations from prd/README.md section 21.2 do. `/workspaces` is the explicit
 // exclusion from the redesign R1 brief; `/scheduler` (the standalone queue foundation route) is the
 // same kind of internal tool and is excluded for the same reason.
-const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler']
+// `/login` is excluded too: it's a full-bleed split-screen (see login/page.tsx) that supplies its
+// own "back to home" affordance, so the floating nav pill and marketing footer would just be
+// redundant chrome fighting the brand panel for the same edge of the screen.
+const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler', '/login']
 // AUDIT_UI_UX_CSS PUB-17/P2 item 4: the venue display/slideshow route is meant for a TV or
 // projector at arm's length, not a normal visitor - the floating nav and footer would eat screen
 // space and add clutter nobody in that context can interact with anyway.

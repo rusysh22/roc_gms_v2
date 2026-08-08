@@ -68,6 +68,54 @@ export async function addSportAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardUpdated=1`)
 }
 
+// Mirrors deleteCategoryAction's guard (categoryActions.ts) - no cascade delete of anything with
+// real competition data. Courts and matches are checked directly (both denormalize sport_id);
+// categories are checked too since a sport backing a category should be retired via that
+// category, not out from under it. Rulesets have no delete UI of their own and no value without
+// their sport, so they're removed along with it rather than left permanently orphaned.
+export async function deleteSportAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const sportId = text(formData, 'sportId')
+
+  const sport = await payload.findByID({ collection: 'sports', id: sportId, depth: 0 }).catch(() => null)
+  if (!sport || String(sport.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=invalid_relationship`)
+  }
+
+  const [categories, courts, matches] = await Promise.all([
+    payload.count({ collection: 'competition-categories', where: { sport_id: { equals: sportId } } }),
+    payload.count({ collection: 'courts', where: { sport_id: { equals: sportId } } }),
+    payload.count({ collection: 'matches', where: { sport_id: { equals: sportId } } }),
+  ])
+  if (categories.totalDocs > 0 || courts.totalDocs > 0 || matches.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=sport_in_use`)
+  }
+
+  const rulesets = await payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { sport_id: { equals: sportId } } })
+  for (const ruleset of rulesets.docs) {
+    await payload.delete({ collection: 'rulesets', id: ruleset.id })
+  }
+
+  await payload.delete({ collection: 'sports', id: sportId })
+  await recordAuditLog({
+    payload,
+    action: 'sport.delete',
+    entityType: 'sports',
+    entityId: sportId,
+    before: sport,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardUpdated=1`)
+}
+
 export async function addRulesetAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,

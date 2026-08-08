@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
-
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../workspaceAuth'
+import { ClientRedirect } from './ClientRedirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,13 +33,13 @@ export default async function WorkspaceEntryPage() {
 
   const roles = access.user.roles || []
   if (roles.includes('super_admin') || roles.includes('event_admin')) {
-    redirect('/workspaces/event-admin')
+    return <ClientRedirect to="/workspaces/event-admin" />
   }
-  if (roles.includes('scheduler')) redirect('/workspaces/scheduler')
-  if (roles.includes('match_officer')) redirect('/workspaces/match-officer')
-  if (roles.includes('content_admin')) redirect('/workspaces/content-admin')
-  if (roles.includes('draw')) redirect('/workspaces/event-admin/entries')
-  if (roles.includes('registration')) redirect('/workspaces/event-admin/registrations')
+  if (roles.includes('scheduler')) return <ClientRedirect to="/workspaces/scheduler" />
+  if (roles.includes('match_officer')) return <ClientRedirect to="/workspaces/match-officer" />
+  if (roles.includes('content_admin')) return <ClientRedirect to="/workspaces/content-admin" />
+  if (roles.includes('draw')) return <ClientRedirect to="/workspaces/event-admin/entries" />
+  if (roles.includes('registration')) return <ClientRedirect to="/workspaces/event-admin/registrations" />
 
   return <WorkspaceUnauthorized workspaceName="Operational Workspaces" allowedRoles={[...ALL_WORKSPACE_ROLES]} />
 }

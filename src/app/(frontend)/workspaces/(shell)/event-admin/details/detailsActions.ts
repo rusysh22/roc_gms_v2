@@ -60,6 +60,13 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
 
   const timezoneInput = text(formData, 'timezone')
   const timezone = timezones.has(timezoneInput) ? timezoneInput : DEFAULT_EVENT_TIMEZONE
+  const medalRankingMethodInput = text(formData, 'medalRankingMethod')
+  const medalRankingMethod =
+    medalRankingMethodInput === 'weighted_points' ? 'weighted_points' : 'gold_first'
+  const toNonNegativeInt = (value: string, fallback: number) => {
+    const parsed = Number.parseInt(value, 10)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+  }
 
   const data = {
     name,
@@ -78,6 +85,11 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
     archive_at: toIso(text(formData, 'archiveAt')),
     status: status as 'draft' | 'setup' | 'coming_soon' | 'live' | 'completed' | 'archived',
     visibility: visibility as 'hidden' | 'coming_soon' | 'preview_only' | 'published' | 'archived',
+    medal_tally_enabled: formData.get('medalTallyEnabled') === 'on',
+    medal_ranking_method: medalRankingMethod as 'gold_first' | 'weighted_points',
+    medal_points_gold: toNonNegativeInt(text(formData, 'medalPointsGold'), 3),
+    medal_points_silver: toNonNegativeInt(text(formData, 'medalPointsSilver'), 2),
+    medal_points_bronze: toNonNegativeInt(text(formData, 'medalPointsBronze'), 1),
   }
 
   const before = await payload.findByID({ collection: 'events', id: event.id, depth: 0 })

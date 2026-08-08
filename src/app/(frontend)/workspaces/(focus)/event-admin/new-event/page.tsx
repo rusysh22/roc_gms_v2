@@ -53,7 +53,7 @@ import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
-import { addRulesetAction, addSportAction } from './sportActions'
+import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
 import { SportCatalogPicker } from './SportCatalogPicker'
 import {
   addCategoryAction,
@@ -70,6 +70,7 @@ import {
   addTeamAction,
   cancelParticipantsImportAction,
   confirmParticipantsImportAction,
+  deletePlayerAction,
   previewParticipantsImportAction,
 } from './participantActions'
 import { addEntriesAction, shuffleSeedsAction, withdrawEntryAction } from './entriesSeedActions'
@@ -150,6 +151,8 @@ const errorMessages: Record<string, string> = {
   empty_catalog_selection: 'Tick at least one event before adding.',
   category_in_use:
     'This category already has entries, stages, or matches - archive it instead of deleting.',
+  sport_in_use: 'This sport already has categories, courts, or matches - remove those first.',
+  player_in_use: 'This player already has entries or roster spots - remove those first.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -1349,15 +1352,29 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
         <div className="flex max-h-[32rem] flex-col gap-3 overflow-y-auto pr-1">
           {sports.docs.map((sport) => (
             <Card key={sport.id} className="flex flex-col gap-4">
-              <div>
-                <p className="text-sm font-extrabold text-ink">{sport.name}</p>
-                <p className="text-xs font-semibold text-ink-soft">
-                  <GlossaryHint
-                    term="Rulesets"
-                    definition="How score, winning, standings, and tie-breaks are calculated for this sport. Optional - categories work fine without one."
-                  />
-                  : {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
-                </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-extrabold text-ink">{sport.name}</p>
+                  <p className="text-xs font-semibold text-ink-soft">
+                    <GlossaryHint
+                      term="Rulesets"
+                      definition="How score, winning, standings, and tie-breaks are calculated for this sport. Optional - categories work fine without one."
+                    />
+                    : {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
+                  </p>
+                </div>
+                <form id={`delete-sport-${sport.id}`} action={deleteSportAction}>
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="sportId" value={sport.id} />
+                </form>
+                <ConfirmSubmitButton
+                  formId={`delete-sport-${sport.id}`}
+                  size="sm"
+                  variant="ghost"
+                  confirmMessage={`Delete "${sport.name}"? Only allowed if it has no categories, courts, or matches yet.`}
+                >
+                  Delete
+                </ConfirmSubmitButton>
               </div>
               <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
                 <input type="hidden" name="eventId" value={eventId} />
@@ -2261,10 +2278,28 @@ const ParticipantsStep = async ({
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {players.docs.map((player) => {
               const clubLabel = getRelationshipLabel(player.club_id as RelationshipDoc, '')
+              const deleteFormId = `delete-player-${player.id}`
               return (
-                <div key={player.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                  <strong className="block text-sm font-bold text-ink">{player.name}</strong>
-                  {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                <div
+                  key={player.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2"
+                >
+                  <div>
+                    <strong className="block text-sm font-bold text-ink">{player.name}</strong>
+                    {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                  </div>
+                  <form id={deleteFormId} action={deletePlayerAction}>
+                    <input type="hidden" name="eventId" value={eventId} />
+                    <input type="hidden" name="playerId" value={player.id} />
+                  </form>
+                  <ConfirmSubmitButton
+                    formId={deleteFormId}
+                    size="sm"
+                    variant="ghost"
+                    confirmMessage={`Delete "${player.name}"? Only allowed if they have no entries or roster spots yet.`}
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
                 </div>
               )
             })}

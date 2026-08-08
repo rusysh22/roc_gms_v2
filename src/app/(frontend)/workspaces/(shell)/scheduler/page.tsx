@@ -37,8 +37,10 @@ export const dynamic = 'force-dynamic'
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.4: postponed was previously a dead end -
 // RescheduleMatchDialog couldn't reach a postponed match at all, so "postpone" had no guided way
-// back to a real schedule. Included here alongside the original three statuses.
-const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'postponed'])
+// back to a real schedule. Included here alongside the original three statuses. 'published' added
+// after live testing found it was the single most common status for an upcoming match, yet the
+// Reschedule button never appeared for it - see the matching comment in schedulerActions.ts.
+const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'published', 'postponed'])
 
 const scheduleErrorMessages: Record<string, string> = {
   invalid_match: 'Fill in every field with valid values before creating the match.',
@@ -280,6 +282,9 @@ export default async function SchedulerWorkspacePage({
             </Button>
             <Button asChild variant="secondary">
               <a href="/workspaces/scheduler/export">Export (.xlsx)</a>
+            </Button>
+            <Button asChild variant="secondary">
+              <Link href="/workspaces/scheduler/import">Import (.xlsx)</Link>
             </Button>
             <Button asChild variant="secondary">
               <Link href="/workspaces/scheduler/optimize">Schedule Optimizer</Link>

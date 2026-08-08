@@ -80,6 +80,30 @@
  * once an edge is reached; the `scroll`-attachment shadows stay pinned to the viewport and only
  * become visible where a local gradient hasn't already covered them.
  */
+/* Login split-screen showcase (src/app/(frontend)/login/LoginShowcase.tsx): `drift` animates the
+ * ambient background blobs, `fill-bar` drives the story-style progress dots. Referenced via
+ * Tailwind arbitrary `animate-[drift_9s_ease-in-out_infinite]` utilities - plain top-level
+ * `@keyframes` so the animation name resolves regardless of Tailwind's layer/cascade order.
+ */
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(18px, -14px);
+  }
+}
+
+@keyframes fill-bar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
 @layer components {
   .table-scroll-shadow {
     background:

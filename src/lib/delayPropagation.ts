@@ -3,10 +3,11 @@ import { UNSTARTED_TARGET_STATUSES } from './winnerAdvancement'
 // Must match schedulerActions.ts's reschedulableFromStates exactly - it can't be imported
 // directly ('use server' files may only export async functions). Deliberately narrower than
 // UNSTARTED_TARGET_STATUSES (used below for "has this match not started yet") - a match already
-// past 'scheduled' (published, check_in_open, ready_to_start) hasn't run yet either, but
-// rescheduleMatchAction refuses to move it, so suggesting a downstream shift for one would fail
-// on Apply.
-const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'postponed'])
+// at check_in_open/ready_to_start hasn't run yet either, but rescheduleMatchAction refuses to move
+// it (that close to start time, Postpone's explicit public warning is more appropriate than a
+// quiet time nudge), so suggesting a downstream shift for one would fail on Apply. 'published' is
+// included, matching schedulerActions.ts.
+const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'published', 'postponed'])
 
 type RelationshipDoc = { id?: string | number; name?: string; display_name?: string }
 

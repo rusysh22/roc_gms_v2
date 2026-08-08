@@ -56,6 +56,22 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
 export const getAllowedTransitions = (status: string) =>
   MATCH_TRANSITIONS.filter((transition) => transition.from.includes(status))
 
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.6: only status changes a spectator would actually care
+// about post to the public "Match Updates" feed - ongoing/paused/finished/under_review are
+// internal operating states with no public-facing meaning of their own (finished still says
+// "Provisional" until result_published; under_review shouldn't alarm anyone).
+//
+// Lives here (a plain module) rather than in matchActions.ts - a "use server" file's static
+// analysis only allows async-function exports, so a plain object constant like this has to live
+// outside the action file that uses it (schedulerActions.ts's bulk import needs it too).
+export const PUBLIC_STATUS_NOTICES: Record<string, { urgency: 'warning' | 'urgent' | 'result'; displayMode: 'banner' | 'urgent_alert' | 'feed'; label: string }> = {
+  postponed: { urgency: 'warning', displayMode: 'banner', label: 'postponed' },
+  cancelled: { urgency: 'warning', displayMode: 'banner', label: 'cancelled' },
+  disputed: { urgency: 'urgent', displayMode: 'urgent_alert', label: 'marked disputed' },
+  result_published: { urgency: 'result', displayMode: 'feed', label: 'result published' },
+  walkover: { urgency: 'result', displayMode: 'feed', label: 'decided by walkover' },
+}
+
 const STANDINGS_STAGE_TYPES = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.5/15.7 (P0): "Confirm and Publish Result" previously

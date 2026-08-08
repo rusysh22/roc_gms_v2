@@ -678,3 +678,44 @@ export async function addPlayerAction(formData: FormData): Promise<void> {
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
 }
+
+// Mirrors deleteCategoryAction's guard (categoryActions.ts) - no cascade delete of anything with
+// real competition data. A player can be attached to the event two ways: directly as an
+// individual-mode competition entry (player_id), or indirectly via a team/pair roster spot
+// (rosters.player_id) - either one blocks deletion.
+export async function deletePlayerAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const playerId = text(formData, 'playerId')
+
+  const player = await payload.findByID({ collection: 'players', id: playerId, depth: 0 }).catch(() => null)
+  if (!player || String(player.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+
+  const [entries, rosters] = await Promise.all([
+    payload.count({ collection: 'competition-entries', where: { player_id: { equals: playerId } } }),
+    payload.count({ collection: 'rosters', where: { player_id: { equals: playerId } } }),
+  ])
+  if (entries.totalDocs > 0 || rosters.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=player_in_use`)
+  }
+
+  await payload.delete({ collection: 'players', id: playerId })
+  await recordAuditLog({
+    payload,
+    action: 'player.delete',
+    entityType: 'players',
+    entityId: playerId,
+    before: player,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
