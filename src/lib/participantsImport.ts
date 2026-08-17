@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 
-export type ParsedClubRow = { name: string; contactPerson?: string; contactEmail?: string; categoryName?: string }
-export type ParsedTeamRow = { name: string; clubName?: string; contactEmail?: string; categoryName?: string }
+export type ParsedClubRow = { name: string; contactPerson?: string; contactEmail?: string; categoryNames?: string[] }
+export type ParsedTeamRow = { name: string; clubName?: string; contactEmail?: string; categoryNames?: string[] }
 export type ParsedPlayerRow = {
   name: string
   clubName?: string
@@ -10,7 +10,7 @@ export type ParsedPlayerRow = {
   gender?: string
   identificationNumber?: string
   photo?: string
-  categoryName?: string
+  categoryNames?: string[]
 }
 // A pair has no name of its own on the sheet - it's identified by its two players, matched by
 // name against the Players sheet (same file) or an existing player already in the event.
@@ -21,7 +21,7 @@ export type ParsedPairRow = {
   player2Name: string
   teamName?: string
   clubName?: string
-  categoryName?: string
+  categoryNames?: string[]
 }
 
 export type ParsedParticipantsWorkbook = {
@@ -32,6 +32,26 @@ export type ParsedParticipantsWorkbook = {
 }
 
 const str = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim())
+
+// `category_name` may list more than one category, comma-separated, so a single row can register
+// into every category it competes in (e.g. a player entered in both Singles and Doubles, or a team
+// entered in both a group stage and a separate cup category) instead of only ever the one named.
+// Blank entries (from stray/trailing commas) are dropped and exact-duplicate names collapse to one
+// - the row shouldn't be queued to register into the same category name twice just because it was
+// typed twice.
+const parseCategoryNames = (raw: string): string[] | undefined => {
+  const seen = new Set<string>()
+  const names: string[] = []
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    names.push(trimmed)
+  }
+  return names.length > 0 ? names : undefined
+}
 
 const sheetRows = (workbook: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] => {
   const sheet = workbook.Sheets[sheetName]
@@ -50,7 +70,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       name: str(row.name),
       contactPerson: str(row.contact_person) || undefined,
       contactEmail: str(row.contact_email) || undefined,
-      categoryName: str(row.category_name) || undefined,
+      categoryNames: parseCategoryNames(str(row.category_name)),
     }))
     .filter((row) => row.name)
 
@@ -59,7 +79,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       name: str(row.name),
       clubName: str(row.club_name) || undefined,
       contactEmail: str(row.contact_email) || undefined,
-      categoryName: str(row.category_name) || undefined,
+      categoryNames: parseCategoryNames(str(row.category_name)),
     }))
     .filter((row) => row.name)
 
@@ -72,7 +92,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       gender: str(row.gender).toLowerCase() || undefined,
       identificationNumber: str(row.identification_number) || undefined,
       photo: str(row.photo) || undefined,
-      categoryName: str(row.category_name) || undefined,
+      categoryNames: parseCategoryNames(str(row.category_name)),
     }))
     .filter((row) => row.name)
 
@@ -82,7 +102,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       player2Name: str(row.player2_name),
       teamName: str(row.team_name) || undefined,
       clubName: str(row.club_name) || undefined,
-      categoryName: str(row.category_name) || undefined,
+      categoryNames: parseCategoryNames(str(row.category_name)),
     }))
     .filter((row) => row.player1Name && row.player2Name)
 

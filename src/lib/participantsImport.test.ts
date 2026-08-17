@@ -33,20 +33,44 @@ describe('parseParticipantsWorkbook', () => {
     // Teams sheet.
     const teamWithNoClub = parsed.teams.find((team) => team.name === 'Organizing Committee Mixed Volleyball')
     expect(teamWithNoClub).toMatchObject({ clubName: undefined })
-    // The register-on-import shortcut: a category_name value comes back as-is, a blank one comes
-    // back undefined - same convention as every other optional cell.
+    // The register-on-import shortcut: a category_name value comes back as a name array, a blank
+    // one comes back undefined - same convention as every other optional cell.
     const playerWithCategory = parsed.players.find((player) => player.name === 'Amanda Putri')
-    expect(playerWithCategory).toMatchObject({ categoryName: 'Badminton Singles Women' })
+    expect(playerWithCategory).toMatchObject({ categoryNames: ['Badminton Singles Women'] })
     const playerWithoutCategory = parsed.players.find((player) => player.name === 'John Smith')
-    expect(playerWithoutCategory).toMatchObject({ categoryName: undefined })
+    expect(playerWithoutCategory).toMatchObject({ categoryNames: undefined })
+    // The Teams sheet demonstrates the comma-separated multi-category form.
+    const teamWithMultipleCategories = parsed.teams.find((team) => team.name === 'Jakarta Futsal Men')
+    expect(teamWithMultipleCategories).toMatchObject({ categoryNames: ['Futsal Men', 'Futsal Open'] })
     // Pairs are matched by player name, not id - both names must round-trip exactly.
     expect(parsed.pairs[0]).toMatchObject({
       player1Name: 'John Smith',
       player2Name: 'Citra Lestari',
       teamName: undefined,
       clubName: undefined,
-      categoryName: undefined,
+      categoryNames: undefined,
     })
+  })
+
+  it('splits category_name on commas, trims blanks, and dedupes case-insensitively', () => {
+    const workbook = XLSX.utils.book_new()
+    const playersSheet = XLSX.utils.json_to_sheet([
+      { name: 'Jane Doe', category_name: 'Singles Women, Doubles Women , , singles women' },
+      { name: 'No Category', category_name: '' },
+      { name: 'Only Commas', category_name: ' , , ' },
+    ])
+    XLSX.utils.book_append_sheet(workbook, playersSheet, 'Players')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+    const parsed = parseParticipantsWorkbook(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+    )
+
+    expect(parsed.players.find((p) => p.name === 'Jane Doe')).toMatchObject({
+      categoryNames: ['Singles Women', 'Doubles Women'],
+    })
+    expect(parsed.players.find((p) => p.name === 'No Category')).toMatchObject({ categoryNames: undefined })
+    expect(parsed.players.find((p) => p.name === 'Only Commas')).toMatchObject({ categoryNames: undefined })
   })
 
   it('leaves identificationNumber and photo undefined when the columns are blank', () => {

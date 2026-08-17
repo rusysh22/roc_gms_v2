@@ -83,11 +83,19 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
     ],
     [
       '7. "category_name" (on Clubs, Teams, Players, and Pairs) is optional and does two things at once: it ' +
-        'creates the row AND registers it as an entry into that category in one step, instead of registering ' +
-        'it later in the wizard\'s Registration step. It must exactly match (case-insensitive) the name of a ' +
-        'category you already created in this event, and that category\'s participant type must match the ' +
-        'sheet (e.g. a Players row can only register into an individual-mode category). Leave it blank to ' +
-        'register participants manually later - nothing breaks either way.',
+        'creates the row AND registers it as an entry into one or more categories in the same step, instead of ' +
+        'registering it later in the wizard\'s Registration step. Each name must exactly match (case-insensitive) ' +
+        'the name of a category you already created in this event, and that category\'s participant type must ' +
+        'match the sheet (e.g. a Players row can only register into an individual-mode category). Leave it ' +
+        'blank to register participants manually later - nothing breaks either way.',
+    ],
+    [
+      '7a. To register the same row into more than one category (e.g. a player entered in both Singles and ' +
+        'Doubles, or a team entered in both a group stage and a separate cup category), list every category ' +
+        'name in that one cell separated by commas: "Badminton Singles Men, Badminton Doubles Men". Each name ' +
+        'is matched and validated independently - if one of the names in the list doesn\'t match anything, only ' +
+        'that one registration is skipped (with a warning after import), the row and its other, valid ' +
+        'registrations are unaffected.',
     ],
     ['8. Do not rename the Clubs / Teams / Players / Pairs sheet tabs - the importer reads them by name.'],
     ['9. Delete the example rows before adding your own data (or just overwrite them row by row).'],
@@ -111,9 +119,10 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       name: 'Jakarta Futsal Men',
       club_name: 'Contingent Jakarta',
       contact_email: 'team.jakarta.futsal@example.com',
-      // Demonstrates the optional register-on-import shortcut - only matches if a category named
-      // exactly "Futsal Men" already exists in this event, otherwise this cell is simply ignored.
-      category_name: 'Futsal Men',
+      // Demonstrates the optional register-on-import shortcut, including the comma-separated
+      // multi-category form - only matches whichever of these two category names already exist in
+      // this event ("Futsal Men", "Futsal Open"), the other is simply skipped with a warning.
+      category_name: 'Futsal Men, Futsal Open',
     },
     { name: 'Bandung Futsal Men', club_name: 'Contingent Bandung', contact_email: '', category_name: '' },
     { name: 'Jakarta Basketball 5x5 Women', club_name: 'Contingent Jakarta', contact_email: '', category_name: '' },

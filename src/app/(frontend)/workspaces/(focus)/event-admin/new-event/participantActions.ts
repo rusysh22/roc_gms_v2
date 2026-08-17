@@ -244,11 +244,12 @@ const buildCategoryNameIndex = (categories: ImportCategoryDoc[]) => {
 }
 
 // `category_name` on any import sheet (see participantsImportTemplate.ts) is an optional shortcut
-// that both creates the row AND registers it into a category in one step, instead of a separate
-// trip through the wizard's Registration step. Resolved by exact case-insensitive name match
-// against this event's categories - ambiguous (same name reused across two categories) or
-// mode-mismatched (e.g. a Players row against a team-mode category) resolves to a warning instead
-// of guessing which one was meant.
+// that both creates the row AND registers it into one or more categories in one step, instead of a
+// separate trip through the wizard's Registration step - the cell may list several comma-separated
+// names (parseCategoryNames in participantsImport.ts), each resolved and applied independently here.
+// Resolved by exact case-insensitive name match against this event's categories - ambiguous (same
+// name reused across two categories) or mode-mismatched (e.g. a Players row against a team-mode
+// category) resolves to a warning for that one name instead of guessing which one was meant.
 const resolveImportCategory = (
   categoriesByName: Map<string, ImportCategoryDoc[]>,
   categoryName: string | undefined,
@@ -337,13 +338,16 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   const warn = (sheet: string, name: string, reason: string) => {
     issues.push({ sheet, name: name || '(blank)', reason })
   }
-  const checkCategory = (sheet: string, name: string, categoryName: string | undefined, expectedMode: string) => {
-    const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
-    if (!result) return
-    if ('warning' in result) {
-      warn(sheet, name, result.warning)
-    } else {
-      entriesToRegister += 1
+  const checkCategory = (sheet: string, name: string, categoryNames: string[] | undefined, expectedMode: string) => {
+    if (!categoryNames) return
+    for (const categoryName of categoryNames) {
+      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+      if (!result) continue
+      if ('warning' in result) {
+        warn(sheet, name, result.warning)
+      } else {
+        entriesToRegister += 1
+      }
     }
   }
 
@@ -360,7 +364,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
     knownClubNames.add(key)
     clubsToCreate += 1
-    checkCategory('Clubs', row.name, row.categoryName, 'club')
+    checkCategory('Clubs', row.name, row.categoryNames, 'club')
   }
 
   for (const row of parsed.teams) {
@@ -378,7 +382,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
     knownTeamSlugs.add(slug)
     teamsToCreate += 1
-    checkCategory('Teams', row.name, row.categoryName, 'team')
+    checkCategory('Teams', row.name, row.categoryNames, 'team')
   }
 
   for (const row of parsed.players) {
@@ -398,7 +402,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
     playersToCreate += 1
     knownPlayerNames.add(row.name.trim().toLowerCase())
-    checkCategory('Players', row.name, row.categoryName, 'individual')
+    checkCategory('Players', row.name, row.categoryNames, 'individual')
   }
 
   for (const row of parsed.pairs) {
@@ -417,7 +421,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Pairs', label, `Club "${row.clubName}" not found - will be saved without a club`)
     }
     pairsToCreate += 1
-    checkCategory('Pairs', label, row.categoryName, 'pair')
+    checkCategory('Pairs', label, row.categoryNames, 'pair')
   }
 
   return { clubsToCreate, teamsToCreate, playersToCreate, pairsToCreate, entriesToRegister, skippedCount, issues }
@@ -583,22 +587,25 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     collection: 'clubs' | 'teams' | 'players',
     sourceId: number,
     sourceName: string,
-    categoryName: string | undefined,
+    categoryNames: string[] | undefined,
     expectedMode: string,
   ) => {
-    const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
-    if (!result) return
-    if ('warning' in result) {
-      warn(sheet, sourceName, result.warning)
-      return
+    if (!categoryNames) return
+    for (const categoryName of categoryNames) {
+      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+      if (!result) continue
+      if ('warning' in result) {
+        warn(sheet, sourceName, result.warning)
+        continue
+      }
+      registrations.push({
+        collection,
+        sourceId,
+        sourceName,
+        categoryId: Number(result.category.id),
+        entryType: entryTypeByMode[expectedMode],
+      })
     }
-    registrations.push({
-      collection,
-      sourceId,
-      sourceName,
-      categoryId: Number(result.category.id),
-      entryType: entryTypeByMode[expectedMode],
-    })
   }
 
   for (const row of parsed.clubs) {
@@ -633,7 +640,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       const doc = await payload.create({ collection: 'clubs', data })
       clubIdByName.set(key, Number(doc.id))
       created += 1
-      queueRegistration('Clubs', 'clubs', Number(doc.id), row.name, row.categoryName, 'club')
+      queueRegistration('Clubs', 'clubs', Number(doc.id), row.name, row.categoryNames, 'club')
     } catch {
       skip('Clubs', row.name, 'Could not save (unexpected error)')
     }
@@ -669,7 +676,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       }
       const doc = await payload.create({ collection: 'teams', data })
       created += 1
-      queueRegistration('Teams', 'teams', Number(doc.id), row.name, row.categoryName, 'team')
+      queueRegistration('Teams', 'teams', Number(doc.id), row.name, row.categoryNames, 'team')
     } catch {
       skip('Teams', row.name, 'Could not save (unexpected error)')
     }
@@ -707,7 +714,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       }
       playerIdByName.set(String(row.name).trim().toLowerCase(), Number(doc.id))
       created += 1
-      queueRegistration('Players', 'players', Number(doc.id), row.name, row.categoryName, 'individual')
+      queueRegistration('Players', 'players', Number(doc.id), row.name, row.categoryNames, 'individual')
     } catch {
       // Falls through here mainly if the unique (event_id, identification_number) DB index is hit
       // despite the in-memory check above - e.g. a concurrent import into the same event.
@@ -779,7 +786,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         })
       }
       created += 1
-      queueRegistration('Pairs', 'teams', Number(team.id), name, row.categoryName, 'pair')
+      queueRegistration('Pairs', 'teams', Number(team.id), name, row.categoryNames, 'pair')
     } catch {
       skip('Pairs', label, 'Could not save (unexpected error)')
     }

@@ -2026,9 +2026,9 @@ const ParticipantsStep = async ({
           <CardTitle>Bulk import from Excel</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Got a lot of clubs, teams, players, or doubles pairs? Download the template, fill it in,
-            and upload it here - everything gets tied to this event automatically. Add an optional
-            category name per row to register it into a category in the same step, instead of doing
-            that separately in Registration.
+            and upload it here - everything gets tied to this event automatically. Add one or more
+            category names per row (comma-separated) to register it straight into those categories
+            in the same step, instead of doing that separately in Registration.
           </p>
         </div>
         <div className="flex flex-col gap-3">
