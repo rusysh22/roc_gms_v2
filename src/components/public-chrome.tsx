@@ -13,10 +13,18 @@ import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
 // genuinely public destinations from prd/README.md section 21.2 do. `/workspaces` is the explicit
 // exclusion from the redesign R1 brief; `/scheduler` (the standalone queue foundation route) is the
 // same kind of internal tool and is excluded for the same reason.
-// `/login` is excluded too: it's a full-bleed split-screen (see login/page.tsx) that supplies its
-// own "back to home" affordance, so the floating nav pill and marketing footer would just be
-// redundant chrome fighting the brand panel for the same edge of the screen.
-const CHROME_EXCLUDED_PREFIXES = ['/workspaces', '/scheduler', '/login']
+// `/login` and its `/register`, `/forgot-password`, and `/reset-password` companions are excluded
+// too: they're full-bleed, centered auth screens that supply their own "back to login"/"back to
+// home" affordance, so the floating nav pill and marketing footer would just be redundant chrome
+// fighting the card for the same edge of the screen.
+const CHROME_EXCLUDED_PREFIXES = [
+  '/workspaces',
+  '/scheduler',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+]
 // AUDIT_UI_UX_CSS PUB-17/P2 item 4: the venue display/slideshow route is meant for a TV or
 // projector at arm's length, not a normal visitor - the floating nav and footer would eat screen
 // space and add clutter nobody in that context can interact with anyway.
@@ -115,6 +123,17 @@ function UserMenu({ user }: { user: PublicNavUser }) {
 }
 
 function NavCta({ user }: { user: PublicNavUser | null }) {
+  if (!user) {
+    return (
+      <Link
+        href="/login"
+        className="rounded-full bg-green px-3 py-1.5 text-xs font-bold whitespace-nowrap text-paper no-underline transition-colors hover:bg-ink"
+      >
+        Log in
+      </Link>
+    )
+  }
+
   return (
     <div className="flex items-center gap-2">
       <Link
@@ -123,7 +142,7 @@ function NavCta({ user }: { user: PublicNavUser | null }) {
       >
         Event Management
       </Link>
-      {user ? <UserMenu user={user} /> : null}
+      <UserMenu user={user} />
     </div>
   )
 }

@@ -88,7 +88,20 @@ const STEPS = [
 export default function MarketingHomePage() {
   return (
     <main className="font-sans text-ink">
-      <section className="relative overflow-hidden px-4 pt-10 pb-16 sm:pt-16" id="top">
+      {/* The floating nav pill is `position: sticky`, which still reserves its own height in
+          normal flow (measured: ~62px on mobile below the `md:` nav breakpoint where the full
+          item row collapses to a hamburger, ~54px at `md:` and up) - on top of PublicChrome's own
+          `pt-6` (24px) content-wrapper padding. Left uncancelled, min-h-svh on this section would
+          make it exactly one viewport tall starting *after* that ~78-86px of reserved space, so
+          its bottom would sit that far past the fold instead of the section filling the actual
+          first screen with the pill floating over it. Negative margin equal to reserved-space +
+          padding pulls the section's top back up to y=0 so the two - together - fill exactly one
+          screen; the pill still renders on top via its own z-50. Same fix as
+          src/app/(frontend)/events/[eventSlug]/page.tsx's hero. */}
+      <section
+        className="relative -mt-[5.375rem] flex min-h-svh items-center overflow-hidden px-4 pb-16 pt-28 md:-mt-[4.875rem]"
+        id="top"
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-40 -left-40 h-72 w-72 rounded-full bg-green/20 blur-[90px]"

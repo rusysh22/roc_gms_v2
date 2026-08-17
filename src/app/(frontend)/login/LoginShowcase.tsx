@@ -13,8 +13,8 @@ import { cn } from '@/lib/utils'
 const slides = [
   {
     icon: Radio,
-    title: 'Live scoring, semua venue',
-    body: 'Update skor langsung dari lapangan, penonton dan admin lain lihat perubahannya seketika.',
+    title: 'Live scoring, every venue',
+    body: 'Update scores straight from courtside - spectators and other admins see the change instantly.',
     mock: (
       <div className="rounded-card border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
         <div className="flex items-center justify-between text-xs font-bold text-paper/70">
@@ -34,13 +34,13 @@ const slides = [
   },
   {
     icon: CalendarClock,
-    title: 'Jadwal otomatis, minim bentrok',
-    body: 'Susun ratusan pertandingan lintas venue dan hari tanpa tim atau wasit yang ketabrak jadwal.',
+    title: 'Auto-scheduling, fewer clashes',
+    body: 'Schedule hundreds of matches across venues and days without double-booking a team or referee.',
     mock: (
       <div className="flex flex-col gap-2 rounded-card border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
         {[
           ['08:00', 'Court 1', 'Badminton'],
-          ['08:00', 'Court 2', 'Basket 3x3'],
+          ['08:00', 'Court 2', 'Basketball 3x3'],
           ['08:30', 'Court 1', 'Badminton'],
         ].map(([time, court, sport]) => (
           <div key={time + court} className="flex items-center gap-2 text-xs font-semibold text-paper/90">
@@ -55,8 +55,8 @@ const slides = [
   },
   {
     icon: Medal,
-    title: 'Bracket & standings otomatis',
-    body: 'Bracket dan klasemen terupdate sendiri tiap ada hasil baru masuk - tidak perlu hitung manual.',
+    title: 'Brackets & standings, automatic',
+    body: 'Brackets and standings update themselves the moment a new result comes in - no manual tallying.',
     mock: (
       <div className="rounded-card border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
         {[
@@ -74,11 +74,11 @@ const slides = [
   },
   {
     icon: LayoutGrid,
-    title: 'Satu event, banyak cabang',
-    body: 'Kelola beberapa cabang olahraga, klub, tim, sampai pemain dalam satu event yang sama.',
+    title: 'One event, many sports',
+    body: 'Manage multiple sports, clubs, teams, and players all inside the same event.',
     mock: (
       <div className="flex flex-wrap gap-2 rounded-card border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-        {['Badminton', 'Basket 3x3', 'Voli', 'Futsal'].map((sport) => (
+        {['Badminton', 'Basketball 3x3', 'Volleyball', 'Futsal'].map((sport) => (
           <span key={sport} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-paper/90">
             {sport}
           </span>
@@ -111,9 +111,10 @@ export function LoginShowcase() {
       onBlur={() => setPaused(false)}
     >
       {/* Ambient depth: slow-drifting blurred blobs + a giant near-invisible trophy watermark.
-          Kept inside the green family (plus a touch of gold/blue) and very low opacity - the first
-          pass at this page used a loud multi-color gradient + tiled pattern and it read as busy,
-          so this time texture comes from motion and blur rather than contrast. */}
+          Kept strictly inside the green/blue brand pair (no gold accent here) and very low
+          opacity - the first pass at this page used a loud multi-color gradient + tiled pattern
+          and it read as busy, so this time texture comes from motion and blur rather than
+          contrast. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div
           className={cn(
@@ -123,7 +124,7 @@ export function LoginShowcase() {
         />
         <div
           className={cn(
-            'absolute top-1/2 -left-16 h-64 w-64 rounded-full bg-gold/20 blur-3xl',
+            'absolute top-1/2 -left-16 h-64 w-64 rounded-full bg-[#34d399]/20 blur-3xl',
             autoplay && 'animate-[drift_11s_ease-in-out_-3s_infinite]',
           )}
         />
