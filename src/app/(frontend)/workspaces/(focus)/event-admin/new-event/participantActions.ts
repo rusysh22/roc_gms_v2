@@ -230,6 +230,49 @@ export async function addPairAction(formData: FormData): Promise<void> {
 
 const validGenders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
+type ImportCategoryDoc = { id: unknown; name: unknown; participant_mode: unknown }
+
+const buildCategoryNameIndex = (categories: ImportCategoryDoc[]) => {
+  const map = new Map<string, ImportCategoryDoc[]>()
+  for (const category of categories) {
+    const key = String(category.name).trim().toLowerCase()
+    const list = map.get(key) || []
+    list.push(category)
+    map.set(key, list)
+  }
+  return map
+}
+
+// `category_name` on any import sheet (see participantsImportTemplate.ts) is an optional shortcut
+// that both creates the row AND registers it into a category in one step, instead of a separate
+// trip through the wizard's Registration step. Resolved by exact case-insensitive name match
+// against this event's categories - ambiguous (same name reused across two categories) or
+// mode-mismatched (e.g. a Players row against a team-mode category) resolves to a warning instead
+// of guessing which one was meant.
+const resolveImportCategory = (
+  categoriesByName: Map<string, ImportCategoryDoc[]>,
+  categoryName: string | undefined,
+  expectedMode: string,
+): { category: ImportCategoryDoc } | { warning: string } | null => {
+  if (!categoryName) {
+    return null
+  }
+  const matches = categoriesByName.get(categoryName.trim().toLowerCase()) || []
+  if (matches.length === 0) {
+    return { warning: `Category "${categoryName}" not found - not registered to any category` }
+  }
+  const modeMatches = matches.filter((category) => String(category.participant_mode) === expectedMode)
+  if (modeMatches.length === 0) {
+    return { warning: `Category "${categoryName}" doesn't accept this participant type - not registered` }
+  }
+  if (modeMatches.length > 1) {
+    return {
+      warning: `Category name "${categoryName}" is ambiguous (matches ${modeMatches.length} categories) - register manually in the Registration step`,
+    }
+  }
+  return { category: modeMatches[0] }
+}
+
 // Bare filesystem scratch storage - NOT the Media collection. Media enforces "this must be a real,
 // decodable image" (validateMediaUpload/validateImageBuffer in src/collections/Media.ts) at the
 // collection boundary, which an .xlsx workbook can never satisfy; routing the preview upload
@@ -264,35 +307,27 @@ const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedP
 // re-run fresh at confirm time (not trusted as a stale snapshot) in case anything changed
 // in between.
 const planParticipantsImport = async (payload: Payload, eventId: string, parsed: ParsedParticipantsWorkbook) => {
-  const existingClubs = await payload.find({
-    collection: 'clubs',
-    depth: 0,
-    limit: 1000,
-    where: { event_id: { equals: eventId } },
-  })
+  const [existingClubs, existingTeams, existingPlayers, existingCategories] = await Promise.all([
+    payload.find({ collection: 'clubs', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'teams', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'players', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'competition-categories', depth: 0, limit: 500, where: { event_id: { equals: eventId } } }),
+  ])
   const knownClubNames = new Set(existingClubs.docs.map((club) => String(club.name).trim().toLowerCase()))
-  const existingTeams = await payload.find({
-    collection: 'teams',
-    depth: 0,
-    limit: 1000,
-    where: { event_id: { equals: eventId } },
-  })
   const knownTeamSlugs = new Set(existingTeams.docs.map((team) => String(team.slug)))
-  const existingPlayers = await payload.find({
-    collection: 'players',
-    depth: 0,
-    limit: 1000,
-    where: { event_id: { equals: eventId } },
-  })
   const knownIdentificationNumbers = new Set(
     existingPlayers.docs
       .map((player) => (player.identification_number ? String(player.identification_number).trim().toLowerCase() : ''))
       .filter(Boolean),
   )
+  const knownPlayerNames = new Set(existingPlayers.docs.map((player) => String(player.name).trim().toLowerCase()))
+  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
 
   let clubsToCreate = 0
   let teamsToCreate = 0
   let playersToCreate = 0
+  let pairsToCreate = 0
+  let entriesToRegister = 0
   let skippedCount = 0
   const issues: { sheet: string; name: string; reason: string }[] = []
   const skip = (sheet: string, name: string, reason: string) => {
@@ -301,6 +336,15 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   }
   const warn = (sheet: string, name: string, reason: string) => {
     issues.push({ sheet, name: name || '(blank)', reason })
+  }
+  const checkCategory = (sheet: string, name: string, categoryName: string | undefined, expectedMode: string) => {
+    const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+    if (!result) return
+    if ('warning' in result) {
+      warn(sheet, name, result.warning)
+    } else {
+      entriesToRegister += 1
+    }
   }
 
   for (const row of parsed.clubs) {
@@ -316,6 +360,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
     knownClubNames.add(key)
     clubsToCreate += 1
+    checkCategory('Clubs', row.name, row.categoryName, 'club')
   }
 
   for (const row of parsed.teams) {
@@ -333,6 +378,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
     knownTeamSlugs.add(slug)
     teamsToCreate += 1
+    checkCategory('Teams', row.name, row.categoryName, 'team')
   }
 
   for (const row of parsed.players) {
@@ -351,9 +397,30 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Players', row.name, `Gender "${row.gender}" is not valid - will be saved without a gender`)
     }
     playersToCreate += 1
+    knownPlayerNames.add(row.name.trim().toLowerCase())
+    checkCategory('Players', row.name, row.categoryName, 'individual')
   }
 
-  return { clubsToCreate, teamsToCreate, playersToCreate, skippedCount, issues }
+  for (const row of parsed.pairs) {
+    const label = row.teamName || `${row.player1Name} / ${row.player2Name}`
+    const p1Key = row.player1Name.trim().toLowerCase()
+    const p2Key = row.player2Name.trim().toLowerCase()
+    if (p1Key === p2Key) {
+      skip('Pairs', label, 'Player 1 and Player 2 must be different players')
+      continue
+    }
+    if (!knownPlayerNames.has(p1Key) || !knownPlayerNames.has(p2Key)) {
+      skip('Pairs', label, 'One or both players were not found on the Players sheet or in this event')
+      continue
+    }
+    if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
+      warn('Pairs', label, `Club "${row.clubName}" not found - will be saved without a club`)
+    }
+    pairsToCreate += 1
+    checkCategory('Pairs', label, row.categoryName, 'pair')
+  }
+
+  return { clubsToCreate, teamsToCreate, playersToCreate, pairsToCreate, entriesToRegister, skippedCount, issues }
 }
 
 const MAX_ISSUES_IN_URL = 25
@@ -384,7 +451,12 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
   if (!parsed) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
-  if (parsed.clubs.length === 0 && parsed.teams.length === 0 && parsed.players.length === 0) {
+  if (
+    parsed.clubs.length === 0 &&
+    parsed.teams.length === 0 &&
+    parsed.players.length === 0 &&
+    parsed.pairs.length === 0
+  ) {
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=empty_import`)
   }
 
@@ -400,6 +472,8 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&importPreviewFile=${scratchFilename}` +
       `&importPreviewClubs=${plan.clubsToCreate}&importPreviewTeams=${plan.teamsToCreate}&importPreviewPlayers=${plan.playersToCreate}` +
+      `&importPreviewPairs=${plan.pairsToCreate}` +
+      (plan.entriesToRegister ? `&importPreviewEntries=${plan.entriesToRegister}` : '') +
       (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : '') +
       (issuesParam ? `&importPreviewIssues=${issuesParam}` : '') +
       (moreIssues ? `&importPreviewMoreIssues=${moreIssues}` : ''),
@@ -447,27 +521,30 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
-  const existingClubs = await payload.find({
-    collection: 'clubs',
-    depth: 0,
-    limit: 1000,
-    where: { event_id: { equals: eventId } },
-  })
+  const [existingClubs, existingPlayers, existingCategories] = await Promise.all([
+    payload.find({ collection: 'clubs', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'players', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({
+      collection: 'competition-categories',
+      depth: 0,
+      limit: 500,
+      where: { event_id: { equals: eventId } },
+    }),
+  ])
   const clubIdByName = new Map<string, number>()
   for (const club of existingClubs.docs) {
     clubIdByName.set(String(club.name).trim().toLowerCase(), Number(club.id))
   }
-  const existingPlayers = await payload.find({
-    collection: 'players',
-    depth: 0,
-    limit: 1000,
-    where: { event_id: { equals: eventId } },
-  })
+  const playerIdByName = new Map<string, number>()
+  for (const player of existingPlayers.docs) {
+    playerIdByName.set(String(player.name).trim().toLowerCase(), Number(player.id))
+  }
   const knownIdentificationNumbers = new Set(
     existingPlayers.docs
       .map((player) => (player.identification_number ? String(player.identification_number).trim().toLowerCase() : ''))
       .filter(Boolean),
   )
+  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
 
   let created = 0
   let skipped = 0
@@ -482,6 +559,46 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   }
   const warn = (sheet: string, name: string, reason: string) => {
     issues.push({ sheet, name: name || '(blank)', reason })
+  }
+
+  // `category_name` rows are resolved against `categoriesByName` as each source is created, then
+  // applied in one batch after every club/team/player/pair has been saved - batching needs every
+  // referenced category's existing entry count up front for correct seed numbers, same as
+  // addBulkCategoryAssignmentsAction.
+  const registrations: {
+    collection: 'clubs' | 'teams' | 'players'
+    sourceId: number
+    sourceName: string
+    categoryId: number
+    entryType: 'club' | 'team' | 'pair' | 'individual'
+  }[] = []
+  const entryTypeByMode: Record<string, 'club' | 'team' | 'pair' | 'individual'> = {
+    club: 'club',
+    team: 'team',
+    pair: 'pair',
+    individual: 'individual',
+  }
+  const queueRegistration = (
+    sheet: string,
+    collection: 'clubs' | 'teams' | 'players',
+    sourceId: number,
+    sourceName: string,
+    categoryName: string | undefined,
+    expectedMode: string,
+  ) => {
+    const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+    if (!result) return
+    if ('warning' in result) {
+      warn(sheet, sourceName, result.warning)
+      return
+    }
+    registrations.push({
+      collection,
+      sourceId,
+      sourceName,
+      categoryId: Number(result.category.id),
+      entryType: entryTypeByMode[expectedMode],
+    })
   }
 
   for (const row of parsed.clubs) {
@@ -516,6 +633,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       const doc = await payload.create({ collection: 'clubs', data })
       clubIdByName.set(key, Number(doc.id))
       created += 1
+      queueRegistration('Clubs', 'clubs', Number(doc.id), row.name, row.categoryName, 'club')
     } catch {
       skip('Clubs', row.name, 'Could not save (unexpected error)')
     }
@@ -549,8 +667,9 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         slug,
         contact_email: row.contactEmail,
       }
-      await payload.create({ collection: 'teams', data })
+      const doc = await payload.create({ collection: 'teams', data })
       created += 1
+      queueRegistration('Teams', 'teams', Number(doc.id), row.name, row.categoryName, 'team')
     } catch {
       skip('Teams', row.name, 'Could not save (unexpected error)')
     }
@@ -582,15 +701,148 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         identification_number: row.identificationNumber,
         photo: row.photo,
       }
-      await payload.create({ collection: 'players', data })
+      const doc = await payload.create({ collection: 'players', data })
       if (identificationNumberKey) {
         knownIdentificationNumbers.add(identificationNumberKey)
       }
+      playerIdByName.set(String(row.name).trim().toLowerCase(), Number(doc.id))
       created += 1
+      queueRegistration('Players', 'players', Number(doc.id), row.name, row.categoryName, 'individual')
     } catch {
       // Falls through here mainly if the unique (event_id, identification_number) DB index is hit
       // despite the in-memory check above - e.g. a concurrent import into the same event.
       skip('Players', row.name, 'Could not save (unexpected error)')
+    }
+  }
+
+  // Pairs are stored as a 2-player Team the same way addPairAction does it (rosters always need a
+  // team_id) - resolved against both players just created above and players that already existed
+  // in the event, matched by name since a pair row has no other stable per-workbook key.
+  for (const row of parsed.pairs) {
+    const label = row.teamName || `${row.player1Name} / ${row.player2Name}`
+    const p1Key = row.player1Name.trim().toLowerCase()
+    const p2Key = row.player2Name.trim().toLowerCase()
+    if (p1Key === p2Key) {
+      skip('Pairs', label, 'Player 1 and Player 2 must be different players')
+      continue
+    }
+    const player1Id = playerIdByName.get(p1Key)
+    const player2Id = playerIdByName.get(p2Key)
+    if (!player1Id || !player2Id) {
+      skip('Pairs', label, 'One or both players were not found on the Players sheet or in this event')
+      continue
+    }
+    try {
+      const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
+      if (row.clubName && !clubId) {
+        warn('Pairs', label, `Club "${row.clubName}" not found - saved without a club`)
+      }
+      const name = row.teamName || `${row.player1Name} / ${row.player2Name}`
+      const baseSlug = slugify(name)
+      let slug = baseSlug
+      for (let suffix = 2; suffix <= 50; suffix += 1) {
+        const existing = await payload.count({
+          collection: 'teams',
+          where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
+        })
+        if (existing.totalDocs === 0) break
+        slug = `${baseSlug}-${suffix}`.slice(0, 80)
+      }
+      const teamData = { event_id: Number(eventId), club_id: clubId, name, slug }
+      const team = await payload.create({ collection: 'teams', data: teamData })
+      await recordAuditLog({
+        payload,
+        action: 'team.create',
+        entityType: 'teams',
+        entityId: team.id,
+        before: null,
+        after: { ...teamData, pair: true },
+        actorUserId: user.id,
+      })
+      for (const playerId of [player1Id, player2Id]) {
+        const rosterData = {
+          event_id: Number(eventId),
+          team_id: Number(team.id),
+          player_id: playerId,
+          role: 'player' as const,
+          status: 'active' as const,
+        }
+        const roster = await payload.create({ collection: 'rosters', data: rosterData })
+        await recordAuditLog({
+          payload,
+          action: 'roster.create',
+          entityType: 'rosters',
+          entityId: roster.id,
+          before: null,
+          after: rosterData,
+          actorUserId: user.id,
+        })
+      }
+      created += 1
+      queueRegistration('Pairs', 'teams', Number(team.id), name, row.categoryName, 'pair')
+    } catch {
+      skip('Pairs', label, 'Could not save (unexpected error)')
+    }
+  }
+
+  // Apply every queued category registration in one batch - same dedupe-by-key/running-seed
+  // pattern as addBulkCategoryAssignmentsAction, just sourced from import rows instead of matrix
+  // checkboxes.
+  let registered = 0
+  if (registrations.length > 0) {
+    const categoryIds = [...new Set(registrations.map((registration) => String(registration.categoryId)))]
+    const existingEntries = await payload.find({
+      collection: 'competition-entries',
+      depth: 0,
+      limit: 5000,
+      where: { category_id: { in: categoryIds } },
+    })
+    const enteredKeys = new Set(
+      existingEntries.docs.map((entry) => {
+        const entryCollection = entry.team_id ? 'teams' : entry.club_id ? 'clubs' : 'players'
+        const linkedId =
+          entryCollection === 'teams' ? entry.team_id : entryCollection === 'clubs' ? entry.club_id : entry.player_id
+        return `${entryCollection}:${linkedId}:${entry.category_id}`
+      }),
+    )
+    const nextSeedByCategory = new Map<string, number>()
+    for (const entry of existingEntries.docs) {
+      const catKey = String(entry.category_id)
+      nextSeedByCategory.set(
+        catKey,
+        Math.max(nextSeedByCategory.get(catKey) || 0, Number(entry.seed_number) || 0) + 1,
+      )
+    }
+
+    for (const registration of registrations) {
+      const key = `${registration.collection}:${registration.sourceId}:${registration.categoryId}`
+      if (enteredKeys.has(key)) continue
+      const catKey = String(registration.categoryId)
+      const seed = nextSeedByCategory.get(catKey) || 1
+      const entryData = {
+        event_id: Number(eventId),
+        category_id: registration.categoryId,
+        display_name: registration.sourceName,
+        entry_type: registration.entryType,
+        status: 'confirmed' as const,
+        seed_number: seed,
+        player_id: registration.collection === 'players' ? registration.sourceId : undefined,
+        team_id: registration.collection === 'teams' ? registration.sourceId : undefined,
+        club_id: registration.collection === 'clubs' ? registration.sourceId : undefined,
+      }
+      const createdEntry = await payload.create({ collection: 'competition-entries', data: entryData })
+      await recordAuditLog({
+        payload,
+        action: 'competition_entry.create',
+        entityType: 'competition-entries',
+        entityId: createdEntry.id,
+        before: null,
+        after: entryData,
+        actorUserId: user.id,
+      })
+      enteredKeys.add(key)
+      nextSeedByCategory.set(catKey, seed + 1)
+      registered += 1
     }
   }
 
@@ -603,10 +855,12 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     after: {
       created,
       skipped,
+      registered,
       issues,
       clubs: parsed.clubs.length,
       teams: parsed.teams.length,
       players: parsed.players.length,
+      pairs: parsed.pairs.length,
     },
     actorUserId: user.id,
   })
@@ -619,6 +873,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   const { issuesParam, moreIssues } = encodeIssues(issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}` +
+      (registered ? `&wizardRegistered=${registered}` : '') +
       (skipped ? `&wizardImportSkipped=${skipped}` : '') +
       (issuesParam ? `&wizardImportIssues=${issuesParam}` : '') +
       (moreIssues ? `&wizardImportMoreIssues=${moreIssues}` : ''),

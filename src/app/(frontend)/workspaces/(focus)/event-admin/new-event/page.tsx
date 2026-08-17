@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { GlossaryHint } from '@/components/ui/glossary-hint'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { SelectAllCheckbox } from '@/components/ui/select-all-checkbox'
+import { ListSearchFilter } from '@/components/ui/list-search-filter'
 import { Select } from '@/components/ui/select'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -73,7 +74,12 @@ import {
   deletePlayerAction,
   previewParticipantsImportAction,
 } from './participantActions'
-import { addEntriesAction, shuffleSeedsAction, withdrawEntryAction } from './entriesSeedActions'
+import {
+  addBulkCategoryAssignmentsAction,
+  addEntriesAction,
+  shuffleSeedsAction,
+  withdrawEntryAction,
+} from './entriesSeedActions'
 import { generateMatchesAction, setStageRulesetOverrideAction } from './generateActions'
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
@@ -235,12 +241,16 @@ const StepProgress = ({
                 <Link
                   href={href}
                   className={cn(
-                    'flex flex-col items-center gap-1 no-underline',
+                    'flex shrink-0 flex-col items-center gap-1 no-underline',
                     active ? 'text-ink' : 'text-ink-soft hover:text-ink',
                   )}
                 >
                   {pill}
-                  <span className="max-w-20 text-center text-[11px] font-bold leading-tight">
+                  {/* Fixed width (not max-width) - every step's label column is exactly the same
+                      size regardless of text length, so a short label like "Event" doesn't leave
+                      the connector after it a different width than a long, two-line one like
+                      "Setup Assistant". That's what kept the row's spacing from reading as even. */}
+                  <span className="w-20 text-center text-[11px] font-bold leading-tight">
                     {step.label}
                   </span>
                 </Link>
@@ -250,9 +260,9 @@ const StepProgress = ({
                 // normal-text minimum. Full-opacity ink-soft already passes on its own (see the
                 // reachable/inactive branch above, which never used the opacity modifier) and
                 // still reads as visually muted next to the active step's full-ink label.
-                <span className="flex flex-col items-center gap-1 text-ink-soft">
+                <span className="flex shrink-0 flex-col items-center gap-1 text-ink-soft">
                   {pill}
-                  <span className="max-w-20 text-center text-[11px] font-bold leading-tight">
+                  <span className="w-20 text-center text-[11px] font-bold leading-tight">
                     {step.label}
                   </span>
                 </span>
@@ -507,6 +517,7 @@ export default async function NewEventWizardPage({
               tab={get(params, 'tab')}
               setupParticipantSource={String(event.setup_participant_source || '')}
               imported={get(params, 'wizardImported')}
+              importRegistered={get(params, 'wizardRegistered')}
               importSkipped={get(params, 'wizardImportSkipped')}
               importIssues={get(params, 'wizardImportIssues')}
               importMoreIssues={get(params, 'wizardImportMoreIssues')}
@@ -514,6 +525,8 @@ export default async function NewEventWizardPage({
               importPreviewClubs={get(params, 'importPreviewClubs')}
               importPreviewTeams={get(params, 'importPreviewTeams')}
               importPreviewPlayers={get(params, 'importPreviewPlayers')}
+              importPreviewPairs={get(params, 'importPreviewPairs')}
+              importPreviewEntries={get(params, 'importPreviewEntries')}
               importPreviewSkipped={get(params, 'importPreviewSkipped')}
               importPreviewIssues={get(params, 'importPreviewIssues')}
               importPreviewMoreIssues={get(params, 'importPreviewMoreIssues')}
@@ -1868,6 +1881,7 @@ const ParticipantsStep = async ({
   tab,
   setupParticipantSource,
   imported,
+  importRegistered,
   importSkipped,
   importIssues,
   importMoreIssues,
@@ -1875,6 +1889,8 @@ const ParticipantsStep = async ({
   importPreviewClubs,
   importPreviewTeams,
   importPreviewPlayers,
+  importPreviewPairs,
+  importPreviewEntries,
   importPreviewSkipped,
   importPreviewIssues,
   importPreviewMoreIssues,
@@ -1884,6 +1900,7 @@ const ParticipantsStep = async ({
   tab?: string
   setupParticipantSource?: string
   imported?: string
+  importRegistered?: string
   importSkipped?: string
   importIssues?: string
   importMoreIssues?: string
@@ -1891,6 +1908,8 @@ const ParticipantsStep = async ({
   importPreviewClubs?: string
   importPreviewTeams?: string
   importPreviewPlayers?: string
+  importPreviewPairs?: string
+  importPreviewEntries?: string
   importPreviewSkipped?: string
   importPreviewIssues?: string
   importPreviewMoreIssues?: string
@@ -1963,6 +1982,7 @@ const ParticipantsStep = async ({
         <AlertBanner tone="success">
           <p>
             Imported {imported} row(s) from the Excel file.
+            {importRegistered ? ` ${importRegistered} of them were also registered into a category via "category_name".` : ''}
             {importSkipped ? ` ${importSkipped} row(s) were skipped.` : ''}
           </p>
           {issues.length > 0 ? (
@@ -2005,8 +2025,10 @@ const ParticipantsStep = async ({
         <div>
           <CardTitle>Bulk import from Excel</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
-            Got a lot of clubs, teams, or players? Download the template, fill it in, and upload it
-            here - everything gets tied to this event automatically.
+            Got a lot of clubs, teams, players, or doubles pairs? Download the template, fill it in,
+            and upload it here - everything gets tied to this event automatically. Add an optional
+            category name per row to register it into a category in the same step, instead of doing
+            that separately in Registration.
           </p>
         </div>
         <div className="flex flex-col gap-3">
@@ -2045,7 +2067,7 @@ const ParticipantsStep = async ({
               Nothing has been saved yet. Check the mapping below, then confirm or cancel.
             </p>
           </div>
-          <dl className="grid grid-cols-3 gap-3 text-sm">
+          <dl className="grid grid-cols-3 gap-3 text-sm sm:grid-cols-5">
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Clubs</dt>
               <dd className="text-lg font-extrabold text-ink">{importPreviewClubs || 0}</dd>
@@ -2057,6 +2079,14 @@ const ParticipantsStep = async ({
             <div>
               <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Players</dt>
               <dd className="text-lg font-extrabold text-ink">{importPreviewPlayers || 0}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Pairs</dt>
+              <dd className="text-lg font-extrabold text-ink">{importPreviewPairs || 0}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Category entries</dt>
+              <dd className="text-lg font-extrabold text-ink">{importPreviewEntries || 0}</dd>
             </div>
           </dl>
           {previewIssues.length > 0 ? (
@@ -2466,6 +2496,111 @@ const RegistrationStep = async ({
     return nested ? getRelationshipLabel(nested.club_id as RelationshipDoc, '') || undefined : undefined
   }
 
+  // Bulk registration matrix: club x category / team x category, so an admin can register e.g.
+  // "Club A's Team A1 into Futsal" and "Club B into Chess (club entry)" in one submit instead of
+  // switching the category selector above per sport. Scoped to team/pair/club-mode categories only
+  // (see addBulkCategoryAssignmentsAction) - only worth showing once there's more than one such
+  // category, otherwise it's strictly slower than the single-category form above.
+  const bulkModes = new Set(['team', 'pair', 'club'])
+  const bulkCategories = categories.docs.filter((cat) => bulkModes.has(String(cat.participant_mode)))
+  let bulkMatrix: {
+    categories: { id: string; label: string; mode: string }[]
+    rows: { type: 'clubs' | 'teams'; id: string; name: string; clubLabel?: string }[]
+    enteredKeys: Set<string>
+  } | null = null
+  if (bulkCategories.length > 1) {
+    const bulkCategoryIds = bulkCategories.map((cat) => String(cat.id))
+    const [bulkClubs, bulkTeams, bulkEntries] = await Promise.all([
+      payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+      payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+      payload.find({
+        collection: 'competition-entries',
+        depth: 0,
+        limit: 5000,
+        where: { and: [{ category_id: { in: bulkCategoryIds } }, { status: { equals: 'confirmed' } }] },
+      }),
+    ])
+    const enteredKeys = new Set(
+      bulkEntries.docs.map((entry) => {
+        const entryCollection = entry.team_id ? 'teams' : entry.club_id ? 'clubs' : 'players'
+        const linkedId =
+          entryCollection === 'teams' ? entry.team_id : entryCollection === 'clubs' ? entry.club_id : entry.player_id
+        return `${entryCollection}:${linkedId}:${entry.category_id}`
+      }),
+    )
+    bulkMatrix = {
+      categories: bulkCategories.map((cat) => ({
+        id: String(cat.id),
+        label: `${getRelationshipLabel(cat.sport_id as RelationshipDoc)} — ${cat.name}`,
+        mode: String(cat.participant_mode),
+      })),
+      rows: [
+        ...bulkClubs.docs.map((club) => ({ type: 'clubs' as const, id: String(club.id), name: String(club.name) })),
+        ...bulkTeams.docs.map((team) => ({
+          type: 'teams' as const,
+          id: String(team.id),
+          name: String(team.name),
+          clubLabel: getRelationshipLabel(team.club_id as RelationshipDoc, '') || undefined,
+        })),
+      ],
+      enteredKeys,
+    }
+  }
+
+  // Individual-mode categories are excluded from the club/team matrix above (see
+  // addBulkCategoryAssignmentsAction's own comment - a category with dozens of players would make
+  // that grid unusably wide). This covers the same "more than one category to fill in" pain a
+  // different way: one searchable checklist per individual-mode category, all on this page at once,
+  // each still posting through the same addEntriesAction as the single-category form below - no new
+  // server action needed, just fewer round trips through the category switcher above. Same
+  // more-than-one-category threshold as the matrix, for the same reason.
+  const individualCategories = categories.docs.filter(
+    (cat) => String(cat.participant_mode) === 'individual',
+  )
+  let individualBulk: {
+    categories: { id: string; label: string }[]
+    playersByCategory: Map<string, { id: string; name: string; clubLabel?: string }[]>
+  } | null = null
+  if (individualCategories.length > 1) {
+    const individualCategoryIds = individualCategories.map((cat) => String(cat.id))
+    const [allPlayers, individualEntries] = await Promise.all([
+      payload.find({ collection: 'players', depth: 1, limit: 500, where: { event_id: { equals: eventId } }, sort: 'name' }),
+      payload.find({
+        collection: 'competition-entries',
+        depth: 0,
+        limit: 5000,
+        where: { and: [{ category_id: { in: individualCategoryIds } }, { status: { equals: 'confirmed' } }] },
+      }),
+    ])
+    const enteredByCategory = new Map<string, Set<string>>()
+    for (const entry of individualEntries.docs) {
+      const catKey = String(entry.category_id)
+      const set = enteredByCategory.get(catKey) || new Set<string>()
+      set.add(String(entry.player_id))
+      enteredByCategory.set(catKey, set)
+    }
+    individualBulk = {
+      categories: individualCategories.map((cat) => ({
+        id: String(cat.id),
+        label: `${getRelationshipLabel(cat.sport_id as RelationshipDoc)} — ${cat.name}`,
+      })),
+      playersByCategory: new Map(
+        individualCategories.map((cat) => {
+          const catId = String(cat.id)
+          const entered = enteredByCategory.get(catId) || new Set<string>()
+          const available = allPlayers.docs
+            .filter((player) => !entered.has(String(player.id)))
+            .map((player) => ({
+              id: String(player.id),
+              name: String(player.name),
+              clubLabel: getRelationshipLabel(player.club_id as RelationshipDoc, '') || undefined,
+            }))
+          return [catId, available] as const
+        }),
+      ),
+    }
+  }
+
   return (
     <>
       <Card className="flex flex-col gap-4">
@@ -2497,6 +2632,158 @@ const RegistrationStep = async ({
           </Button>
         </form>
       </Card>
+
+      {bulkMatrix ? (
+        <Card className="flex flex-col gap-3">
+          <details>
+            <summary className="cursor-pointer text-sm font-extrabold text-ink select-none">
+              Bulk assign across sports
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="text-xs text-ink-soft">
+                Tick which club/team plays which sport, across every team, pair, and club category at
+                once - e.g. Club A&apos;s Team A1 into Futsal and Club B into Chess, in one submit.
+                Individual/pair-of-players categories aren&apos;t shown here - use the form above for
+                those.
+              </p>
+              <form action={addBulkCategoryAssignmentsAction} className="flex flex-col gap-3">
+                <input type="hidden" name="eventId" value={eventId} />
+                <Table caption="Bulk assign clubs and teams to sports">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 z-10 bg-mist">Club / Team</TableHead>
+                      {bulkMatrix.categories.map((category) => (
+                        <TableHead key={category.id} className="text-center">
+                          {category.label}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkMatrix.rows.map((row) => (
+                      <TableRow key={`${row.type}-${row.id}`}>
+                        <TableCell className="sticky left-0 z-10 bg-paper">
+                          <strong className="block truncate text-sm font-bold text-ink">{row.name}</strong>
+                          {row.clubLabel ? (
+                            <span className="block truncate text-xs text-ink-soft">{row.clubLabel}</span>
+                          ) : null}
+                        </TableCell>
+                        {bulkMatrix.categories.map((category) => {
+                          const compatible =
+                            (category.mode === 'club' && row.type === 'clubs') ||
+                            ((category.mode === 'team' || category.mode === 'pair') && row.type === 'teams')
+                          if (!compatible) {
+                            return (
+                              <TableCell key={category.id} className="text-center text-ink-soft">
+                                –
+                              </TableCell>
+                            )
+                          }
+                          const key = `${row.type}:${row.id}:${category.id}`
+                          const alreadyEntered = bulkMatrix!.enteredKeys.has(key)
+                          return (
+                            <TableCell key={category.id} className="text-center">
+                              {alreadyEntered ? (
+                                <span title="Already entered" className="text-green">
+                                  <Check className="mx-auto h-4 w-4" aria-hidden="true" />
+                                </span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  name="assignments"
+                                  value={key}
+                                  aria-label={`Register ${row.name} into ${category.label}`}
+                                  className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                                />
+                              )}
+                            </TableCell>
+                          )
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div>
+                  <SubmitButton size="sm">Assign checked cells as entries</SubmitButton>
+                </div>
+              </form>
+            </div>
+          </details>
+        </Card>
+      ) : null}
+
+      {individualBulk ? (
+        <Card className="flex flex-col gap-3">
+          <details>
+            <summary className="cursor-pointer text-sm font-extrabold text-ink select-none">
+              Bulk register individual entries
+            </summary>
+            <div className="mt-3 flex flex-col gap-4">
+              <p className="text-xs text-ink-soft">
+                Register players into several individual categories without switching the category
+                selector above each time - search and check who&apos;s in for each category, then
+                submit that category&apos;s section.
+              </p>
+              {individualBulk.categories.map((category) => {
+                const players = individualBulk!.playersByCategory.get(category.id) || []
+                const listId = `individual-bulk-list-${category.id}`
+                return (
+                  <div key={category.id} className="flex flex-col gap-2 rounded-card border border-line p-3">
+                    <p className="text-sm font-bold text-ink">{category.label}</p>
+                    {players.length === 0 ? (
+                      <p className="text-xs text-ink-soft">
+                        Everyone available has already been registered here.
+                      </p>
+                    ) : (
+                      <form action={addEntriesAction} className="flex flex-col gap-2">
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="categoryId" value={category.id} />
+                        <ListSearchFilter
+                          listId={listId}
+                          placeholder={`Search players for ${category.label}...`}
+                          className="h-9 w-full rounded-[10px] border border-line bg-paper px-3 font-sans text-sm font-semibold text-ink transition-colors placeholder:font-normal placeholder:text-ink-soft focus-visible:border-green focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green/20"
+                        />
+                        <label className="flex items-center gap-2 text-xs font-bold text-ink-soft">
+                          <SelectAllCheckbox
+                            targetName="sourceIds"
+                            className="h-4 w-4 rounded border-line text-green focus:ring-green/40"
+                          />
+                          Select all {players.length} shown
+                        </label>
+                        <div id={listId} className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+                          {players.map((player) => (
+                            <label
+                              key={player.id}
+                              data-search={`${player.name} ${player.clubLabel || ''}`.toLowerCase()}
+                              className="flex cursor-pointer items-center gap-3 rounded-card border border-line bg-paper px-4 py-2.5"
+                            >
+                              <input
+                                type="checkbox"
+                                name="sourceIds"
+                                value={player.id}
+                                className="h-4 w-4 shrink-0 rounded border-line text-green focus:ring-green/40"
+                              />
+                              <div className="min-w-0">
+                                <strong className="block truncate text-sm font-bold text-ink">{player.name}</strong>
+                                {player.clubLabel ? (
+                                  <span className="block truncate text-xs text-ink-soft">{player.clubLabel}</span>
+                                ) : null}
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        <div>
+                          <SubmitButton size="sm">Add selected as entries</SubmitButton>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </details>
+        </Card>
+      ) : null}
 
       <Card className="flex flex-col gap-3">
         <div>

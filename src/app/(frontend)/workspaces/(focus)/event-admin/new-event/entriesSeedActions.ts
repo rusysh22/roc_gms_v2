@@ -117,6 +117,119 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}${suffix}`)
 }
 
+// Registration normally works one category at a time (see addEntriesAction) - fine for a single
+// sport, but tedious for an admin setting up an event with several team/club-mode sports at once
+// (e.g. "Club A's Team A1 plays Futsal, Club B plays Chess as a club entry"). This lets one submit
+// check cells across a club x category / team x category matrix and creates every entry in one go.
+// Scoped to team/pair/club modes only - individual-mode categories can have dozens of players and
+// would make the matrix unusably wide, so those still go through the single-category flow above.
+export async function addBulkCategoryAssignmentsAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const event = await getWizardEvent(payload, eventId)
+  if (!event) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+
+  // Each checked cell posts as "<sourceCollection>:<sourceId>:<categoryId>" - the collection is
+  // carried alongside the id because a bare id is ambiguous between the teams and clubs collections.
+  const raw = formData.getAll('assignments').map(String).filter(Boolean)
+  const parsed = raw
+    .map((value) => {
+      const [collection, sourceId, categoryId] = value.split(':')
+      return collection && sourceId && categoryId ? { collection, sourceId, categoryId } : null
+    })
+    .filter((v): v is { collection: string; sourceId: string; categoryId: string } => v !== null)
+
+  if (parsed.length === 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=registration&wizardError=invalid_entry`)
+  }
+
+  const categoryIds = [...new Set(parsed.map((p) => p.categoryId))]
+  const categories = await payload.find({
+    collection: 'competition-categories',
+    depth: 0,
+    limit: 200,
+    where: { and: [{ event_id: { equals: eventId } }, { id: { in: categoryIds } }] },
+  })
+  const categoryById = new Map(categories.docs.map((c) => [String(c.id), c]))
+
+  const existing = await payload.find({
+    collection: 'competition-entries',
+    depth: 0,
+    limit: 5000,
+    where: { category_id: { in: categoryIds } },
+  })
+  const enteredKeys = new Set(
+    existing.docs.map((entry) => {
+      const collection =
+        entry.team_id !== null && entry.team_id !== undefined ? 'teams'
+        : entry.club_id !== null && entry.club_id !== undefined ? 'clubs'
+        : 'players'
+      const linkedId = collection === 'teams' ? entry.team_id : collection === 'clubs' ? entry.club_id : entry.player_id
+      return `${collection}:${linkedId}:${entry.category_id}`
+    }),
+  )
+  const nextSeedByCategory = new Map<string, number>()
+  for (const entry of existing.docs) {
+    const catKey = String(entry.category_id)
+    nextSeedByCategory.set(
+      catKey,
+      Math.max(nextSeedByCategory.get(catKey) || 0, Number(entry.seed_number) || 0) + 1,
+    )
+  }
+
+  let addedCount = 0
+  for (const { collection, sourceId, categoryId } of parsed) {
+    const category = categoryById.get(categoryId)
+    if (!category) continue
+    const mode = String(category.participant_mode || 'open')
+    // Reject a cell whose collection doesn't match its column's category mode - guards against a
+    // tampered/stale form post, not something the matrix UI itself can produce.
+    if (sourceCollectionByMode(mode) !== collection || (collection !== 'teams' && collection !== 'clubs')) {
+      continue
+    }
+    const key = `${collection}:${sourceId}:${categoryId}`
+    if (enteredKeys.has(key)) continue
+
+    const source = await payload.findByID({ collection, id: sourceId, depth: 0 }).catch(() => null)
+    if (!source || String(source.event_id) !== String(eventId)) continue
+
+    const seed = nextSeedByCategory.get(categoryId) || 1
+    const data = {
+      event_id: Number(eventId),
+      category_id: Number(categoryId),
+      display_name: String(source.name),
+      entry_type: entryTypeByMode(mode),
+      status: 'confirmed' as const,
+      seed_number: seed,
+      team_id: collection === 'teams' ? Number(sourceId) : undefined,
+      club_id: collection === 'clubs' ? Number(sourceId) : undefined,
+    }
+    const created = await payload.create({ collection: 'competition-entries', data })
+    await recordAuditLog({
+      payload,
+      action: 'competition_entry.create',
+      entityType: 'competition-entries',
+      entityId: created.id,
+      before: null,
+      after: data,
+      actorUserId: user.id,
+    })
+    enteredKeys.add(key)
+    nextSeedByCategory.set(categoryId, seed + 1)
+    addedCount += 1
+  }
+
+  revalidatePath(wizardPage)
+  const suffix = addedCount === 0 ? '&wizardError=duplicate_entry' : `&wizardUpdated=1&wizardBulkAdded=${addedCount}`
+  redirect(`${wizardPage}?eventId=${eventId}&step=registration${suffix}`)
+}
+
 export async function shuffleSeedsAction(formData: FormData): Promise<void> {
   const { payload } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,

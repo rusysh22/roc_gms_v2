@@ -17,6 +17,7 @@ describe('parseParticipantsWorkbook', () => {
     expect(parsed.clubs).toHaveLength(5)
     expect(parsed.teams).toHaveLength(4)
     expect(parsed.players).toHaveLength(9)
+    expect(parsed.pairs).toHaveLength(1)
 
     expect(parsed.players[0]).toMatchObject({
       name: 'John Smith',
@@ -32,6 +33,20 @@ describe('parseParticipantsWorkbook', () => {
     // Teams sheet.
     const teamWithNoClub = parsed.teams.find((team) => team.name === 'Organizing Committee Mixed Volleyball')
     expect(teamWithNoClub).toMatchObject({ clubName: undefined })
+    // The register-on-import shortcut: a category_name value comes back as-is, a blank one comes
+    // back undefined - same convention as every other optional cell.
+    const playerWithCategory = parsed.players.find((player) => player.name === 'Amanda Putri')
+    expect(playerWithCategory).toMatchObject({ categoryName: 'Badminton Singles Women' })
+    const playerWithoutCategory = parsed.players.find((player) => player.name === 'John Smith')
+    expect(playerWithoutCategory).toMatchObject({ categoryName: undefined })
+    // Pairs are matched by player name, not id - both names must round-trip exactly.
+    expect(parsed.pairs[0]).toMatchObject({
+      player1Name: 'John Smith',
+      player2Name: 'Citra Lestari',
+      teamName: undefined,
+      clubName: undefined,
+      categoryName: undefined,
+    })
   })
 
   it('leaves identificationNumber and photo undefined when the columns are blank', () => {
@@ -45,5 +60,6 @@ describe('parseParticipantsWorkbook', () => {
     )
 
     expect(parsed.players).toEqual([{ name: 'Jane Doe' }])
+    expect(parsed.pairs).toEqual([])
   })
 })
