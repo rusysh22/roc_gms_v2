@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageSchedule } from '@/access/roles'
 
 export const Stages: CollectionConfig = {
@@ -11,10 +12,10 @@ export const Stages: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageSchedule,
-    delete: canManageSchedule,
+    create: scopedCreateToUserEvents(canManageSchedule),
+    delete: scopedToUserEvents(canManageSchedule),
     read: publicReadScopedToEvent(),
-    update: canManageSchedule,
+    update: scopedToUserEvents(canManageSchedule),
   },
   fields: [
     {

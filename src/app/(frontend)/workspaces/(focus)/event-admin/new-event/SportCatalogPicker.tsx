@@ -101,7 +101,13 @@ export function SportCatalogPicker({ eventId }: { eventId: string }) {
           <form
             action={addSportFromCatalogAction}
             className="flex flex-col gap-4"
-            onSubmit={() => setOpen(false)}
+            onSubmit={() => {
+              // Stay open on the sport-choice screen instead of closing - admins adding several
+              // sports in one sitting shouldn't have to reopen this dialog for each one.
+              setSelectedSport(null)
+              setSearch('')
+              setCheckedEvents(new Set())
+            }}
           >
             <input type="hidden" name="eventId" value={eventId} />
             <input type="hidden" name="sportKey" value={selectedSport.key} />

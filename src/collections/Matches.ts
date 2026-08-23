@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import {
   canCreateMatch,
   canDeleteMatch,
@@ -24,13 +25,13 @@ export const Matches: CollectionConfig = {
     useAsTitle: 'match_number',
   },
   access: {
-    create: canCreateMatch,
-    delete: canDeleteMatch,
+    create: scopedCreateToUserEvents(canCreateMatch),
+    delete: scopedToUserEvents(canDeleteMatch),
     read: canReadPublicMatch,
     // Base role gate stays broad (any of scheduler/match_officer/event_admin/super_admin can
     // update *something* on a match) - enforceMatchMutationCapabilities below narrows which
     // *fields* each role may change at the collection boundary, on every entry point.
-    update: canManageMatches,
+    update: scopedToUserEvents(canManageMatches),
   },
   hooks: {
     // Sport scope first (cheaper rejection, and independent of the update-only capability

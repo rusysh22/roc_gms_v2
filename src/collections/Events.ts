@@ -1,6 +1,7 @@
 import type { CollectionAfterChangeHook, CollectionConfig } from 'payload'
 
 import { publicReadEvents } from '@/access/eventVisibility'
+import { scopedToUserEvents } from '@/access/eventScope'
 import { canManageEventStructure } from '@/access/roles'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 
@@ -14,9 +15,15 @@ const enrollCreatorAsMember: CollectionAfterChangeHook = async ({ doc, req, oper
   }
 
   try {
+    // `req` must be forwarded so this insert runs inside the SAME transaction as the event create
+    // it's reacting to - without it, this create opens its own connection/transaction that can't
+    // yet see the just-created (not-committed) event row, and the FK insert fails silently every
+    // time (caught below, logged, never surfaced) - which is why no event ever actually ended up
+    // scoped despite this hook existing.
     await req.payload.create({
       collection: 'event-memberships',
       data: { event_id: doc.id, user_id: req.user.id },
+      req,
     })
   } catch (error) {
     req.payload.logger.error(`Failed to auto-enroll creator as member of event ${doc.id}: ${error}`)
@@ -33,10 +40,14 @@ export const Events: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
+    // `create` is intentionally NOT event-scoped - there's no existing event to scope against yet.
+    // `enrollCreatorAsMember` below immediately makes the creator this event's first member, so
+    // `update`/`delete` scoping (keyed on `id`, since this collection IS the event) never locks
+    // them out of what they just created.
     create: canManageEventStructure,
-    delete: canManageEventStructure,
+    delete: scopedToUserEvents(canManageEventStructure, 'id'),
     read: publicReadEvents,
-    update: canManageEventStructure,
+    update: scopedToUserEvents(canManageEventStructure, 'id'),
   },
   hooks: {
     afterChange: [enrollCreatorAsMember],

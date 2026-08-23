@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageParticipants } from '@/access/roles'
 
 export const Clubs: CollectionConfig = {
@@ -11,10 +12,10 @@ export const Clubs: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageParticipants,
-    delete: canManageParticipants,
+    create: scopedCreateToUserEvents(canManageParticipants),
+    delete: scopedToUserEvents(canManageParticipants),
     read: publicReadScopedToEvent(),
-    update: canManageParticipants,
+    update: scopedToUserEvents(canManageParticipants),
   },
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 9: slug uniqueness must be scoped per
   // event, not global, so two different events can each have their own club

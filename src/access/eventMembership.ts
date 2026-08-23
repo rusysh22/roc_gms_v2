@@ -17,10 +17,13 @@ const getRelationId = (value: unknown): string | number | undefined => {
   return undefined
 }
 
-/** An event with zero EventMemberships rows predates this feature (or was never scoped) and is
- * treated as open to any authenticated staff account - exactly how every event behaved before
- * AUDIT_E2E AUTH-01, so existing tournaments never get silently locked out. Adding at least one
- * member switches that event into per-event-scoped mode from then on. super_admin always bypasses. */
+/** Membership is required, full stop: a staff account only reaches an event it has an explicit
+ * EventMemberships row for (super_admin always bypasses). Events.ts's enrollCreatorAsMember hook
+ * enrolls the creator the moment an event is made, so this never blocks the person who actually
+ * made it - it only blocks everyone else. (Earlier this had a "zero-membership events are open to
+ * any staff" fallback for pre-existing events; removed per explicit product decision - an event
+ * an admin didn't create/get added to must not appear in their admin panel at all, only through
+ * the public site like any other visitor.) */
 export const canAccessEvent = async (
   payload: Payload,
   user: MembershipUser,
@@ -34,21 +37,16 @@ export const canAccessEvent = async (
     collection: 'event-memberships',
     depth: 0,
     limit: 500,
-    where: { event_id: { equals: eventId } },
+    where: { and: [{ event_id: { equals: eventId } }, { user_id: { equals: user.id } }] },
   })
 
-  if (membershipsForEvent.totalDocs === 0) {
-    return true
-  }
-
-  return membershipsForEvent.docs.some(
-    (membership) => String(getRelationId(membership.user_id)) === String(user.id),
-  )
+  return membershipsForEvent.totalDocs > 0
 }
 
-/** Same open-by-default-until-scoped rule as canAccessEvent, applied to every event at once - used
- * to filter the workspace event switcher so a scoped-out user never even sees an event they can't
- * touch (previously listEventsForSwitcher had no where clause at all). */
+/** Same membership-required rule as canAccessEvent, applied across every event at once - used to
+ * filter the workspace event switcher (and, via eventScope.ts/eventVisibility.ts, every
+ * event-scoped collection's access control) so a non-member never even sees an event they don't
+ * belong to. */
 export const getAccessibleEventIds = async (
   payload: Payload,
   user: MembershipUser,
@@ -57,30 +55,22 @@ export const getAccessibleEventIds = async (
     return 'all'
   }
 
-  const [eventsResult, membershipsResult] = await Promise.all([
-    payload.find({ collection: 'events', depth: 0, limit: 200, sort: '-event_start_at' }),
-    payload.find({ collection: 'event-memberships', depth: 0, limit: 1000 }),
-  ])
+  const membershipsResult = await payload.find({
+    collection: 'event-memberships',
+    depth: 0,
+    limit: 1000,
+    where: { user_id: { equals: user.id } },
+  })
 
-  const membersByEvent = new Map<string, Set<string>>()
+  // A user can hold more than one membership row per event (e.g. distinct sport_ids scoping) -
+  // dedupe by string key while keeping the original id value/type for the returned list.
+  const uniqueById = new Map<string, string | number>()
   for (const membership of membershipsResult.docs) {
     const eventId = getRelationId(membership.event_id)
-    const userId = getRelationId(membership.user_id)
-    if (eventId === undefined || userId === undefined) {
-      continue
+    if (eventId !== undefined) {
+      uniqueById.set(String(eventId), eventId)
     }
-    const key = String(eventId)
-    const members = membersByEvent.get(key) || new Set<string>()
-    members.add(String(userId))
-    membersByEvent.set(key, members)
   }
 
-  const currentUserId = String(user.id)
-
-  return eventsResult.docs
-    .filter((event) => {
-      const members = membersByEvent.get(String(event.id))
-      return !members || members.has(currentUserId)
-    })
-    .map((event) => event.id)
+  return [...uniqueById.values()]
 }

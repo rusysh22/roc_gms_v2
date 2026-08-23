@@ -2,6 +2,7 @@ import path from 'path'
 import type { CollectionBeforeOperationHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageMatches, canReadDocumentation } from '@/access/roles'
 import {
   validateImageBuffer,
@@ -55,10 +56,10 @@ export const DocumentationAssets: CollectionConfig = {
     useAsTitle: 'caption',
   },
   access: {
-    create: canManageMatches,
-    delete: canManageMatches,
+    create: scopedCreateToUserEvents(canManageMatches),
+    delete: scopedToUserEvents(canManageMatches),
     read: canReadDocumentation,
-    update: canManageMatches,
+    update: scopedToUserEvents(canManageMatches),
   },
   hooks: {
     beforeOperation: [validateDocumentationUpload],

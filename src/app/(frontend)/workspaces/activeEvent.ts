@@ -1,8 +1,10 @@
-import { cookies } from 'next/headers'
+import { cookies, headers as getHeaders } from 'next/headers'
 import type { Payload } from 'payload'
 
-import { getAccessibleEventIds } from '@/access/eventMembership'
+import { canAccessEvent, getAccessibleEventIds } from '@/access/eventMembership'
 import type { UserRole } from '@/access/roles'
+
+type ActiveEventUser = { id: string | number; roles?: UserRole[] | null }
 
 // Event = the "company"/tenant every master-data and transaction collection is scoped to
 // (event_id on Sports, Categories, Clubs, Teams, Players, Entries, Matches, ...). One admin
@@ -33,22 +35,45 @@ export const getActiveEvent = async (
   const cookieStore = await cookies()
   const cookieEventId = cookieStore.get(ACTIVE_EVENT_COOKIE)?.value
 
+  // Resolves the caller itself (same pattern as getCurrentPublicUser.ts) so none of this file's
+  // ~40 call sites need to be touched to pass a user through - every one of them gets this
+  // membership scoping for free.
+  const { user } = await payload.auth({ headers: await getHeaders() })
+  const scopeUser = user as ActiveEventUser | null
+
   if (cookieEventId) {
     const event = await payload
       .findByID({ collection: 'events', id: cookieEventId, depth })
       .catch(() => null)
-    if (event) {
+    // AUDIT_E2E AUTH-01 follow-up "per-user event access": trust the cookie only if this user can
+    // still actually reach that event - it may have been set before their membership was removed,
+    // or (before this fix) never validated against membership at all, which is exactly how one
+    // account's admin panel could end up showing another account's event.
+    if (event && scopeUser && (await canAccessEvent(payload, scopeUser, event.id))) {
       return event as ActiveEventDoc
     }
   }
 
-  // No cookie yet (first visit) or it pointed at a deleted event - fall back to the
-  // earliest-starting event, matching this app's original single-event assumption.
+  if (!scopeUser) {
+    return null
+  }
+
+  // No (valid) cookie - fall back to this user's own earliest-starting event, matching this app's
+  // original single-event assumption, but scoped to what they're actually a member of. Never a
+  // bare global fallback (the previous behavior): a freshly logged-in user with no active-event
+  // cookie must not be handed an event they have no relationship to just because it happens to
+  // start first system-wide.
+  const accessibleEventIds = await getAccessibleEventIds(payload, scopeUser)
+  if (accessibleEventIds !== 'all' && accessibleEventIds.length === 0) {
+    return null
+  }
+
   const fallback = await payload.find({
     collection: 'events',
     depth,
     limit: 1,
     sort: 'event_start_at',
+    where: accessibleEventIds === 'all' ? undefined : { id: { in: accessibleEventIds } },
   })
   return (fallback.docs[0] as ActiveEventDoc) || null
 }

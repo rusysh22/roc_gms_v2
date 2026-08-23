@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageMatches, canReadBackofficeOnly, enforceMatchSetMutationCapabilities } from '@/access/roles'
 
 export const MatchSets: CollectionConfig = {
@@ -9,10 +10,10 @@ export const MatchSets: CollectionConfig = {
     group: 'Schedule',
   },
   access: {
-    create: canManageMatches,
-    delete: canManageMatches,
-    read: canReadBackofficeOnly,
-    update: canManageMatches,
+    create: scopedCreateToUserEvents(canManageMatches),
+    delete: scopedToUserEvents(canManageMatches),
+    read: scopedToUserEvents(canReadBackofficeOnly),
+    update: scopedToUserEvents(canManageMatches),
   },
   hooks: {
     beforeChange: [enforceMatchSetMutationCapabilities],

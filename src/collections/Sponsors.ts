@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageEventStructure } from '@/access/roles'
 
 // AUDIT_UI_UX_CSS PUB-10/P2 item 5: "sponsor/partner belum menjadi bagian appearance/public
@@ -16,10 +17,10 @@ export const Sponsors: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
+    create: scopedCreateToUserEvents(canManageEventStructure),
+    delete: scopedToUserEvents(canManageEventStructure),
     read: publicReadScopedToEvent(),
-    update: canManageEventStructure,
+    update: scopedToUserEvents(canManageEventStructure),
   },
   fields: [
     {

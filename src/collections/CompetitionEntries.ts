@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageParticipants } from '@/access/roles'
 
 export const CompetitionEntries: CollectionConfig = {
@@ -11,10 +12,10 @@ export const CompetitionEntries: CollectionConfig = {
     useAsTitle: 'display_name',
   },
   access: {
-    create: canManageParticipants,
-    delete: canManageParticipants,
+    create: scopedCreateToUserEvents(canManageParticipants),
+    delete: scopedToUserEvents(canManageParticipants),
     read: publicReadScopedToEvent(),
-    update: canManageParticipants,
+    update: scopedToUserEvents(canManageParticipants),
   },
   fields: [
     {

@@ -1,7 +1,8 @@
-import type { Access, CollectionBeforeChangeHook, FieldAccess, Payload } from 'payload'
+import type { Access, CollectionBeforeChangeHook, FieldAccess, Payload, Where } from 'payload'
 import { Forbidden } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
+import { staffOrPublicWhere } from './eventVisibility'
 
 export type UserRole =
   | 'super_admin'
@@ -150,11 +151,12 @@ const fieldChanged = (
 ) => field in data && getFieldValueId(data[field]) !== getFieldValueId(originalDoc[field])
 
 /** MSG-06: resolves how far a member's EventMemberships.sport_ids narrows them for this event.
- * `null` means unrestricted - either there's no membership row at all (an event with zero
- * EventMemberships rows is open to any staff account, same as canAccessEvent's default), or at
- * least one of the member's rows for this event has an empty sport_ids (empty = all sports, and
- * a member with multiple rows should get the union of what any one row grants, not the
- * intersection). A non-null Set is the union of every populated row's sport_ids. */
+ * `null` means unrestricted - either this user has no membership row for this event at all (moot
+ * in practice: canAccessEvent/the event-scoped collection access already requires one before this
+ * ever runs, for any non-super_admin/event_admin role), or at least one of their rows for this
+ * event has an empty sport_ids (empty = all sports, and a member with multiple rows should get the
+ * union of what any one row grants, not the intersection). A non-null Set is the union of every
+ * populated row's sport_ids. */
 const resolveMembershipSportScope = async (
   payload: Payload,
   userId: string | number,
@@ -313,16 +315,21 @@ export const canReadAdminField: FieldAccess = ({ req }) => {
   return hasRole(req.user as AccessUser | null | undefined, ['super_admin'])
 }
 
-/** Unauthenticated callers can only see explicitly public documentation. */
-export const canReadDocumentation: Access = ({ req }) => {
-  if (req.user) return true
-  return { visibility: { equals: 'public' } }
+/** Unauthenticated callers can only see explicitly public documentation. Authenticated staff get
+ * that plus full read (including internal assets) on events they're actually a member of - not a
+ * blanket bypass, now that self-registration hands out an authenticated account to anyone. */
+export const canReadDocumentation: Access = async ({ req }) => {
+  const publicWhere = { visibility: { equals: 'public' } } satisfies Where
+  if (!req.user) return publicWhere
+  return staffOrPublicWhere(req, 'event_id', publicWhere)
 }
 
-/** Public APIs must not reveal drafts or internal matches. */
-export const canReadPublicMatch: Access = ({ req }) => {
-  if (req.user) return true
-  return { is_public: { equals: true } }
+/** Public APIs must not reveal drafts or internal matches. Authenticated staff get that plus full
+ * read on events they're actually a member of, same reasoning as canReadDocumentation above. */
+export const canReadPublicMatch: Access = async ({ req }) => {
+  const publicWhere = { is_public: { equals: true } } satisfies Where
+  if (!req.user) return publicWhere
+  return staffOrPublicWhere(req, 'event_id', publicWhere)
 }
 
 export const canReadBackofficeOnly: Access = ({ req }) => Boolean(req.user)

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageRegistrationQueue } from '@/access/roles'
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P2 item 2: "Registration portal dan approval queue". A
@@ -24,10 +25,10 @@ export const RegistrationSubmissions: CollectionConfig = {
     useAsTitle: 'display_name',
   },
   access: {
-    create: canManageRegistrationQueue,
-    delete: canManageRegistrationQueue,
-    read: canManageRegistrationQueue,
-    update: canManageRegistrationQueue,
+    create: scopedCreateToUserEvents(canManageRegistrationQueue),
+    delete: scopedToUserEvents(canManageRegistrationQueue),
+    read: scopedToUserEvents(canManageRegistrationQueue),
+    update: scopedToUserEvents(canManageRegistrationQueue),
   },
   fields: [
     {

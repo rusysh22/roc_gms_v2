@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageParticipants, canReadEventBackoffice } from '@/access/roles'
 
 export const Players: CollectionConfig = {
@@ -10,10 +11,10 @@ export const Players: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageParticipants,
-    delete: canManageParticipants,
-    read: canReadEventBackoffice,
-    update: canManageParticipants,
+    create: scopedCreateToUserEvents(canManageParticipants),
+    delete: scopedToUserEvents(canManageParticipants),
+    read: scopedToUserEvents(canReadEventBackoffice),
+    update: scopedToUserEvents(canManageParticipants),
   },
   // MSG-05: identification_number uniqueness must be scoped per event, not global - it used to be
   // a bare `unique: true` field, which meant the same person's ID collided across two unrelated

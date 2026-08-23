@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadScopedToEvent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageSchedule } from '@/access/roles'
 
 // MSG-02: one row per medal awarded (gold/silver/bronze), derived from a category's final result
@@ -16,10 +17,10 @@ export const MedalRecords: CollectionConfig = {
     useAsTitle: 'medal',
   },
   access: {
-    create: canManageSchedule,
-    delete: canManageSchedule,
+    create: scopedCreateToUserEvents(canManageSchedule),
+    delete: scopedToUserEvents(canManageSchedule),
     read: publicReadScopedToEvent(),
-    update: canManageSchedule,
+    update: scopedToUserEvents(canManageSchedule),
   },
   indexes: [{ fields: ['event_id', 'category_id', 'entry_id', 'medal'], unique: true }],
   fields: [

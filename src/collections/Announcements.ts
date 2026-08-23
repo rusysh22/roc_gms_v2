@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadPublishedContent } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageContent } from '@/access/roles'
 
 const statusOptions = [
@@ -18,10 +19,10 @@ export const Announcements: CollectionConfig = {
     useAsTitle: 'title',
   },
   access: {
-    create: canManageContent,
-    delete: canManageContent,
+    create: scopedCreateToUserEvents(canManageContent),
+    delete: scopedToUserEvents(canManageContent),
     read: publicReadPublishedContent({ expiresAtField: 'expires_at' }),
-    update: canManageContent,
+    update: scopedToUserEvents(canManageContent),
   },
   fields: [
     {

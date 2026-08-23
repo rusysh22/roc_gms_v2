@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canReadEventBackoffice, isSystemAdmin } from '@/access/roles'
 
 // AUDIT_E2E AUTH-01: roles on Users are global, so any event_admin/scheduler/match_officer/
@@ -15,10 +16,13 @@ export const EventMemberships: CollectionConfig = {
     useAsTitle: 'user_id',
   },
   access: {
-    create: isSystemAdmin,
-    delete: isSystemAdmin,
-    read: canReadEventBackoffice,
-    update: isSystemAdmin,
+    // Scoped to the caller's own accessible events too: an event_admin can enroll/remove members
+    // on an event they're already open on/a member of (including one they just created, per
+    // Events.ts's enrollCreatorAsMember), but not reach into an event scoped to someone else.
+    create: scopedCreateToUserEvents(isSystemAdmin),
+    delete: scopedToUserEvents(isSystemAdmin),
+    read: scopedToUserEvents(canReadEventBackoffice),
+    update: scopedToUserEvents(isSystemAdmin),
   },
   fields: [
     {

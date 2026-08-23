@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   Activity,
@@ -17,6 +17,7 @@ import {
   Layers,
   ListChecks,
   ListOrdered,
+  LogOut,
   Medal,
   Megaphone,
   Menu,
@@ -307,6 +308,33 @@ function SidebarContent({
   )
 }
 
+function LogoutButton() {
+  const router = useRouter()
+  const [loggingOut, setLoggingOut] = React.useState(false)
+
+  const handleLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await fetch('/api/users/logout', { method: 'POST' })
+    } finally {
+      router.push('/login')
+      router.refresh()
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleLogout}
+      disabled={loggingOut}
+      className="flex items-center gap-3 rounded-full px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:bg-mist hover:text-danger disabled:opacity-60"
+    >
+      <LogOut className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {loggingOut ? 'Logging out...' : 'Log out'}
+    </button>
+  )
+}
+
 function SidebarFooter({
   email,
   events,
@@ -329,6 +357,7 @@ function SidebarFooter({
         >
           View public site
         </Link>
+        <LogoutButton />
         {email ? <p className="truncate px-3 pt-1 text-xs font-semibold text-ink-soft">{email}</p> : null}
       </div>
     </div>

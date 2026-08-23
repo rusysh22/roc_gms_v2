@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageEventStructure } from '@/access/roles'
 
 export const Venues: CollectionConfig = {
@@ -10,10 +11,11 @@ export const Venues: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageEventStructure,
-    delete: canManageEventStructure,
+    create: scopedCreateToUserEvents(canManageEventStructure),
+    delete: scopedToUserEvents(canManageEventStructure),
+    // Unchanged: read stays fully public, separate from the per-user *write* scoping this pass adds.
     read: () => true,
-    update: canManageEventStructure,
+    update: scopedToUserEvents(canManageEventStructure),
   },
   fields: [
     {

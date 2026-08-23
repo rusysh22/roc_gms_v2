@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { publicReadPublishedBracket } from '@/access/eventVisibility'
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageSchedule } from '@/access/roles'
 
 export const Brackets: CollectionConfig = {
@@ -11,10 +12,10 @@ export const Brackets: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: canManageSchedule,
-    delete: canManageSchedule,
+    create: scopedCreateToUserEvents(canManageSchedule),
+    delete: scopedToUserEvents(canManageSchedule),
     read: publicReadPublishedBracket,
-    update: canManageSchedule,
+    update: scopedToUserEvents(canManageSchedule),
   },
   fields: [
     {

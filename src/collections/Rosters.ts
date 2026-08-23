@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedCreateToUserEvents, scopedToUserEvents } from '@/access/eventScope'
 import { canManageParticipants, canReadEventBackoffice } from '@/access/roles'
 
 export const Rosters: CollectionConfig = {
@@ -10,10 +11,10 @@ export const Rosters: CollectionConfig = {
     useAsTitle: 'role',
   },
   access: {
-    create: canManageParticipants,
-    delete: canManageParticipants,
-    read: canReadEventBackoffice,
-    update: canManageParticipants,
+    create: scopedCreateToUserEvents(canManageParticipants),
+    delete: scopedToUserEvents(canManageParticipants),
+    read: scopedToUserEvents(canReadEventBackoffice),
+    update: scopedToUserEvents(canManageParticipants),
   },
   fields: [
     {
