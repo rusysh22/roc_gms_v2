@@ -83,7 +83,7 @@ import {
 import { generateMatchesAction, setStageRulesetOverrideAction } from './generateActions'
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
-import { UnsavedChangesGuard } from './UnsavedChangesGuard'
+import { WizardFormDraft } from './WizardFormDraft'
 import { SeedOrderTable } from './SeedOrderTable'
 
 export const dynamic = 'force-dynamic'
@@ -135,7 +135,7 @@ const errorMessages: Record<string, string> = {
   invalid_entry: 'Choose a category and a participant to add.',
   duplicate_entry: 'That participant is already entered in this category.',
   invalid_import_file: 'Upload a valid .xlsx file exported from the template.',
-  empty_import: 'That file has no rows in its Clubs, Teams, or Players sheets.',
+  empty_import: 'That file has no rows in any of its Sports, Categories, Clubs, Teams, Players, or Pairs sheets.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
   duplicate_seed: 'Two entries had the same seed number. Give each entry a unique seed and save again.',
   invalid_group_count: 'Choose between 2 and 12 groups.',
@@ -517,13 +517,22 @@ export default async function NewEventWizardPage({
               tab={get(params, 'tab')}
               setupParticipantSource={String(event.setup_participant_source || '')}
               imported={get(params, 'wizardImported')}
+              importUpdated={get(params, 'wizardImportUpdated')}
               importRegistered={get(params, 'wizardRegistered')}
               importSkipped={get(params, 'wizardImportSkipped')}
               importIssues={get(params, 'wizardImportIssues')}
               importMoreIssues={get(params, 'wizardImportMoreIssues')}
               importPreviewFile={get(params, 'importPreviewFile')}
+              importPreviewSports={get(params, 'importPreviewSports')}
+              importPreviewSportsUpdate={get(params, 'importPreviewSportsUpdate')}
+              importPreviewRulesets={get(params, 'importPreviewRulesets')}
+              importPreviewRulesetsUpdate={get(params, 'importPreviewRulesetsUpdate')}
+              importPreviewCategories={get(params, 'importPreviewCategories')}
+              importPreviewCategoriesUpdate={get(params, 'importPreviewCategoriesUpdate')}
               importPreviewClubs={get(params, 'importPreviewClubs')}
+              importPreviewClubsUpdate={get(params, 'importPreviewClubsUpdate')}
               importPreviewTeams={get(params, 'importPreviewTeams')}
+              importPreviewTeamsUpdate={get(params, 'importPreviewTeamsUpdate')}
               importPreviewPlayers={get(params, 'importPreviewPlayers')}
               importPreviewPairs={get(params, 'importPreviewPairs')}
               importPreviewEntries={get(params, 'importPreviewEntries')}
@@ -1215,10 +1224,11 @@ const EventStep = ({
         The basics for your event. You can add sports, categories, and participants next.
       </p>
     </div>
-    {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 8 gap-fill: warns on tab close/refresh once anything
-        below has been touched, so a typed-out name/dates/logo isn't silently lost - see
-        UnsavedChangesGuard for exactly what this does and doesn't cover. */}
-    <UnsavedChangesGuard>
+    {/* prd/redesign/import-data-and-draft-persistence.md track DR: autosaves this form to
+        localStorage as it's filled and offers an explicit "restore?" banner on the next mount, so a
+        refresh/crash/accidental navigation mid-entry doesn't lose a typed-out name/dates/timezone.
+        Also keeps the native beforeunload prompt. The logo file input can't be persisted. */}
+    <WizardFormDraft storageKey="new-event:event-step">
       <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
         {/* Carried through from the Setup Assistant (Step 0), if answered - createEventAction
             persists these onto the new event so every later step can read a real default off it. */}
@@ -1277,7 +1287,7 @@ const EventStep = ({
           </SubmitButton>
         </div>
       </form>
-    </UnsavedChangesGuard>
+    </WizardFormDraft>
   </Card>
 )
 
@@ -1881,13 +1891,22 @@ const ParticipantsStep = async ({
   tab,
   setupParticipantSource,
   imported,
+  importUpdated,
   importRegistered,
   importSkipped,
   importIssues,
   importMoreIssues,
   importPreviewFile,
+  importPreviewSports,
+  importPreviewSportsUpdate,
+  importPreviewRulesets,
+  importPreviewRulesetsUpdate,
+  importPreviewCategories,
+  importPreviewCategoriesUpdate,
   importPreviewClubs,
+  importPreviewClubsUpdate,
   importPreviewTeams,
+  importPreviewTeamsUpdate,
   importPreviewPlayers,
   importPreviewPairs,
   importPreviewEntries,
@@ -1900,13 +1919,22 @@ const ParticipantsStep = async ({
   tab?: string
   setupParticipantSource?: string
   imported?: string
+  importUpdated?: string
   importRegistered?: string
   importSkipped?: string
   importIssues?: string
   importMoreIssues?: string
   importPreviewFile?: string
+  importPreviewSports?: string
+  importPreviewSportsUpdate?: string
+  importPreviewRulesets?: string
+  importPreviewRulesetsUpdate?: string
+  importPreviewCategories?: string
+  importPreviewCategoriesUpdate?: string
   importPreviewClubs?: string
+  importPreviewClubsUpdate?: string
   importPreviewTeams?: string
+  importPreviewTeamsUpdate?: string
   importPreviewPlayers?: string
   importPreviewPairs?: string
   importPreviewEntries?: string
@@ -1981,7 +2009,8 @@ const ParticipantsStep = async ({
       {imported ? (
         <AlertBanner tone="success">
           <p>
-            Imported {imported} row(s) from the Excel file.
+            Imported {imported} new row(s) from the Excel file.
+            {importUpdated ? ` ${importUpdated} existing row(s) were updated.` : ''}
             {importRegistered ? ` ${importRegistered} of them were also registered into a category via "category_name".` : ''}
             {importSkipped ? ` ${importSkipped} row(s) were skipped.` : ''}
           </p>
@@ -2023,20 +2052,32 @@ const ParticipantsStep = async ({
 
       <Card className="flex flex-col gap-3">
         <div>
-          <CardTitle>Bulk import from Excel</CardTitle>
+          <CardTitle>Import event data from Excel</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
-            Got a lot of clubs, teams, players, or doubles pairs? Download the template, fill it in,
-            and upload it here - everything gets tied to this event automatically. Add one or more
-            category names per row (comma-separated) to register it straight into those categories
-            in the same step, instead of doing that separately in Registration.
+            One workbook covers your whole event: Sports, Rulesets, Categories, Clubs, Teams,
+            Players, and doubles Pairs. Fill it top to bottom and upload it here - everything gets tied to this
+            event automatically, and re-uploading an edited file updates rows instead of duplicating
+            them. Add one or more category names per row (comma-separated) to register it straight
+            into those categories in the same step.
           </p>
         </div>
         <div className="flex flex-col gap-3">
-          <Button asChild variant="secondary" size="sm" className="self-start">
-            <a href="/workspaces/event-admin/new-event/participants-template" download>
-              Download Excel template
-            </a>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <a href={`/workspaces/event-admin/new-event/data-template?eventId=${eventId}`} download>
+                Download template for this event
+              </a>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <a href="/workspaces/event-admin/new-event/participants-template" download>
+                Download blank template
+              </a>
+            </Button>
+          </div>
+          <p className="text-xs text-ink-soft">
+            &ldquo;For this event&rdquo; comes back with your Sports and Categories sheets already
+            filled in{categories.docs.length === 0 ? ' (add some in the earlier steps first for the best result)' : ''}.
+          </p>
           <form action={previewParticipantsImportAction} className="flex flex-col items-start gap-3 sm:max-w-sm">
             <input type="hidden" name="eventId" value={eventId} />
             <FileUpload
@@ -2067,27 +2108,29 @@ const ParticipantsStep = async ({
               Nothing has been saved yet. Check the mapping below, then confirm or cancel.
             </p>
           </div>
-          <dl className="grid grid-cols-3 gap-3 text-sm sm:grid-cols-5">
-            <div>
-              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Clubs</dt>
-              <dd className="text-lg font-extrabold text-ink">{importPreviewClubs || 0}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Teams</dt>
-              <dd className="text-lg font-extrabold text-ink">{importPreviewTeams || 0}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Players</dt>
-              <dd className="text-lg font-extrabold text-ink">{importPreviewPlayers || 0}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Pairs</dt>
-              <dd className="text-lg font-extrabold text-ink">{importPreviewPairs || 0}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">Category entries</dt>
-              <dd className="text-lg font-extrabold text-ink">{importPreviewEntries || 0}</dd>
-            </div>
+          <dl className="grid grid-cols-3 gap-3 text-sm sm:grid-cols-4 lg:grid-cols-8">
+            {(
+              [
+                ['Sports', importPreviewSports, importPreviewSportsUpdate],
+                ['Rulesets', importPreviewRulesets, importPreviewRulesetsUpdate],
+                ['Categories', importPreviewCategories, importPreviewCategoriesUpdate],
+                ['Clubs', importPreviewClubs, importPreviewClubsUpdate],
+                ['Teams', importPreviewTeams, importPreviewTeamsUpdate],
+                ['Players', importPreviewPlayers, undefined],
+                ['Pairs', importPreviewPairs, undefined],
+                ['Category entries', importPreviewEntries, undefined],
+              ] as const
+            ).map(([label, created, updatedCount]) => (
+              <div key={label}>
+                <dt className="text-xs font-bold tracking-wide text-ink-soft uppercase">{label}</dt>
+                <dd className="text-lg font-extrabold text-ink">
+                  {created || 0}
+                  {updatedCount && updatedCount !== '0' ? (
+                    <span className="text-xs font-semibold text-ink-soft"> +{updatedCount} upd.</span>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
           </dl>
           {previewIssues.length > 0 ? (
             <details>

@@ -52,6 +52,65 @@ describe('parseParticipantsWorkbook', () => {
     })
   })
 
+  it('parses the Sports and Categories sheets from the template', () => {
+    const buffer = buildParticipantsTemplateWorkbook()
+    const parsed = parseParticipantsWorkbook(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+    )
+
+    expect(parsed.sports).toEqual([
+      { name: 'Badminton', sportType: 'court', description: undefined, icon: undefined },
+      { name: 'Futsal', sportType: 'field', description: undefined, icon: undefined },
+    ])
+    expect(parsed.rulesets).toHaveLength(2)
+    expect(parsed.rulesets.find((r) => r.name === 'Badminton BWF 21')).toMatchObject({
+      sportName: 'Badminton',
+      scoreType: 'sets',
+      setBased: true,
+      allowDraw: false,
+      bestOf: 3,
+    })
+    expect(parsed.categories).toHaveLength(5)
+    expect(parsed.categories.find((c) => c.name === 'Badminton Singles Men')).toMatchObject({
+      rulesetName: 'Badminton BWF 21',
+    })
+    expect(parsed.categories.find((c) => c.name === 'Futsal Men')).toMatchObject({
+      sportName: 'Futsal',
+      participantMode: 'team',
+      formatType: 'group_stage_to_knockout',
+      rosterRequired: true,
+      minRosterSize: 5,
+      maxRosterSize: 12,
+      groupQualifyCount: 2,
+      thirdPlacePolicy: 'match',
+    })
+    // Every category_name referenced on the participant sheets exists on the Categories sheet.
+    const categoryNames = new Set(parsed.categories.map((c) => c.name))
+    for (const team of parsed.teams) {
+      for (const name of team.categoryNames ?? []) expect(categoryNames.has(name)).toBe(true)
+    }
+    for (const player of parsed.players) {
+      for (const name of player.categoryNames ?? []) expect(categoryNames.has(name)).toBe(true)
+    }
+  })
+
+  it('normalises yes/no and numeric category cells, leaving blanks undefined', () => {
+    const workbook = XLSX.utils.book_new()
+    const categoriesSheet = XLSX.utils.json_to_sheet([
+      { name: 'A', sport_name: 'Badminton', roster_required: 'YES', min_roster_size: '3', medal_weight: '' },
+      { name: 'B', sport_name: 'Badminton', roster_required: '', min_roster_size: 'abc' },
+    ])
+    XLSX.utils.book_append_sheet(workbook, categoriesSheet, 'Categories')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+    const parsed = parseParticipantsWorkbook(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+    )
+
+    expect(parsed.categories[0]).toMatchObject({ rosterRequired: true, minRosterSize: 3, medalWeight: undefined })
+    expect(parsed.categories[1]).toMatchObject({ rosterRequired: undefined, minRosterSize: undefined })
+  })
+
   it('splits category_name on commas, trims blanks, and dedupes case-insensitively', () => {
     const workbook = XLSX.utils.book_new()
     const playersSheet = XLSX.utils.json_to_sheet([

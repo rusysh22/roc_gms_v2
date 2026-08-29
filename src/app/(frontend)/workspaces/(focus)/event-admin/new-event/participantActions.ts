@@ -230,6 +230,26 @@ export async function addPairAction(formData: FormData): Promise<void> {
 
 const validGenders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
+// prd/redesign/import-data-and-draft-persistence.md track IMP: the workbook's Sports and Categories
+// sheets are processed before any participant sheet. An unrecognised enum value never fails the
+// row - it falls back to the field default with a warning (mirrors addSportAction/addCategoryAction
+// which already coerce their form inputs the same way).
+const validSportTypes = new Set(['court', 'field', 'table', 'board', 'esport', 'track', 'other'])
+const validParticipantModes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd'])
+const validFormatTypes = new Set([
+  'single_elimination',
+  'double_elimination',
+  'round_robin',
+  'group_stage_to_knockout',
+  'league',
+  'friendly',
+  'time_trial',
+  'score_ranking',
+])
+const validCategoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
+const validThirdPlacePolicies = new Set(['none', 'match', 'shared'])
+const validScoreTypes = new Set(['points', 'goals', 'sets', 'time', 'result', 'custom'])
+
 type ImportCategoryDoc = { id: unknown; name: unknown; participant_mode: unknown }
 
 const buildCategoryNameIndex = (categories: ImportCategoryDoc[]) => {
@@ -308,12 +328,22 @@ const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedP
 // re-run fresh at confirm time (not trusted as a stale snapshot) in case anything changed
 // in between.
 const planParticipantsImport = async (payload: Payload, eventId: string, parsed: ParsedParticipantsWorkbook) => {
-  const [existingClubs, existingTeams, existingPlayers, existingCategories] = await Promise.all([
-    payload.find({ collection: 'clubs', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
-    payload.find({ collection: 'teams', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
-    payload.find({ collection: 'players', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
-    payload.find({ collection: 'competition-categories', depth: 0, limit: 500, where: { event_id: { equals: eventId } } }),
-  ])
+  const [existingSports, existingRulesets, existingClubs, existingTeams, existingPlayers, existingCategories] =
+    await Promise.all([
+      payload.find({ collection: 'sports', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+      payload.find({ collection: 'rulesets', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+      payload.find({ collection: 'clubs', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+      payload.find({ collection: 'teams', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+      payload.find({ collection: 'players', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+      payload.find({ collection: 'competition-categories', depth: 0, limit: 500, where: { event_id: { equals: eventId } } }),
+    ])
+  const knownRulesetSlugs = new Set(existingRulesets.docs.map((ruleset) => String(ruleset.slug)))
+  const knownRulesetNames = new Set(existingRulesets.docs.map((ruleset) => String(ruleset.name).trim().toLowerCase()))
+  // A category's `sport_name` resolves against either an existing sport (by name or slug) or a
+  // Sports row in the same workbook - the sheet slug is derived deterministically from the name.
+  const knownSportSlugs = new Set(existingSports.docs.map((sport) => String(sport.slug)))
+  const knownSportNames = new Set(existingSports.docs.map((sport) => String(sport.name).trim().toLowerCase()))
+  const knownSportCategorySlugs = new Set(existingCategories.docs.map((category) => String(category.slug)))
   const knownClubNames = new Set(existingClubs.docs.map((club) => String(club.name).trim().toLowerCase()))
   const knownTeamSlugs = new Set(existingTeams.docs.map((team) => String(team.slug)))
   const knownIdentificationNumbers = new Set(
@@ -323,9 +353,28 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   )
   const knownPlayerNames = new Set(existingPlayers.docs.map((player) => String(player.name).trim().toLowerCase()))
   const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
+  // A `category_name` cell on a participant sheet can point at a Category defined in the same
+  // workbook, not just one already in the event - add those to the resolver index, skipping any
+  // whose slug already exists so an existing+sheet pairing doesn't read as a false "ambiguous".
+  for (const row of parsed.categories) {
+    const slug = slugify(row.name)
+    if (!slug || !row.sportName || knownSportCategorySlugs.has(slug)) continue
+    const key = row.name.trim().toLowerCase()
+    const list = categoriesByName.get(key) || []
+    list.push({ id: `sheet:${slug}`, name: row.name, participant_mode: row.participantMode || 'open' })
+    categoriesByName.set(key, list)
+  }
 
+  let sportsToCreate = 0
+  let sportsToUpdate = 0
+  let rulesetsToCreate = 0
+  let rulesetsToUpdate = 0
+  let categoriesToCreate = 0
+  let categoriesToUpdate = 0
   let clubsToCreate = 0
+  let clubsToUpdate = 0
   let teamsToCreate = 0
+  let teamsToUpdate = 0
   let playersToCreate = 0
   let pairsToCreate = 0
   let entriesToRegister = 0
@@ -351,6 +400,87 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
   }
 
+  for (const row of parsed.sports) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Sports', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (row.sportType && !validSportTypes.has(row.sportType)) {
+      warn('Sports', row.name, `Sport type "${row.sportType}" is not valid - will be saved as "court"`)
+    }
+    if (knownSportSlugs.has(slug)) {
+      sportsToUpdate += 1
+    } else {
+      sportsToCreate += 1
+      knownSportSlugs.add(slug)
+      knownSportNames.add(row.name.trim().toLowerCase())
+    }
+  }
+
+  for (const row of parsed.rulesets) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Rulesets', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (!row.sportName) {
+      skip('Rulesets', row.name, 'Missing sport_name')
+      continue
+    }
+    if (!knownSportNames.has(row.sportName.trim().toLowerCase()) && !knownSportSlugs.has(slugify(row.sportName))) {
+      skip('Rulesets', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      continue
+    }
+    if (row.scoreType && !validScoreTypes.has(row.scoreType)) {
+      warn('Rulesets', row.name, `score_type "${row.scoreType}" is not valid - will use "points"`)
+    }
+    if (knownRulesetSlugs.has(slug)) {
+      rulesetsToUpdate += 1
+    } else {
+      rulesetsToCreate += 1
+      knownRulesetSlugs.add(slug)
+      knownRulesetNames.add(row.name.trim().toLowerCase())
+    }
+  }
+
+  for (const row of parsed.categories) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Categories', row.name, 'Missing or invalid name')
+      continue
+    }
+    if (!row.sportName) {
+      skip('Categories', row.name, 'Missing sport_name')
+      continue
+    }
+    if (!knownSportNames.has(row.sportName.trim().toLowerCase()) && !knownSportSlugs.has(slugify(row.sportName))) {
+      skip('Categories', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      continue
+    }
+    if (row.rulesetName && !knownRulesetNames.has(row.rulesetName.trim().toLowerCase())) {
+      warn('Categories', row.name, `Ruleset "${row.rulesetName}" not found - will be saved without a ruleset`)
+    }
+    if (row.participantMode && !validParticipantModes.has(row.participantMode)) {
+      warn('Categories', row.name, `participant_mode "${row.participantMode}" is not valid - will use "open"`)
+    }
+    if (row.formatType && !validFormatTypes.has(row.formatType)) {
+      warn('Categories', row.name, `format_type "${row.formatType}" is not valid - will use "single_elimination"`)
+    }
+    if (row.status && !validCategoryStatuses.has(row.status)) {
+      warn('Categories', row.name, `status "${row.status}" is not valid - will use "draft"`)
+    }
+    if (row.thirdPlacePolicy && !validThirdPlacePolicies.has(row.thirdPlacePolicy)) {
+      warn('Categories', row.name, `third_place_policy "${row.thirdPlacePolicy}" is not valid - will use "none"`)
+    }
+    if (knownSportCategorySlugs.has(slug)) {
+      categoriesToUpdate += 1
+    } else {
+      categoriesToCreate += 1
+      knownSportCategorySlugs.add(slug)
+    }
+  }
+
   for (const row of parsed.clubs) {
     const slug = slugify(row.name)
     const key = row.name.trim().toLowerCase()
@@ -359,11 +489,11 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       continue
     }
     if (knownClubNames.has(key)) {
-      skip('Clubs', row.name, 'A club with this name already exists')
-      continue
+      clubsToUpdate += 1
+    } else {
+      knownClubNames.add(key)
+      clubsToCreate += 1
     }
-    knownClubNames.add(key)
-    clubsToCreate += 1
     checkCategory('Clubs', row.name, row.categoryNames, 'club')
   }
 
@@ -373,15 +503,15 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       skip('Teams', row.name, 'Missing or invalid name')
       continue
     }
-    if (knownTeamSlugs.has(slug)) {
-      skip('Teams', row.name, 'A team with this name already exists')
-      continue
-    }
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Teams', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
     }
-    knownTeamSlugs.add(slug)
-    teamsToCreate += 1
+    if (knownTeamSlugs.has(slug)) {
+      teamsToUpdate += 1
+    } else {
+      knownTeamSlugs.add(slug)
+      teamsToCreate += 1
+    }
     checkCategory('Teams', row.name, row.categoryNames, 'team')
   }
 
@@ -424,7 +554,23 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     checkCategory('Pairs', label, row.categoryNames, 'pair')
   }
 
-  return { clubsToCreate, teamsToCreate, playersToCreate, pairsToCreate, entriesToRegister, skippedCount, issues }
+  return {
+    sportsToCreate,
+    sportsToUpdate,
+    rulesetsToCreate,
+    rulesetsToUpdate,
+    categoriesToCreate,
+    categoriesToUpdate,
+    clubsToCreate,
+    clubsToUpdate,
+    teamsToCreate,
+    teamsToUpdate,
+    playersToCreate,
+    pairsToCreate,
+    entriesToRegister,
+    skippedCount,
+    issues,
+  }
 }
 
 const MAX_ISSUES_IN_URL = 25
@@ -456,6 +602,9 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
   if (
+    parsed.sports.length === 0 &&
+    parsed.rulesets.length === 0 &&
+    parsed.categories.length === 0 &&
     parsed.clubs.length === 0 &&
     parsed.teams.length === 0 &&
     parsed.players.length === 0 &&
@@ -475,7 +624,12 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
   const { issuesParam, moreIssues } = encodeIssues(plan.issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&importPreviewFile=${scratchFilename}` +
-      `&importPreviewClubs=${plan.clubsToCreate}&importPreviewTeams=${plan.teamsToCreate}&importPreviewPlayers=${plan.playersToCreate}` +
+      `&importPreviewSports=${plan.sportsToCreate}&importPreviewSportsUpdate=${plan.sportsToUpdate}` +
+      `&importPreviewRulesets=${plan.rulesetsToCreate}&importPreviewRulesetsUpdate=${plan.rulesetsToUpdate}` +
+      `&importPreviewCategories=${plan.categoriesToCreate}&importPreviewCategoriesUpdate=${plan.categoriesToUpdate}` +
+      `&importPreviewClubs=${plan.clubsToCreate}&importPreviewClubsUpdate=${plan.clubsToUpdate}` +
+      `&importPreviewTeams=${plan.teamsToCreate}&importPreviewTeamsUpdate=${plan.teamsToUpdate}` +
+      `&importPreviewPlayers=${plan.playersToCreate}` +
       `&importPreviewPairs=${plan.pairsToCreate}` +
       (plan.entriesToRegister ? `&importPreviewEntries=${plan.entriesToRegister}` : '') +
       (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : '') +
@@ -525,7 +679,9 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
-  const [existingClubs, existingPlayers, existingCategories] = await Promise.all([
+  const [existingSports, existingRulesets, existingClubs, existingPlayers, existingCategories] = await Promise.all([
+    payload.find({ collection: 'sports', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'rulesets', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
     payload.find({ collection: 'clubs', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
     payload.find({ collection: 'players', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
     payload.find({
@@ -535,6 +691,25 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       where: { event_id: { equals: eventId } },
     }),
   ])
+  // Sports/Categories are upserted by slug before any participant sheet, so a Category can name a
+  // Sport from the same workbook and a participant row's `category_name` can hit a Category just
+  // created here. `sportIdByName`/`sportIdBySlug` and `rulesetIdByName` back that resolution.
+  const sportIdBySlug = new Map<string, number>()
+  const sportIdByName = new Map<string, number>()
+  for (const sport of existingSports.docs) {
+    sportIdBySlug.set(String(sport.slug), Number(sport.id))
+    sportIdByName.set(String(sport.name).trim().toLowerCase(), Number(sport.id))
+  }
+  const rulesetIdByName = new Map<string, number>()
+  const rulesetIdBySlug = new Map<string, number>()
+  for (const ruleset of existingRulesets.docs) {
+    rulesetIdByName.set(String(ruleset.name).trim().toLowerCase(), Number(ruleset.id))
+    rulesetIdBySlug.set(String(ruleset.slug), Number(ruleset.id))
+  }
+  const categoryIdBySlug = new Map<string, number>()
+  for (const category of existingCategories.docs) {
+    categoryIdBySlug.set(String(category.slug), Number(category.id))
+  }
   const clubIdByName = new Map<string, number>()
   for (const club of existingClubs.docs) {
     clubIdByName.set(String(club.name).trim().toLowerCase(), Number(club.id))
@@ -551,6 +726,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
 
   let created = 0
+  let updated = 0
   let skipped = 0
   // Per-row detail so a failed import is actionable ("Jane Doe: duplicate name") instead of just
   // an opaque "N skipped" count the user has no way to act on. `skip` is a row that produced no
@@ -608,6 +784,240 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     }
   }
 
+  // --- Sports (upsert by slug) ---
+  for (const row of parsed.sports) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Sports', row.name, 'Missing or invalid name')
+      continue
+    }
+    const sportType = row.sportType && validSportTypes.has(row.sportType) ? row.sportType : 'court'
+    if (row.sportType && sportType !== row.sportType) {
+      warn('Sports', row.name, `Sport type "${row.sportType}" is not valid - saved as "court"`)
+    }
+    try {
+      const existingId = sportIdBySlug.get(slug)
+      if (existingId) {
+        const before = await payload.findByID({ collection: 'sports', id: existingId, depth: 0 }).catch(() => null)
+        const data = {
+          name: row.name,
+          sport_type: sportType as 'court' | 'field' | 'table' | 'board' | 'esport' | 'track' | 'other',
+          description: row.description,
+          icon: row.icon,
+        }
+        await payload.update({ collection: 'sports', id: existingId, data })
+        await recordAuditLog({
+          payload,
+          action: 'sport.update',
+          entityType: 'sports',
+          entityId: existingId,
+          before,
+          after: data,
+          actorUserId: user.id,
+        })
+        updated += 1
+      } else {
+        const data = {
+          event_id: Number(eventId),
+          name: row.name,
+          slug,
+          sport_type: sportType as 'court' | 'field' | 'table' | 'board' | 'esport' | 'track' | 'other',
+          description: row.description,
+          icon: row.icon,
+          is_active: true,
+        }
+        const doc = await payload.create({ collection: 'sports', data })
+        sportIdBySlug.set(slug, Number(doc.id))
+        sportIdByName.set(row.name.trim().toLowerCase(), Number(doc.id))
+        await recordAuditLog({
+          payload,
+          action: 'sport.create',
+          entityType: 'sports',
+          entityId: doc.id,
+          before: null,
+          after: data,
+          actorUserId: user.id,
+        })
+        created += 1
+      }
+    } catch {
+      skip('Sports', row.name, 'Could not save (unexpected error)')
+    }
+  }
+
+  // --- Rulesets (upsert by slug) ---
+  for (const row of parsed.rulesets) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Rulesets', row.name, 'Missing or invalid name')
+      continue
+    }
+    const sportId = row.sportName
+      ? sportIdByName.get(row.sportName.trim().toLowerCase()) ?? sportIdBySlug.get(slugify(row.sportName))
+      : undefined
+    if (!sportId) {
+      skip('Rulesets', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      continue
+    }
+    const scoreType = row.scoreType && validScoreTypes.has(row.scoreType) ? row.scoreType : 'points'
+    if (row.scoreType && scoreType !== row.scoreType) {
+      warn('Rulesets', row.name, `score_type "${row.scoreType}" is not valid - saved as "points"`)
+    }
+    const rulesetData = {
+      sport_id: sportId,
+      name: row.name,
+      score_type: scoreType as 'points' | 'goals' | 'sets' | 'time' | 'result' | 'custom',
+      set_based: row.setBased,
+      allow_draw: row.allowDraw,
+      best_of: row.bestOf,
+      target_score: row.targetScore,
+      max_score: row.maxScore,
+      description: row.description,
+    }
+    try {
+      const existingId = rulesetIdBySlug.get(slug)
+      if (existingId) {
+        const before = await payload.findByID({ collection: 'rulesets', id: existingId, depth: 0 }).catch(() => null)
+        await payload.update({ collection: 'rulesets', id: existingId, data: rulesetData })
+        await recordAuditLog({
+          payload,
+          action: 'ruleset.update',
+          entityType: 'rulesets',
+          entityId: existingId,
+          before,
+          after: rulesetData,
+          actorUserId: user.id,
+        })
+        updated += 1
+      } else {
+        const doc = await payload.create({
+          collection: 'rulesets',
+          data: { event_id: Number(eventId), slug, ...rulesetData },
+        })
+        rulesetIdBySlug.set(slug, Number(doc.id))
+        rulesetIdByName.set(row.name.trim().toLowerCase(), Number(doc.id))
+        await recordAuditLog({
+          payload,
+          action: 'ruleset.create',
+          entityType: 'rulesets',
+          entityId: doc.id,
+          before: null,
+          after: { event_id: Number(eventId), slug, ...rulesetData },
+          actorUserId: user.id,
+        })
+        created += 1
+      }
+    } catch {
+      skip('Rulesets', row.name, 'Could not save (unexpected error)')
+    }
+  }
+
+  // --- Categories (upsert by slug) ---
+  for (const row of parsed.categories) {
+    const slug = slugify(row.name)
+    if (!slug) {
+      skip('Categories', row.name, 'Missing or invalid name')
+      continue
+    }
+    const sportId = row.sportName
+      ? sportIdByName.get(row.sportName.trim().toLowerCase()) ?? sportIdBySlug.get(slugify(row.sportName))
+      : undefined
+    if (!sportId) {
+      skip('Categories', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      continue
+    }
+    const participantMode =
+      row.participantMode && validParticipantModes.has(row.participantMode) ? row.participantMode : 'open'
+    if (row.participantMode && participantMode !== row.participantMode) {
+      warn('Categories', row.name, `participant_mode "${row.participantMode}" is not valid - saved as "open"`)
+    }
+    const formatType =
+      row.formatType && validFormatTypes.has(row.formatType) ? row.formatType : 'single_elimination'
+    if (row.formatType && formatType !== row.formatType) {
+      warn('Categories', row.name, `format_type "${row.formatType}" is not valid - saved as "single_elimination"`)
+    }
+    const status = row.status && validCategoryStatuses.has(row.status) ? row.status : 'draft'
+    if (row.status && status !== row.status) {
+      warn('Categories', row.name, `status "${row.status}" is not valid - saved as "draft"`)
+    }
+    const thirdPlacePolicy =
+      row.thirdPlacePolicy && validThirdPlacePolicies.has(row.thirdPlacePolicy) ? row.thirdPlacePolicy : 'none'
+    let rulesetId: number | undefined
+    if (row.rulesetName) {
+      rulesetId = rulesetIdByName.get(row.rulesetName.trim().toLowerCase())
+      if (!rulesetId) {
+        warn('Categories', row.name, `Ruleset "${row.rulesetName}" not found - saved without a ruleset`)
+      }
+    }
+    const data = {
+      sport_id: sportId,
+      name: row.name,
+      participant_mode: participantMode as 'individual' | 'pair' | 'team' | 'club' | 'open' | 'tbd',
+      format_type: formatType as
+        | 'single_elimination'
+        | 'double_elimination'
+        | 'round_robin'
+        | 'group_stage_to_knockout'
+        | 'league'
+        | 'friendly'
+        | 'time_trial'
+        | 'score_ranking',
+      status: status as 'draft' | 'open' | 'locked' | 'published' | 'archived',
+      third_place_policy: thirdPlacePolicy as 'none' | 'match' | 'shared',
+      roster_required: row.rosterRequired,
+      min_roster_size: row.minRosterSize,
+      max_roster_size: row.maxRosterSize,
+      group_qualify_count: row.groupQualifyCount,
+      result_unit: row.resultUnit,
+      ruleset_id: rulesetId,
+      medal_eligible: row.medalEligible,
+      medal_weight: row.medalWeight,
+    }
+    try {
+      const existingId = categoryIdBySlug.get(slug)
+      if (existingId) {
+        const before = await payload
+          .findByID({ collection: 'competition-categories', id: existingId, depth: 0 })
+          .catch(() => null)
+        await payload.update({ collection: 'competition-categories', id: existingId, data })
+        await recordAuditLog({
+          payload,
+          action: 'competition_category.update',
+          entityType: 'competition-categories',
+          entityId: existingId,
+          before,
+          after: data,
+          actorUserId: user.id,
+        })
+        updated += 1
+      } else {
+        const doc = await payload.create({
+          collection: 'competition-categories',
+          data: { event_id: Number(eventId), slug, ...data },
+        })
+        categoryIdBySlug.set(slug, Number(doc.id))
+        // Make the just-created category resolvable by `category_name` on the participant sheets
+        // below (queueRegistration reads categoriesByName).
+        const key = row.name.trim().toLowerCase()
+        const list = categoriesByName.get(key) || []
+        list.push({ id: doc.id, name: row.name, participant_mode: participantMode })
+        categoriesByName.set(key, list)
+        await recordAuditLog({
+          payload,
+          action: 'competition_category.create',
+          entityType: 'competition-categories',
+          entityId: doc.id,
+          before: null,
+          after: { event_id: Number(eventId), slug, ...data },
+          actorUserId: user.id,
+        })
+        created += 1
+      }
+    } catch {
+      skip('Categories', row.name, 'Could not save (unexpected error)')
+    }
+  }
+
   for (const row of parsed.clubs) {
     const slug = slugify(row.name)
     const key = row.name.trim().toLowerCase()
@@ -615,11 +1025,26 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       skip('Clubs', row.name, 'Missing or invalid name')
       continue
     }
-    if (clubIdByName.has(key)) {
-      skip('Clubs', row.name, 'Duplicate club name in this event')
-      continue
-    }
     try {
+      const existingId = clubIdByName.get(key)
+      if (existingId) {
+        // Upsert: a re-import of an edited row updates the club in place rather than skipping it.
+        const before = await payload.findByID({ collection: 'clubs', id: existingId, depth: 0 }).catch(() => null)
+        const data = { contact_person: row.contactPerson, contact_email: row.contactEmail }
+        await payload.update({ collection: 'clubs', id: existingId, data })
+        await recordAuditLog({
+          payload,
+          action: 'club.update',
+          entityType: 'clubs',
+          entityId: existingId,
+          before,
+          after: data,
+          actorUserId: user.id,
+        })
+        updated += 1
+        queueRegistration('Clubs', 'clubs', existingId, row.name, row.categoryNames, 'club')
+        continue
+      }
       const duplicate = await payload.find({
         collection: 'clubs',
         depth: 0,
@@ -627,7 +1052,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
       })
       if (duplicate.docs.length > 0) {
-        skip('Clubs', row.name, 'A club with this name already exists')
+        skip('Clubs', row.name, 'A different club already uses this name/slug')
         continue
       }
       const data = {
@@ -653,19 +1078,33 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       continue
     }
     try {
-      const duplicate = await payload.find({
+      const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
+      if (row.clubName && !clubId) {
+        warn('Teams', row.name, `Club "${row.clubName}" not found - saved without a club`)
+      }
+      const existing = await payload.find({
         collection: 'teams',
         depth: 0,
         limit: 1,
         where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
       })
-      if (duplicate.docs.length > 0) {
-        skip('Teams', row.name, 'A team with this name already exists')
+      if (existing.docs.length > 0) {
+        // Upsert by slug: a re-import of an edited row updates the team in place.
+        const before = existing.docs[0]
+        const data = { club_id: clubId, contact_email: row.contactEmail }
+        await payload.update({ collection: 'teams', id: before.id, data })
+        await recordAuditLog({
+          payload,
+          action: 'team.update',
+          entityType: 'teams',
+          entityId: before.id,
+          before,
+          after: data,
+          actorUserId: user.id,
+        })
+        updated += 1
+        queueRegistration('Teams', 'teams', Number(before.id), row.name, row.categoryNames, 'team')
         continue
-      }
-      const clubId = row.clubName ? clubIdByName.get(row.clubName.trim().toLowerCase()) : undefined
-      if (row.clubName && !clubId) {
-        warn('Teams', row.name, `Club "${row.clubName}" not found - saved without a club`)
       }
       const data = {
         event_id: Number(eventId),
@@ -861,9 +1300,13 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     before: null,
     after: {
       created,
+      updated,
       skipped,
       registered,
       issues,
+      sports: parsed.sports.length,
+      rulesets: parsed.rulesets.length,
+      categories: parsed.categories.length,
       clubs: parsed.clubs.length,
       teams: parsed.teams.length,
       players: parsed.players.length,
@@ -880,6 +1323,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   const { issuesParam, moreIssues } = encodeIssues(issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}` +
+      (updated ? `&wizardImportUpdated=${updated}` : '') +
       (registered ? `&wizardRegistered=${registered}` : '') +
       (skipped ? `&wizardImportSkipped=${skipped}` : '') +
       (issuesParam ? `&wizardImportIssues=${issuesParam}` : '') +

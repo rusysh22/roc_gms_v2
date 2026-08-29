@@ -24,7 +24,48 @@ export type ParsedPairRow = {
   categoryNames?: string[]
 }
 
+// prd/redesign/import-data-and-draft-persistence.md track IMP: the workbook now also carries the
+// event structure itself (Sports, Categories), processed before any participant sheet so a
+// Category can reference a Sport defined in the same file and a participant row's `category_name`
+// can point at a Category defined in the same file.
+export type ParsedSportRow = {
+  name: string
+  sportType?: string
+  description?: string
+  icon?: string
+}
+export type ParsedRulesetRow = {
+  name: string
+  sportName: string
+  scoreType?: string
+  setBased?: boolean
+  allowDraw?: boolean
+  bestOf?: number
+  targetScore?: number
+  maxScore?: number
+  description?: string
+}
+export type ParsedCategoryRow = {
+  name: string
+  sportName: string
+  participantMode?: string
+  formatType?: string
+  rulesetName?: string
+  status?: string
+  rosterRequired?: boolean
+  minRosterSize?: number
+  maxRosterSize?: number
+  groupQualifyCount?: number
+  thirdPlacePolicy?: string
+  resultUnit?: string
+  medalEligible?: boolean
+  medalWeight?: number
+}
+
 export type ParsedParticipantsWorkbook = {
+  sports: ParsedSportRow[]
+  rulesets: ParsedRulesetRow[]
+  categories: ParsedCategoryRow[]
   clubs: ParsedClubRow[]
   teams: ParsedTeamRow[]
   players: ParsedPlayerRow[]
@@ -32,6 +73,21 @@ export type ParsedParticipantsWorkbook = {
 }
 
 const str = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim())
+
+// A yes/no cell: blank stays `undefined` (meaning "leave unchanged" on a re-import), anything
+// affirmative is `true`, anything else `false`.
+const bool = (value: unknown): boolean | undefined => {
+  const normalized = str(value).toLowerCase()
+  if (!normalized) return undefined
+  return normalized === 'yes' || normalized === 'y' || normalized === 'true' || normalized === '1' || normalized === 'on'
+}
+
+const num = (value: unknown): number | undefined => {
+  const normalized = str(value)
+  if (!normalized) return undefined
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
 
 // `category_name` may list more than one category, comma-separated, so a single row can register
 // into every category it competes in (e.g. a player entered in both Singles and Doubles, or a team
@@ -64,6 +120,48 @@ const sheetRows = (workbook: XLSX.WorkBook, sheetName: string): Record<string, u
 // Column names here must match `participantsImportTemplate.ts`'s headers.
 export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedParticipantsWorkbook => {
   const workbook = XLSX.read(Buffer.from(fileBuffer), { type: 'buffer' })
+
+  const sports = sheetRows(workbook, 'Sports')
+    .map((row) => ({
+      name: str(row.name),
+      sportType: str(row.sport_type).toLowerCase() || undefined,
+      description: str(row.description) || undefined,
+      icon: str(row.icon) || undefined,
+    }))
+    .filter((row) => row.name)
+
+  const rulesets = sheetRows(workbook, 'Rulesets')
+    .map((row) => ({
+      name: str(row.name),
+      sportName: str(row.sport_name),
+      scoreType: str(row.score_type).toLowerCase() || undefined,
+      setBased: bool(row.set_based),
+      allowDraw: bool(row.allow_draw),
+      bestOf: num(row.best_of),
+      targetScore: num(row.target_score),
+      maxScore: num(row.max_score),
+      description: str(row.description) || undefined,
+    }))
+    .filter((row) => row.name)
+
+  const categories = sheetRows(workbook, 'Categories')
+    .map((row) => ({
+      name: str(row.name),
+      sportName: str(row.sport_name),
+      participantMode: str(row.participant_mode).toLowerCase() || undefined,
+      formatType: str(row.format_type).toLowerCase() || undefined,
+      rulesetName: str(row.ruleset_name) || undefined,
+      status: str(row.status).toLowerCase() || undefined,
+      rosterRequired: bool(row.roster_required),
+      minRosterSize: num(row.min_roster_size),
+      maxRosterSize: num(row.max_roster_size),
+      groupQualifyCount: num(row.group_qualify_count),
+      thirdPlacePolicy: str(row.third_place_policy).toLowerCase().replace(/\s+/g, '_') || undefined,
+      resultUnit: str(row.result_unit) || undefined,
+      medalEligible: bool(row.medal_eligible),
+      medalWeight: num(row.medal_weight),
+    }))
+    .filter((row) => row.name)
 
   const clubs = sheetRows(workbook, 'Clubs')
     .map((row) => ({
@@ -106,5 +204,5 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
     }))
     .filter((row) => row.player1Name && row.player2Name)
 
-  return { clubs, teams, players, pairs }
+  return { sports, rulesets, categories, clubs, teams, players, pairs }
 }

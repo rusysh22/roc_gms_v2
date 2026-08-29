@@ -22,6 +22,10 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // exceljs (used only by src/lib/eventDataTemplate.ts, in a Node route handler) is a large CJS
+  // package that pulls optional stream/zip deps - let Next require it at runtime instead of trying
+  // to bundle it into the route.
+  serverExternalPackages: ['exceljs'],
   async headers() {
     return [
       {

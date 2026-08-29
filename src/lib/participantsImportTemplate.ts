@@ -23,9 +23,27 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
   const instructionsSheet = XLSX.utils.aoa_to_sheet([
     ['How to use this template'],
     [''],
-    ['This file has 4 data sheets (tabs at the bottom): Clubs, Teams, Players, Pairs.'],
+    ['This file has 7 data sheets (tabs at the bottom): Sports, Rulesets, Categories, Clubs, Teams, Players, Pairs.'],
+    [''],
+    ['Fill them top to bottom - the importer processes them in that order, so a Category can name a'],
+    ['Sport from the Sports sheet, and a Clubs/Teams/Players/Pairs row can name a Category from the'],
+    ['Categories sheet, all in the same upload. Any sheet you leave empty is simply skipped.'],
     [''],
     ['What each sheet is for'],
+    [
+      '- Sports = the games played at your event (Badminton, Futsal, Chess, ...). Re-importing a sport ' +
+        'with the same name updates it instead of creating a duplicate.',
+    ],
+    [
+      '- Rulesets = optional scoring rules you can attach to a category (best-of-3 sets, goals with ' +
+        'draws allowed, ...). "sport_name" must match a row on the Sports sheet. Skip this sheet to ' +
+        'use each sport\'s default rules.',
+    ],
+    [
+      '- Categories = a specific competition within a sport (Badminton Singles Men, Futsal Open, ...). ' +
+        '"sport_name" must match a row on the Sports sheet (or a sport already in this event). This is ' +
+        'what the "category_name" column on the sheets below registers participants into.',
+    ],
     [
       '- Clubs = the contingents competing against each other - whatever that means for your event: ' +
         'departments in a company sports day, schools in an inter-school tournament, chapters in a club ' +
@@ -59,6 +77,15 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
     ],
     [''],
     ['Column rules'],
+    [
+      '0. On the Sports sheet, "name" is required and "sport_type" must be one of: court, field, table, ' +
+        'board, esport, track, other (blank defaults to court). On the Categories sheet, "name" and ' +
+        '"sport_name" are required; "participant_mode" is one of individual/pair/team/club/open/tbd and ' +
+        '"format_type" is one of single_elimination/double_elimination/round_robin/group_stage_to_knockout/' +
+        'league/friendly/time_trial/score_ranking. On the Rulesets sheet "score_type" is one of ' +
+        'points/goals/sets/time/result/custom. Any unrecognised value falls back to the default with a ' +
+        'warning - the row is never lost. A blank optional cell on a re-import means "leave unchanged".',
+    ],
     [
       '1. "name" is required on Clubs/Teams/Players; "player1_name" and "player2_name" are required on Pairs. ' +
         'Every other column is optional unless stated otherwise.',
@@ -97,12 +124,164 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
         'that one registration is skipped (with a warning after import), the row and its other, valid ' +
         'registrations are unaffected.',
     ],
-    ['8. Do not rename the Clubs / Teams / Players / Pairs sheet tabs - the importer reads them by name.'],
+    ['8. Do not rename any sheet tab - the importer reads them by name.'],
     ['9. Delete the example rows before adding your own data (or just overwrite them row by row).'],
-    ['10. Upload this file on the Clubs / Teams / Players step of the New Event Wizard.'],
+    ['10. Upload this file on the Import step of the New Event Wizard.'],
+    [
+      '11. Tip: once you have added your sports and categories, use "Download template for this event" ' +
+        'in the wizard - it comes back with the Sports and Categories sheets already filled in with your ' +
+        'real data.',
+    ],
   ])
   instructionsSheet['!cols'] = [{ wch: 100 }]
   XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instructions')
+
+  // The example sports/categories below are internally consistent with the participant sheets'
+  // `category_name` cells further down ("Futsal Men", "Badminton Singles Women", ...), so the
+  // whole file is one coherent walk-through rather than disconnected per-sheet samples.
+  const sportsSheet = XLSX.utils.json_to_sheet([
+    { name: 'Badminton', sport_type: 'court', description: '', icon: '' },
+    { name: 'Futsal', sport_type: 'field', description: '', icon: '' },
+  ])
+  sportsSheet['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 30 }, { wch: 14 }]
+  XLSX.utils.book_append_sheet(workbook, sportsSheet, 'Sports')
+
+  const rulesetsSheet = XLSX.utils.json_to_sheet([
+    {
+      name: 'Badminton BWF 21',
+      sport_name: 'Badminton',
+      score_type: 'sets',
+      set_based: 'yes',
+      allow_draw: 'no',
+      best_of: 3,
+      target_score: 21,
+      max_score: 30,
+      description: '',
+    },
+    {
+      name: 'Futsal 2x20',
+      sport_name: 'Futsal',
+      score_type: 'goals',
+      set_based: 'no',
+      allow_draw: 'yes',
+      best_of: '',
+      target_score: '',
+      max_score: '',
+      description: '',
+    },
+  ])
+  rulesetsSheet['!cols'] = [
+    { wch: 22 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 30 },
+  ]
+  XLSX.utils.book_append_sheet(workbook, rulesetsSheet, 'Rulesets')
+
+  const categoriesSheet = XLSX.utils.json_to_sheet([
+    {
+      name: 'Badminton Singles Men',
+      sport_name: 'Badminton',
+      participant_mode: 'individual',
+      format_type: 'single_elimination',
+      ruleset_name: 'Badminton BWF 21',
+      status: 'draft',
+      roster_required: '',
+      min_roster_size: '',
+      max_roster_size: '',
+      group_qualify_count: '',
+      third_place_policy: 'match',
+      result_unit: '',
+      medal_eligible: 'yes',
+      medal_weight: 1,
+    },
+    {
+      name: 'Badminton Singles Women',
+      sport_name: 'Badminton',
+      participant_mode: 'individual',
+      format_type: 'single_elimination',
+      ruleset_name: '',
+      status: 'draft',
+      roster_required: '',
+      min_roster_size: '',
+      max_roster_size: '',
+      group_qualify_count: '',
+      third_place_policy: 'match',
+      result_unit: '',
+      medal_eligible: 'yes',
+      medal_weight: 1,
+    },
+    {
+      name: 'Badminton Doubles Men',
+      sport_name: 'Badminton',
+      participant_mode: 'pair',
+      format_type: 'single_elimination',
+      ruleset_name: '',
+      status: 'draft',
+      roster_required: '',
+      min_roster_size: '',
+      max_roster_size: '',
+      group_qualify_count: '',
+      third_place_policy: 'none',
+      result_unit: '',
+      medal_eligible: 'yes',
+      medal_weight: 1,
+    },
+    {
+      name: 'Futsal Men',
+      sport_name: 'Futsal',
+      participant_mode: 'team',
+      format_type: 'group_stage_to_knockout',
+      ruleset_name: 'Futsal 2x20',
+      status: 'draft',
+      roster_required: 'yes',
+      min_roster_size: 5,
+      max_roster_size: 12,
+      group_qualify_count: 2,
+      third_place_policy: 'match',
+      result_unit: '',
+      medal_eligible: 'yes',
+      medal_weight: 1,
+    },
+    {
+      name: 'Futsal Open',
+      sport_name: 'Futsal',
+      participant_mode: 'team',
+      format_type: 'round_robin',
+      ruleset_name: '',
+      status: 'draft',
+      roster_required: 'yes',
+      min_roster_size: 5,
+      max_roster_size: 12,
+      group_qualify_count: '',
+      third_place_policy: 'none',
+      result_unit: '',
+      medal_eligible: '',
+      medal_weight: '',
+    },
+  ])
+  categoriesSheet['!cols'] = [
+    { wch: 26 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 24 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+  ]
+  XLSX.utils.book_append_sheet(workbook, categoriesSheet, 'Categories')
 
   const clubsSheet = XLSX.utils.json_to_sheet([
     { name: 'Contingent Jakarta', contact_person: 'Jane Doe', contact_email: 'jane.doe@example.com', category_name: '' },
