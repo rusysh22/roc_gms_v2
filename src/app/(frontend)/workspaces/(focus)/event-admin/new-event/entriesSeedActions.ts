@@ -5,7 +5,24 @@ import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
+import { recalculateResultCachesBestEffort } from '../../../matches/matchActions'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
+
+const UNSTARTED_MATCH_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'published',
+  'check_in_open',
+  'ready_to_start',
+])
+const relId = (value: unknown): string | number | null => {
+  if (value == null) return null
+  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+    return (value as { id: string | number }).id
+  }
+  return value as string | number
+}
 
 // "pair" entries are backed by Teams (not bare Players) because Rosters always require a
 // team_id - a doubles pair is modeled as a 2-player team.
@@ -328,13 +345,59 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
     actorUserId: user.id,
   })
 
+  // A withdrawal before an already-generated match is played hands that match to the opponent as a
+  // walkover (the standard bracket behaviour). Only fully-populated, not-yet-started matches - one
+  // with a still-TBD opponent, or one already in progress, is left for the officer.
+  const pendingMatches = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 200,
+    where: {
+      and: [
+        { or: [{ participant_a_entry_id: { equals: entryId } }, { participant_b_entry_id: { equals: entryId } }] },
+        { status: { in: [...UNSTARTED_MATCH_STATUSES] } },
+      ],
+    },
+  })
+  let walkoverCount = 0
+  for (const match of pendingMatches.docs) {
+    const aId = relId(match.participant_a_entry_id)
+    const bId = relId(match.participant_b_entry_id)
+    const opponentId = String(aId) === String(entryId) ? bId : aId
+    if (!opponentId) continue
+
+    const updated = { status: 'walkover' as const, winner_entry_id: Number(opponentId), actual_end_at: new Date().toISOString() }
+    await payload.update({ collection: 'matches', id: match.id, data: updated, user })
+    await recordAuditLog({
+      payload,
+      action: 'match.walkover_on_withdrawal',
+      entityType: 'matches',
+      entityId: match.id,
+      before: { status: match.status },
+      after: updated,
+      actorUserId: user.id,
+    })
+    await recalculateResultCachesBestEffort({
+      payload,
+      match: { ...(match as unknown as Record<string, unknown>), ...updated } as Parameters<
+        typeof recalculateResultCachesBestEffort
+      >[0]['match'],
+      matchNumber: String(match.match_number),
+      action: 'match.walkover_on_withdrawal',
+      actorUserId: user.id,
+    })
+    walkoverCount += 1
+  }
+
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardUpdated=1`)
+  const suffix = walkoverCount > 0 ? `&wizardWalkovers=${walkoverCount}` : '&wizardUpdated=1'
+  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}${suffix}`)
 }
 
-// The reverse of withdrawEntryAction: put a withdrawn entry back to `confirmed`. Its seed number
-// is kept; if a bracket was already generated the entry re-appears where it was (a walkover it was
-// given while withdrawn stays a walkover - officers correct that through the match lifecycle).
+// The reverse of withdrawEntryAction: put a withdrawn entry back to `confirmed`. Its seed number is
+// kept; if a bracket was already generated the entry re-appears where it was. Any walkovers the
+// withdrawal handed to opponents stay - use "Undo Walkover" on those matches (Match Details) to
+// reverse them, one at a time, while the opponent hasn't progressed.
 export async function reinstateEntryAction(entryId: string, formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,

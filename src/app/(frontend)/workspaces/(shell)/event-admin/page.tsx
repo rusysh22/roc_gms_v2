@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, CalendarClock, CheckCircle2, Circle, MapPinned, Trophy } from 'lucide-react'
 
+import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { computeWizardProgress } from '@/lib/wizardProgress'
@@ -44,7 +45,13 @@ type NextMatchDoc = {
 // counts as "next up" for the score-update shortcut below.
 const MATCH_DAY_STATUSES = ['published', 'scheduled', 'check_in_open', 'ready_to_start', 'ongoing']
 
-export default async function EventAdminWorkspacePage() {
+export default async function EventAdminWorkspacePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = searchParams ? await searchParams : {}
+  const eventDeleted = params.eventDeleted === '1'
   const access = await requireWorkspaceAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: '/workspaces/event-admin',
@@ -144,6 +151,11 @@ export default async function EventAdminWorkspacePage() {
 
   return (
     <>
+      {eventDeleted ? (
+        <AlertBanner tone="success" className="mb-4">
+          Event deleted, along with all of its data.
+        </AlertBanner>
+      ) : null}
       <PageHero
         eyebrow="Event Admin Workspace"
         title={event?.name || 'Set up your first event'}

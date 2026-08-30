@@ -9,7 +9,8 @@ import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { updateEventDetailsAction } from './detailsActions'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
+import { deleteEventAction, updateEventDetailsAction } from './detailsActions'
 import { ReadinessChecklist } from './ReadinessChecklist'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,8 @@ const detailsErrorMessages: Record<string, string> = {
   invalid_date_range: 'Event end time must be after the start time.',
   duplicate_slug: 'That slug is already used by another event.',
   missing_event: 'No active event to edit yet.',
+  confirm_name_mismatch: 'Type the exact event name to confirm deletion.',
+  event_not_abandonable: 'This event has matches or is no longer a draft - archive it instead of deleting.',
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -92,6 +95,12 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
   const detailsError = get(params, 'detailsError')
   const detailsUpdated = get(params, 'detailsUpdated')
   const event = activeEvent as unknown as EventDetailsDoc
+
+  const matchCount = await access.payload.count({
+    collection: 'matches',
+    where: { event_id: { equals: activeEvent.id } },
+  })
+  const canDeleteEvent = event.status === 'draft' && matchCount.totalDocs === 0
 
   return (
     <>
@@ -309,6 +318,30 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
           <SubmitButton>Save event details</SubmitButton>
         </div>
       </form>
+
+      {canDeleteEvent ? (
+        <Card className="mt-6 flex flex-col gap-3 border-danger/30 bg-danger-surface">
+          <CardTitle>Delete this event</CardTitle>
+          <p className="text-sm text-ink-soft">
+            Permanently removes <strong>{event.name}</strong> and everything under it &mdash; sports,
+            categories, entries, clubs, teams, players, venues, courts, rulesets, and scoped content.
+            Only possible while the event is a draft with no matches. There is no undo.
+          </p>
+          <form id="delete-event-form" action={deleteEventAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <Field label="Type the event name to confirm" className="sm:max-w-xs">
+              <Input name="confirmName" placeholder={event.name || ''} autoComplete="off" />
+            </Field>
+            <ConfirmSubmitButton
+              formId="delete-event-form"
+              tone="destructive"
+              className="text-danger"
+              confirmMessage={`Delete "${event.name}" and all of its data? This cannot be undone.`}
+            >
+              Delete event
+            </ConfirmSubmitButton>
+          </form>
+        </Card>
+      ) : null}
     </>
   )
 }

@@ -3,9 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { cookies } from 'next/headers'
+
 import { recordAuditLog } from '@/lib/audit'
+import { deleteEventCascade, eventIsAbandonable } from '@/lib/cascadeDelete'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
-import { getActiveEvent } from '../../../activeEvent'
+import { ACTIVE_EVENT_COOKIE, getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/details'
@@ -108,4 +111,49 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
   revalidatePath('/workspaces/event-admin')
   revalidatePath(`/events/${slug}`)
   redirect(`${page}?detailsUpdated=1`)
+}
+
+// Abandon a draft event: permanently deletes it and every record scoped to it (sports, categories,
+// entries, clubs/teams/players/rosters, venues/courts, rulesets, memberships, sponsors, scoped
+// content). Only allowed while the event is still `draft` and has no matches - once real
+// scheduling/scoring exists it must be archived, not deleted.
+export async function deleteEventAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: page,
+  })
+  const event = await getActiveEvent(payload)
+  const confirmName = text(formData, 'confirmName')
+  if (!event) {
+    redirect(`${page}?detailsError=missing_event`)
+  }
+  if (confirmName !== event!.name) {
+    redirect(`${page}?detailsError=confirm_name_mismatch`)
+  }
+
+  const abandonable = await eventIsAbandonable(payload, event!.id)
+  if (!abandonable.ok) {
+    redirect(`${page}?detailsError=event_not_abandonable`)
+  }
+
+  const before = await payload.findByID({ collection: 'events', id: event!.id, depth: 0 }).catch(() => null)
+  await deleteEventCascade(payload, event!.id)
+  await recordAuditLog({
+    payload,
+    action: 'event.delete',
+    entityType: 'events',
+    entityId: event!.id,
+    before,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  const cookieStore = await cookies()
+  if (cookieStore.get(ACTIVE_EVENT_COOKIE)?.value === String(event!.id)) {
+    cookieStore.delete(ACTIVE_EVENT_COOKIE)
+  }
+
+  revalidatePath(page)
+  revalidatePath('/workspaces/event-admin')
+  redirect('/workspaces/event-admin?eventDeleted=1')
 }

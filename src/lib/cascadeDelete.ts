@@ -101,3 +101,49 @@ export const deleteCategoryCascade = async (payload: Payload, categoryId: string
   await payload.delete({ collection: 'competition-entries', where: { category_id: { equals: categoryId } } }).catch(() => null)
   await payload.delete({ collection: 'competition-categories', id: categoryId })
 }
+
+/** Whether an event is safe to fully delete: it must still be a draft and have no matches (a match
+ * means real scheduling/scoring work that should not vanish in a bulk delete). */
+export const eventIsAbandonable = async (
+  payload: Payload,
+  eventId: string | number,
+): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  const event = await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+  if (!event) return { ok: false, reason: 'not_found' }
+  if (event.status !== 'draft') return { ok: false, reason: 'not_draft' }
+  const matches = await payload.count({ collection: 'matches', where: { event_id: { equals: eventId } } })
+  if (matches.totalDocs > 0) return { ok: false, reason: 'has_matches' }
+  return { ok: true }
+}
+
+/** Deletes a draft event and every record scoped to it. Assumes eventIsAbandonable already
+ * passed (no matches, so no stages/groups/standings/brackets/medals/match-sets to worry about).
+ * FK-safe order: leaf tables first, then their parents, then the event. */
+export const deleteEventCascade = async (payload: Payload, eventId: string | number): Promise<void> => {
+  const where = { event_id: { equals: eventId } }
+
+  // Leaf tables first, then their parents. Every name is a real collection slug.
+  const order = [
+    'rosters',
+    'competition-entries',
+    'registration-submissions',
+    'competition-categories',
+    'courts',
+    'venues',
+    'rulesets',
+    'teams',
+    'players',
+    'clubs',
+    'sports',
+    'event-memberships',
+    'sponsors',
+    'announcements',
+    'articles',
+  ] as const
+
+  for (const collection of order) {
+    await payload.delete({ collection, where }).catch(() => null)
+  }
+
+  await payload.delete({ collection: 'events', id: eventId })
+}

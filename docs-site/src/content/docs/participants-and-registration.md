@@ -69,8 +69,10 @@ Each entry gets a **seed number** immediately; you adjust the draw order in the 
 **Draw & Seeding** step.
 
 An entry can be **withdrawn** later — it moves to a **Withdrawn** list in the Registration step,
-keeping its seed number. **Reinstate** puts it back into the draw where it was. (If a bracket was
-already generated and the withdrawal was covered by a walkover, undo that walkover on the match.)
+keeping its seed number. If a bracket was already generated, each of the entry's **not-yet-played**
+matches is handed to the opponent as a **walkover** (the standard bracket behaviour). **Reinstate**
+puts the entry back where it was; it does **not** undo those walkovers — use **Undo Walkover** on
+each match (Match Details) if the opponent hasn't progressed.
 
 > **Example** — the futsal category has only two teams this year (Finance FC, IT All-Stars). Instead
 > of adding entries one at a time, the organizer opens **Bulk assign across sports**, ticks both

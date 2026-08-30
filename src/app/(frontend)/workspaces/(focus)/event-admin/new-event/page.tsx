@@ -410,6 +410,13 @@ export default async function NewEventWizardPage({
               brackets/standings. You can generate this category&apos;s draw again from scratch.
             </AlertBanner>
           ) : null}
+          {get(params, 'wizardWalkovers') ? (
+            <AlertBanner tone="warning">
+              Entry withdrawn. {get(params, 'wizardWalkovers')} not-yet-played match(es) were handed
+              to the opponent as a walkover. Reinstating does not undo those &mdash; use &ldquo;Undo
+              Walkover&rdquo; on each match if needed.
+            </AlertBanner>
+          ) : null}
           {get(params, 'wizardPromoteWarning') ? (
             <AlertBanner tone="warning">
               {get(params, 'wizardPromoteWarning')} qualifier(s) were withdrawn/disqualified after
@@ -3036,7 +3043,7 @@ const RegistrationStep = async ({
                   </div>
                   <ConfirmSubmitButton
                     formId={formId}
-                    confirmMessage={`Withdraw ${entry.display_name} from this category? You can reinstate them below afterwards.`}
+                    confirmMessage={`Withdraw ${entry.display_name} from this category? Any not-yet-played match of theirs is handed to the opponent as a walkover. You can reinstate them below afterwards.`}
                     variant="secondary"
                     size="sm"
                   >

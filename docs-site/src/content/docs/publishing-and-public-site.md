@@ -24,6 +24,14 @@ The wizard's publish step bundles the common combinations into three choices:
 | **Publish event info only** | Coming Soon | Published | Public event page: details, sports, sponsors — no schedule/results |
 | **Publish event and schedule** | Live | Published | The full public site |
 
+## Deleting an event
+
+**Event Details** has a **Delete this event** section, shown only while the event is still a
+**draft** with **no matches**. It permanently removes the event and everything under it (sports,
+categories, entries, clubs, teams, players, venues, courts, rulesets, memberships, scoped content) —
+you type the event name to confirm. Once real scheduling or scoring exists, an event is **archived**
+(set status to Archived), never deleted.
+
 ## The event timeline
 
 Also on Event Details. Start and end are required; the rest are optional rules — leave any blank to
