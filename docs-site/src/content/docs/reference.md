@@ -143,8 +143,10 @@ target score, wrong best-of), fix it under **Event Setup → Rulesets** and re-s
 genuine exception, use **Correct manually** on the set (Match Details) with a reason.
 
 **A published result is wrong.**
-Only **Event Admin** and **Super Admin** can revise a published result. Open the Match Details page
-and use the Match Actions there.
+Only **Event Admin** and **Super Admin** can touch a published result. On the Match Details page:
+edit the set scores in place (a revision reason is required), or use **Reopen Result** to send the
+match back to *Under Review* — for a single-elimination bracket this pulls the winner out of the
+next round (blocked if that match has already started) and recomputes standings.
 
 **The public site isn't showing the schedule.**
 Check the event's **status** (must be Live, or the *schedule publishes* time must have passed) and

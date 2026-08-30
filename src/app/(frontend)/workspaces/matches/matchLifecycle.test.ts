@@ -33,9 +33,12 @@ describe('match lifecycle', () => {
     expect(isValidTransition('under_review', 'ongoing')).toBe(true)
     // Restore Match
     expect(isValidTransition('cancelled', 'scheduled')).toBe(true)
-    // still no way back from a final result / walkover
+    // Reopen Result / Undo Walkover (Event-Admin-gated, with advancement retraction)
+    expect(isValidTransition('result_published', 'under_review')).toBe(true)
+    expect(isValidTransition('walkover', 'scheduled')).toBe(true)
+    // a published result still can't jump straight back to ongoing/scheduled
+    expect(isValidTransition('result_published', 'ongoing')).toBe(false)
     expect(isValidTransition('result_published', 'scheduled')).toBe(false)
-    expect(isValidTransition('walkover', 'scheduled')).toBe(false)
   })
 
   it('keeps the normal in-play transitions intact', () => {

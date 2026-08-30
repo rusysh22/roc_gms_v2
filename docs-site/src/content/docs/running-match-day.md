@@ -149,9 +149,11 @@ Available on the **Match Details** page (Match Actions), for the common "oops":
 | **Undo Start** | ongoing / paused → scheduled | Clears the recorded start time. Set scores stay. Any Match Officer. |
 | **Reopen Match** | finished / under review → ongoing | Reopens for more play; clears the end time and derived winner. **Event Admin only.** |
 | **Restore Match** | cancelled → scheduled | **Event Admin only.** |
+| **Reopen Result** | result published → under review | **Event Admin only.** For a single-elimination bracket the winner is pulled back out of the next round first — **blocked** if that match has already started. Standings are recomputed. Not supported for double elimination (mark it Disputed instead). |
+| **Undo Walkover** | walkover → scheduled | **Event Admin only.** Same advancement retraction as Reopen Result. |
 
-A **published** result or a **walkover** has no undo — correct a published result through the
-revision flow (Event Admin, with a reason), or mark the match **Disputed**.
+A double-elimination published result cannot be reopened directly — mark it **Disputed**, or use
+**Undo Phase** / **Clear & regenerate** if nothing downstream has started.
 
 > **Example — one badminton match, start to finish**
 >

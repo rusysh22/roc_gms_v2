@@ -514,7 +514,11 @@ export default async function AdminMatchDetailPage({
                         confirmMessage={
                           transition.to === 'result_published'
                             ? getPublishResultConfirmMessage(stageType)
-                            : `${transition.label}. Are you sure?`
+                            : transition.label === 'Reopen Result'
+                              ? 'Reopen this published result? The winner is pulled back out of the next round (blocked if that match has started), standings are recomputed, and the result goes back to Under Review.'
+                              : transition.label === 'Undo Walkover'
+                                ? 'Undo this walkover? The winner is pulled back out of the next round and the match returns to Scheduled.'
+                                : `${transition.label}. Are you sure?`
                         }
                       >
                         {transition.label}

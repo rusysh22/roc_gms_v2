@@ -25,7 +25,10 @@ import {
   type OutcomeSet,
 } from '@/lib/matchResult'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
-import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
+import {
+  attemptSingleEliminationWinnerAdvancement,
+  retractSingleEliminationAdvancement,
+} from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import {
   MATCH_TRANSITIONS,
@@ -536,9 +539,33 @@ async function performMatchTransition(
   // Reverse transitions (Undo Start / Reopen Match / Restore Match) unwind the timestamps + derived
   // winner + summary that the forward step set. Set scores stay - the winner re-derives from them.
   const isReverseToScheduled =
-    targetStatus === 'scheduled' && ['ongoing', 'paused', 'cancelled'].includes(match.status)
+    targetStatus === 'scheduled' && ['ongoing', 'paused', 'cancelled', 'walkover'].includes(match.status)
   const isReopen = targetStatus === 'ongoing' && ['finished', 'under_review'].includes(match.status)
-  if (isReverseToScheduled || isReopen) {
+  // Reopening a *published* result (or undoing a walkover): the winner already advanced, so it must
+  // be pulled back out of the next round before the status changes.
+  const isReopenPublished =
+    (match.status === 'result_published' && targetStatus === 'under_review') ||
+    (match.status === 'walkover' && targetStatus === 'scheduled')
+
+  if (isReopenPublished) {
+    const stage = match.stage_id
+      ? ((await payload.findByID({ collection: 'stages', id: match.stage_id, depth: 0 }).catch(() => null)) as
+          | { stage_type?: string | null }
+          | null)
+      : null
+    const stageType = stage?.stage_type ?? ''
+    if (stageType === 'double_elimination') {
+      return { ok: false, error: 'reopen_not_supported' }
+    }
+    if (stageType === 'single_elimination') {
+      const retraction = await retractSingleEliminationAdvancement(payload, match.id)
+      if (!retraction.retracted && retraction.blockedBy) {
+        return { ok: false, error: 'reopen_blocked_downstream' }
+      }
+    }
+  }
+
+  if (isReverseToScheduled || isReopen || isReopenPublished) {
     updateData.winner_entry_id = null
     updateData.actual_end_at = null
     updateData.score_summary = null
@@ -597,7 +624,7 @@ async function performMatchTransition(
     matchNumber,
     action: 'match.status_transition',
     actorUserId,
-    reverting: isReverseToScheduled || isReopen,
+    reverting: isReverseToScheduled || isReopen || isReopenPublished,
   })
 
   const notice = PUBLIC_STATUS_NOTICES[targetStatus]

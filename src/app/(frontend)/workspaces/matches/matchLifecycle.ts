@@ -30,6 +30,11 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
     reverse: true,
   },
   { from: ['cancelled'], to: 'scheduled', label: 'Restore Match', requiresConfirm: true, reverse: true },
+  // Reopening a final result / undoing a walkover. Event Admin only (locked-status hook). For
+  // single elimination the winner is pulled back out of the next round first, and it is blocked if
+  // that next match has already progressed; not supported for double elimination.
+  { from: ['result_published'], to: 'under_review', label: 'Reopen Result', requiresConfirm: true, reverse: true },
+  { from: ['walkover'], to: 'scheduled', label: 'Undo Walkover', requiresConfirm: true, reverse: true },
   {
     from: ['finished', 'under_review'],
     to: 'result_published',
@@ -142,6 +147,10 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
     "The rules don't show a winner yet - finish the deciding set, or use \"Correct manually\" to set the result.",
   transition_forbidden:
     'That change needs an Event Admin - a finished, published, walked-over, or cancelled match is locked to Match Officers.',
+  reopen_not_supported:
+    "Reopening isn't supported for double-elimination results. Use Undo Phase or Clear & regenerate if nothing has started, or mark the match Disputed.",
+  reopen_blocked_downstream:
+    'The next-round match this result fed has already progressed. Reopen or resolve that match first.',
   set_delete_locked: 'Sets cannot be removed once the match result is finished or published.',
   set_delete_not_last: 'Only the most recent set can be removed. Delete later sets first.',
   ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
