@@ -154,6 +154,8 @@ const errorMessages: Record<string, string> = {
   already_promoted: 'This group stage has already been promoted to knockout. Undo Phase first if you need to redo it.',
   nothing_to_clear: 'This category has no generated matches to clear.',
   matches_already_started: 'Some matches have already started or finished. Clearing is only possible before any match begins.',
+  group_stage_finalized: 'The group stage is finalized. Reopen it first to change the groups.',
+  group_not_empty: 'Those groups still have entries or matches. Empty them (or Clear & regenerate) before reducing the group count.',
   not_promoted: 'This group stage has not been promoted to knockout yet.',
   knockout_already_started: 'Knockout matches have already started - this phase can no longer be undone.',
   no_qualifiers: 'No qualified entries were found for this group stage.',

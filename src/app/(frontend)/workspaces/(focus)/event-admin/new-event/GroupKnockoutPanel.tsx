@@ -26,6 +26,7 @@ import {
   createGroupsAction,
   finalizeGroupStandingsAction,
   generateGroupMatchesAction,
+  reopenGroupStageAction,
   saveGroupAssignmentsAction,
   setGroupQualifyCountAction,
   undoPromoteToKnockoutAction,
@@ -115,6 +116,14 @@ export const GroupKnockoutPanel = async ({
   const allGroupMatchesDecided =
     groupMatchesResult.docs.length > 0 && groupMatchesResult.docs.every((match) => RESULT_STATUSES.has(String(match.status)))
   const isFinalized = groupStage?.status === 'completed'
+
+  const knockoutStageResult = await payload.find({
+    collection: 'stages',
+    depth: 0,
+    limit: 1,
+    where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 2 } }] },
+  })
+  const knockoutStage = knockoutStageResult.docs[0]
 
   // ---- Card 1: groups & qualifiers -------------------------------------------------------------
   const groupsCard = (
@@ -325,7 +334,25 @@ export const GroupKnockoutPanel = async ({
             ))}
           </div>
           {isFinalized ? (
-            <AlertBanner tone="success">Group stage finalized - standings are locked.</AlertBanner>
+            <div className="flex flex-col gap-2">
+              <AlertBanner tone="success">Group stage finalized - standings are locked.</AlertBanner>
+              {!knockoutStage ? (
+                <form id="reopen-group-stage-form" action={reopenGroupStageAction}>
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="categoryId" value={categoryId} />
+                  <ConfirmSubmitButton
+                    formId="reopen-group-stage-form"
+                    tone="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger"
+                    confirmMessage="Reopen the group stage? Qualifier marks are cleared so you can fix a result and finalize again."
+                  >
+                    Reopen group stage
+                  </ConfirmSubmitButton>
+                </form>
+              ) : null}
+            </div>
           ) : (
             <form action={finalizeGroupStandingsAction} className="flex flex-col gap-2">
               <input type="hidden" name="eventId" value={eventId} />
@@ -346,13 +373,6 @@ export const GroupKnockoutPanel = async ({
   )
 
   // ---- Card 4: promote to knockout -------------------------------------------------------------
-  const knockoutStageResult = await payload.find({
-    collection: 'stages',
-    depth: 0,
-    limit: 1,
-    where: { and: [{ category_id: { equals: categoryId } }, { order: { equals: 2 } }] },
-  })
-  const knockoutStage = knockoutStageResult.docs[0]
   const knockoutMatchesResult = knockoutStage
     ? await payload.find({ collection: 'matches', depth: 0, limit: 500, where: { stage_id: { equals: knockoutStage.id } } })
     : { totalDocs: 0, docs: [] as Array<{ status: string }> }

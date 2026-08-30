@@ -179,8 +179,10 @@ On `/workspaces/matches/<match-number>` you can also:
 - Enter **set scores** and add sets, or record a **ranking result** for time-trial / score-ranking
   categories.
 - **Assign officials** to the match.
-- Attach **documentation** (photos, score sheets, files — with a size and type allowlist).
-- Leave **internal comments** for other staff (not public).
+- Attach **documentation** (photos, score sheets, files — with a size and type allowlist). Each
+  asset has a **Delete** button — the uploader or an Event Admin can remove a wrong file.
+- Leave **internal comments** for other staff (not public). A note can be **Deleted** by its author
+  or an Event Admin.
 - Read the match's own **audit history**.
 
 Revising an **already-published** result is restricted to **Event Admin** and **Super Admin**.

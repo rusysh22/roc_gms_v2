@@ -44,9 +44,12 @@ import {
   getAllowedTransitions,
   getPublishResultConfirmMessage,
 } from '../../../matches/matchLifecycle'
-import { addDocumentationAssetAction } from '../../../matches/documentationActions'
+import {
+  addDocumentationAssetAction,
+  deleteDocumentationAssetAction,
+} from '../../../matches/documentationActions'
 import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../../../matches/documentationErrors'
-import { addMatchCommentAction } from '../../../matches/commentActions'
+import { addMatchCommentAction, deleteMatchCommentAction } from '../../../matches/commentActions'
 import { COMMENT_ACTION_ERROR_MESSAGES } from '../../../matches/commentErrors'
 
 export const dynamic = 'force-dynamic'
@@ -632,7 +635,13 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Documentation</CardTitle>
-          <DocumentationAssetList assets={documentationAssets} showVisibility timezone={timezone} />
+          <DocumentationAssetList
+            assets={documentationAssets}
+            showVisibility
+            timezone={timezone}
+            deleteAction={deleteDocumentationAssetAction}
+            matchNumber={match.match_number}
+          />
           <form action={addDocumentationAssetAction} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <Field label="Asset Type">
@@ -672,7 +681,13 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Internal Comments</CardTitle>
-          <CommentList comments={internalComments} showStatus timezone={timezone} />
+          <CommentList
+            comments={internalComments}
+            showStatus
+            timezone={timezone}
+            deleteAction={deleteMatchCommentAction}
+            matchNumber={match.match_number}
+          />
           <form action={addMatchCommentAction} className="flex flex-col gap-4">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <div className="grid gap-4 sm:grid-cols-2">

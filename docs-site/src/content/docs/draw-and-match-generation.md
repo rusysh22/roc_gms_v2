@@ -66,8 +66,16 @@ This format has its own **Groups & qualifiers** panel:
 5. **Finalize & lock group stage** — computes the standings and the qualifiers.
 6. **Promote to knockout** — builds the knockout bracket from the qualifiers.
 
-If you need to redo it, **Undo Phase** deletes the generated knockout matches and unlocks the group
-results — but only while no knockout match has started playing yet.
+Steps back:
+
+- Change the **Total groups** number down to remove empty groups (a group with an entry or a
+  match must be emptied first).
+- **Reopen group stage** — after Finalize but *before* Promote, if a group result was wrong. It
+  clears the qualifier marks so you can fix the result and finalize again.
+- **Undo Phase** — after Promote: deletes the knockout matches and unlocks the group stage, while
+  no knockout match has started.
+- **Clear & regenerate** on the category row wipes everything (groups, matches, standings) for a
+  full restart.
 
 ### League / Friendly
 
