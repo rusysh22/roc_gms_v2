@@ -45,6 +45,16 @@ for that sport before you commit.
 > bracket where the top 2 seeds get a first-round bye. Chess Open (6 players, round robin) produces
 > 15 matches.
 
+### Fixing a draw — Clear & regenerate
+
+Generation is **additive** — running it again only fills in matches that failed the first time. To
+rebuild a draw properly (you fixed seeds, a late entry came in, you changed the format), use
+**Clear & regenerate** on the category row. It deletes every generated match, group, and cached
+bracket/standings for that category so you can generate fresh.
+
+It refuses once **any match in the category has started** — a match with a real result must go
+through the [match lifecycle](/running-match-day/#the-match-lifecycle), not a bulk delete.
+
 ### Group Stage to Knockout
 
 This format has its own **Groups & qualifiers** panel:
@@ -56,8 +66,16 @@ This format has its own **Groups & qualifiers** panel:
 5. **Finalize & lock group stage** — computes the standings and the qualifiers.
 6. **Promote to knockout** — builds the knockout bracket from the qualifiers.
 
-If you need to redo it, **Undo Phase** deletes the generated knockout matches and unlocks the group
-results — but only while no knockout match has started playing yet.
+Steps back:
+
+- Change the **Total groups** number down to remove empty groups (a group with an entry or a
+  match must be emptied first).
+- **Reopen group stage** — after Finalize but *before* Promote, if a group result was wrong. It
+  clears the qualifier marks so you can fix the result and finalize again.
+- **Undo Phase** — after Promote: deletes the knockout matches and unlocks the group stage, while
+  no knockout match has started.
+- **Clear & regenerate** on the category row wipes everything (groups, matches, standings) for a
+  full restart.
 
 ### League / Friendly
 

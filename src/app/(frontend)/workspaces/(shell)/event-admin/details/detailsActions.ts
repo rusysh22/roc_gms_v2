@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
+import { deleteEventCascade, eventIsAbandonable } from '@/lib/cascadeDelete'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { ACTIVE_EVENT_COOKIE, getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
@@ -135,90 +136,52 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
   redirect(`${page}?detailsUpdated=1`)
 }
 
-// Backward-flow gap: a mistakenly created event had no way out of the workspace - it sat in the
-// EventSwitcher forever. This gives one:
-//  - an event that never got past "just created" (no sports / categories / participants / matches)
-//    is hard-deleted, logo media included;
-//  - anything with real setup is *archived* instead (status + visibility both `archived`), which
-//    hides it from the switcher and the public site but keeps the data recoverable.
-// Either way the active-event cookie is cleared so the workspace falls back to another event.
-export async function discardEventAction(formData: FormData): Promise<void> {
+// Delete or archive an event so it leaves the workspace. A draft with no matches is permanently
+// deleted along with everything scoped to it (deleteEventCascade); anything further along is
+// archived instead (status + visibility both `archived`) - hidden from the switcher and the public
+// site but recoverable. The active-event cookie is cleared if it pointed here.
+export async function deleteEventAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: page,
   })
   const event = await getActiveEvent(payload)
+  const confirmName = text(formData, 'confirmName')
   if (!event) {
     redirect(`${page}?detailsError=missing_event`)
   }
-
-  const confirmToken = text(formData, 'confirmName')
-  if (confirmToken !== String(event.name)) {
-    redirect(`${page}?detailsError=discard_name_mismatch`)
+  if (confirmName !== event!.name) {
+    redirect(`${page}?detailsError=confirm_name_mismatch`)
   }
 
-  // Every child collection that carries a foreign key back to the event - if any has a row, a hard
-  // delete would hit an FK, so archive instead. (event-memberships is excluded: every event has the
-  // creator's row and it's cleared explicitly below.)
-  const eventWhere = { event_id: { equals: event.id } }
-  const childCollections = [
-    'sports',
-    'rulesets',
-    'competition-categories',
-    'clubs',
-    'players',
-    'teams',
-    'venues',
-    'courts',
-    'competition-entries',
-    'matches',
-    'registration-submissions',
-    'sponsors',
-    'announcements',
-    'articles',
-  ] as const
-  const childCounts = await Promise.all(
-    childCollections.map((collection) => payload.count({ collection, where: eventWhere })),
-  )
-  const isEmpty = childCounts.every((result) => result.totalDocs === 0)
+  const before = await payload.findByID({ collection: 'events', id: event!.id, depth: 0 }).catch(() => null)
+  const abandonable = await eventIsAbandonable(payload, event!.id)
 
-  const before = await payload.findByID({ collection: 'events', id: event.id, depth: 0 })
-
-  if (isEmpty) {
-    // Every event has at least the creator's event-memberships row (Events.enrollCreatorAsMember);
-    // clear it (and any co-admins added since) before the event row so the FK doesn't block delete.
-    await payload
-      .delete({ collection: 'event-memberships', where: { event_id: { equals: event.id } } })
-      .catch(() => null)
-    await payload.delete({ collection: 'events', id: event.id })
-    if (before.logo) {
-      const logoId = typeof before.logo === 'object' ? (before.logo as { id?: unknown }).id : before.logo
-      if (logoId) {
-        await payload.delete({ collection: 'media', id: String(logoId) }).catch(() => null)
-      }
-    }
+  if (abandonable.ok) {
+    await deleteEventCascade(payload, event!.id)
   } else {
     await payload.update({
       collection: 'events',
-      id: event.id,
+      id: event!.id,
       data: { status: 'archived', visibility: 'archived' },
     })
   }
-
   await recordAuditLog({
     payload,
-    action: isEmpty ? 'event.delete' : 'event.archive',
+    action: abandonable.ok ? 'event.delete' : 'event.archive',
     entityType: 'events',
-    entityId: event.id,
+    entityId: event!.id,
     before,
-    after: isEmpty ? null : { ...before, status: 'archived', visibility: 'archived' },
+    after: abandonable.ok ? null : { ...(before ?? {}), status: 'archived', visibility: 'archived' },
     actorUserId: user.id,
   })
 
   const cookieStore = await cookies()
-  cookieStore.delete(ACTIVE_EVENT_COOKIE)
+  if (cookieStore.get(ACTIVE_EVENT_COOKIE)?.value === String(event!.id)) {
+    cookieStore.delete(ACTIVE_EVENT_COOKIE)
+  }
 
   revalidatePath(page)
   revalidatePath('/workspaces/event-admin')
-  redirect(`/workspaces/event-admin?eventDiscarded=${isEmpty ? 'deleted' : 'archived'}`)
+  redirect(`/workspaces/event-admin?${abandonable.ok ? 'eventDeleted=1' : 'eventDiscarded=archived'}`)
 }

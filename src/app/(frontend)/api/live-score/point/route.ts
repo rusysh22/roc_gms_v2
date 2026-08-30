@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     matchSetId,
     side,
     delta,
-    actorUserId: user.id,
+    user,
   })
 
   return NextResponse.json(result, { status: result.ok ? 200 : 409 })

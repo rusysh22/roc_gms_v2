@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ConfirmSubmitButton } from './matches/ConfirmSubmitButton'
 
 export type RelationshipDoc = {
   id?: string | number
@@ -554,10 +555,15 @@ export const DocumentationAssetList = ({
   assets,
   showVisibility = false,
   timezone = DEFAULT_EVENT_TIMEZONE,
+  deleteAction,
+  matchNumber,
 }: {
   assets: DocumentationAssetSummary[]
   showVisibility?: boolean
   timezone?: string
+  /** When provided, each asset gets a Delete button posting { matchNumber, assetId }. */
+  deleteAction?: (formData: FormData) => Promise<void>
+  matchNumber?: string
 }) => {
   if (assets.length === 0) {
     return <EmptyState>No documentation uploaded yet.</EmptyState>
@@ -571,11 +577,29 @@ export const DocumentationAssetList = ({
             <span className="text-xs font-bold tracking-wide text-ink-soft uppercase">
               {formatStatus(asset.asset_type)}
             </span>
-            {showVisibility ? (
-              <StatusBadge tone={asset.visibility === 'public' ? 'blue' : 'neutral'}>
-                {asset.visibility}
-              </StatusBadge>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {showVisibility ? (
+                <StatusBadge tone={asset.visibility === 'public' ? 'blue' : 'neutral'}>
+                  {asset.visibility}
+                </StatusBadge>
+              ) : null}
+              {deleteAction && matchNumber ? (
+                <form id={`delete-doc-${asset.id}`} action={deleteAction}>
+                  <input type="hidden" name="matchNumber" value={matchNumber} />
+                  <input type="hidden" name="assetId" value={String(asset.id)} />
+                  <ConfirmSubmitButton
+                    formId={`delete-doc-${asset.id}`}
+                    tone="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto px-2 py-0.5 text-danger"
+                    confirmMessage="Delete this documentation asset? This cannot be undone."
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
+                </form>
+              ) : null}
+            </div>
           </div>
           {asset.url ? (
             <a
@@ -635,10 +659,15 @@ export const CommentList = ({
   comments,
   showStatus = false,
   timezone = DEFAULT_EVENT_TIMEZONE,
+  deleteAction,
+  matchNumber,
 }: {
   comments: CommentSummary[]
   showStatus?: boolean
   timezone?: string
+  /** When provided, each comment gets a Delete button posting { matchNumber, commentId }. */
+  deleteAction?: (formData: FormData) => Promise<void>
+  matchNumber?: string
 }) => {
   if (comments.length === 0) {
     return <EmptyState>No comments yet.</EmptyState>
@@ -663,6 +692,22 @@ export const CommentList = ({
               <StatusBadge tone={commentStatusTone[comment.status] || 'neutral'}>
                 {formatStatus(comment.status)}
               </StatusBadge>
+            ) : null}
+            {deleteAction && matchNumber ? (
+              <form id={`delete-comment-${comment.id}`} action={deleteAction} className="ml-auto">
+                <input type="hidden" name="matchNumber" value={matchNumber} />
+                <input type="hidden" name="commentId" value={String(comment.id)} />
+                <ConfirmSubmitButton
+                  formId={`delete-comment-${comment.id}`}
+                  tone="destructive"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-2 py-0.5 text-danger"
+                  confirmMessage="Delete this note? This cannot be undone."
+                >
+                  Delete
+                </ConfirmSubmitButton>
+              </form>
             ) : null}
           </div>
           <p className="mt-1 text-sm text-ink">{comment.body}</p>

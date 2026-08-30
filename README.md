@@ -12,6 +12,27 @@ ROC Game Management System V2 is a Next.js and Payload CMS foundation for runnin
 tournaments and games - office sports days, inter-school competitions, community/public games, and
 similar events.
 
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/app/` | Next.js App Router — `(frontend)` public site + staff workspaces, `(payload)` admin/API |
+| `src/collections/` | Payload collection schemas (the data model) |
+| `src/components/` | Shared React components (`ui/` = design-system primitives) |
+| `src/lib/` | Framework-agnostic domain logic (brackets, scheduling, standings, import/export, …) |
+| `src/access/` | Role and per-event access control |
+| `src/scripts/` | One-off / maintenance scripts run via `npm run …` (seed, recalculate, demo data) |
+| `src/seed/` | Base seed data |
+| `src/proxy.ts` | Next.js middleware (rate limiting) — must stay at this path |
+| `e2e/` | Playwright end-to-end and visual tests |
+| `prd/` | Product requirements, design docs, audits, runbooks, decision log — see `prd/README.md` |
+| `docs-site/` | Standalone Astro + Starlight user documentation, deployed to `docs.intourney.id` |
+| `patches/` | `patch-package` patches applied on `postinstall` |
+
+Inline code comments reference the design and audit documents by filename (for example
+`NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 5`, `AUDIT_E2E MAT-05`). Those files now live under
+`prd/design/` and `prd/audits/` — a repo-wide search for the filename still finds them.
+
 ## Local Setup
 
 1. Copy `.env.example` to `.env` and update `PAYLOAD_SECRET`.

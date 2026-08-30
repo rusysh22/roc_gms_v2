@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import type { Payload } from 'payload'
+import { Forbidden } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
@@ -16,8 +17,18 @@ import {
   loadRulesetForMatch,
   validateSetScore,
 } from '@/lib/ruleValidation'
+import {
+  deriveMatchOutcome,
+  deriveSetWinnerSide,
+  formatScoreSummary,
+  type MatchOutcome,
+  type OutcomeSet,
+} from '@/lib/matchResult'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
-import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
+import {
+  attemptSingleEliminationWinnerAdvancement,
+  retractSingleEliminationAdvancement,
+} from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import {
   MATCH_TRANSITIONS,
@@ -38,6 +49,7 @@ export type MinimalMatch = {
   participant_a_entry_id?: string | number | null
   participant_b_entry_id?: string | number | null
   winner_entry_id?: string | number | null
+  score_summary?: string | null
   result_value?: number | null
   result_qualifier?: string | null
 }
@@ -97,6 +109,81 @@ const revalidateMatch = (matchNumber: string) => {
   revalidatePath('/brackets')
   revalidatePath('/workspaces/standings')
   revalidatePath('/workspaces/brackets')
+}
+
+// ---- ruleset-derived result helpers (src/lib/matchResult.ts) ----
+// The officer enters the score; who won the set and the match is computed from the ruleset, not
+// picked from a dropdown. A manual override path stays available for retirement / DQ / disputes.
+
+const sideEntryId = (match: MinimalMatch, side: 'a' | 'b'): string | number | null | undefined =>
+  side === 'a' ? match.participant_a_entry_id : match.participant_b_entry_id
+
+const setWinnerSideFromDoc = (
+  match: MinimalMatch,
+  set: Pick<MinimalMatchSet, 'winner_entry_id'>,
+): 'a' | 'b' | null => {
+  if (set.winner_entry_id == null) return null
+  if (String(set.winner_entry_id) === String(match.participant_a_entry_id)) return 'a'
+  if (String(set.winner_entry_id) === String(match.participant_b_entry_id)) return 'b'
+  return null
+}
+
+const loadMatchSets = async (payload: Payload, matchId: string | number): Promise<MinimalMatchSet[]> =>
+  (
+    await payload.find({
+      collection: 'match-sets',
+      depth: 0,
+      limit: 50,
+      sort: 'set_number',
+      where: { match_id: { equals: matchId } },
+    })
+  ).docs as MinimalMatchSet[]
+
+const outcomeSetsFrom = (match: MinimalMatch, sets: MinimalMatchSet[]): OutcomeSet[] =>
+  sets.map((set) => ({
+    participant_a_score: set.participant_a_score,
+    participant_b_score: set.participant_b_score,
+    winner_side: setWinnerSideFromDoc(match, set),
+  }))
+
+const loadParticipantLabels = async (payload: Payload, match: MinimalMatch) => {
+  const load = async (id: string | number | null | undefined) => {
+    if (id == null) return 'TBD'
+    const doc = await payload
+      .findByID({ collection: 'competition-entries', id, depth: 0 })
+      .catch(() => null)
+    return ((doc?.display_name as string | undefined) || 'TBD').trim()
+  }
+  const [a, b] = await Promise.all([
+    load(match.participant_a_entry_id),
+    load(match.participant_b_entry_id),
+  ])
+  return { a, b }
+}
+
+/** Recompute matches.score_summary from the current sets. Best-effort - never block a score edit
+ * on the summary write. Must run with `user` so the match-mutation capability hook has a caller. */
+const refreshScoreSummary = async (
+  payload: Payload,
+  match: MinimalMatch,
+  ruleset: Parameters<typeof deriveMatchOutcome>[0],
+  sets: MinimalMatchSet[],
+  user: { id: string | number } | null,
+) => {
+  try {
+    const labels = await loadParticipantLabels(payload, match)
+    const outcomeSets = outcomeSetsFrom(match, sets)
+    const outcome = deriveMatchOutcome(ruleset, outcomeSets)
+    const summary = formatScoreSummary(labels.a, labels.b, outcomeSets, outcome)
+    await payload.update({
+      collection: 'matches',
+      id: match.id,
+      data: { score_summary: summary || null },
+      user: user ?? undefined,
+    })
+  } catch (error) {
+    payload.logger.error(`Failed to refresh score_summary for match ${match.id}: ${error}`)
+  }
 }
 
 const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swiss'])
@@ -169,12 +256,16 @@ export const recalculateResultCachesBestEffort = async ({
   matchNumber,
   action,
   actorUserId,
+  reverting = false,
 }: {
   payload: Payload
   match: MinimalMatch
   matchNumber: string
   action: string
   actorUserId: string | number | null
+  // A reverse transition (reopen / undo start / restore) removes a result that had been counted,
+  // so standings must be recomputed even though the match's new status is not a "result" status.
+  reverting?: boolean
 }) => {
   if (!match.stage_id || !match.category_id) {
     return
@@ -195,7 +286,7 @@ export const recalculateResultCachesBestEffort = async ({
   }
 
   if (stage.stage_type && standingStageTypes.has(stage.stage_type)) {
-    if (!standingResultStatuses.has(match.status)) {
+    if (!standingResultStatuses.has(match.status) && !reverting) {
       return
     }
 
@@ -404,10 +495,189 @@ export const recalculateResultCachesBestEffort = async ({
   }
 }
 
+type TransitionUser = { id: string | number; roles?: string[] | null }
+
+/** The shared core of every match status change: validate the transition, write status (+ optional
+ * winner / score summary / timestamps) with `user` in context for the capability hook, audit,
+ * recalculate result caches, post the public notice, revalidate. Does NOT redirect - callers do.
+ * `transitionMatchStatusAction` and `finishAndPublishMatchAction` both go through here so the
+ * publish pipeline can never diverge. */
+async function performMatchTransition(
+  payload: Payload,
+  user: TransitionUser,
+  match: MinimalMatch,
+  matchNumber: string,
+  targetStatus: string,
+  opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {},
+): Promise<{ ok: true; match: MinimalMatch } | { ok: false; error: string }> {
+  if (!isValidTransition(match.status, targetStatus)) {
+    return { ok: false, error: 'invalid_transition' }
+  }
+
+  const updateData: Record<string, unknown> = { status: targetStatus }
+
+  if (targetStatus === 'ongoing' && !match.actual_start_at) {
+    updateData.actual_start_at = new Date().toISOString()
+  }
+  if (targetStatus === 'finished' && !match.actual_end_at) {
+    updateData.actual_end_at = new Date().toISOString()
+  }
+  // The derived winner is recorded as soon as the match reaches `finished` (still provisional -
+  // bracket advancement only fires on `result_published`), so a match officer who can finish but
+  // not publish still leaves a complete, correct result for an admin to publish in one click.
+  if (
+    (targetStatus === 'finished' || targetStatus === 'result_published' || targetStatus === 'walkover') &&
+    opts.winnerEntryId
+  ) {
+    updateData.winner_entry_id = opts.winnerEntryId
+    if (!match.actual_end_at) updateData.actual_end_at = new Date().toISOString()
+  }
+  if (opts.scoreSummary !== undefined) {
+    updateData.score_summary = opts.scoreSummary
+  }
+
+  // Reverse transitions (Undo Start / Reopen Match / Restore Match) unwind the timestamps + derived
+  // winner + summary that the forward step set. Set scores stay - the winner re-derives from them.
+  const isReverseToScheduled =
+    targetStatus === 'scheduled' && ['ongoing', 'paused', 'cancelled', 'walkover'].includes(match.status)
+  const isReopen = targetStatus === 'ongoing' && ['finished', 'under_review'].includes(match.status)
+  // Reopening a *published* result (or undoing a walkover): the winner already advanced, so it must
+  // be pulled back out of the next round before the status changes.
+  const isReopenPublished =
+    (match.status === 'result_published' && targetStatus === 'under_review') ||
+    (match.status === 'walkover' && targetStatus === 'scheduled')
+
+  if (isReopenPublished) {
+    const stage = match.stage_id
+      ? ((await payload.findByID({ collection: 'stages', id: match.stage_id, depth: 0 }).catch(() => null)) as
+          | { stage_type?: string | null }
+          | null)
+      : null
+    const stageType = stage?.stage_type ?? ''
+    if (stageType === 'double_elimination') {
+      return { ok: false, error: 'reopen_not_supported' }
+    }
+    if (stageType === 'single_elimination') {
+      const retraction = await retractSingleEliminationAdvancement(payload, match.id)
+      if (!retraction.retracted && retraction.blockedBy) {
+        return { ok: false, error: 'reopen_blocked_downstream' }
+      }
+    }
+  }
+
+  if (isReverseToScheduled || isReopen || isReopenPublished) {
+    updateData.winner_entry_id = null
+    updateData.actual_end_at = null
+    updateData.score_summary = null
+    if (isReverseToScheduled) updateData.actual_start_at = null
+  }
+
+  // AUDIT_E2E MAT-02: `requiresWinnerSelection` is enforced here, the one place every transition
+  // goes through - a publish/walkover with no winner_entry_id silently breaks standings/bracket
+  // advancement downstream.
+  const transition = MATCH_TRANSITIONS.find(
+    (candidate) => candidate.from.includes(match.status) && candidate.to === targetStatus,
+  )
+  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id) {
+    return { ok: false, error: 'winner_required' }
+  }
+
+  const beforeSnapshot = {
+    status: match.status,
+    actual_start_at: match.actual_start_at ?? null,
+    actual_end_at: match.actual_end_at ?? null,
+    winner_entry_id: match.winner_entry_id ?? null,
+    score_summary: match.score_summary ?? null,
+  }
+
+  // AUDIT_UI_UX_CSS: enforceMatchMutationCapabilities (src/access/roles.ts) reads req.user to
+  // decide whether this change is allowed on an already-locked match - without `user`, a transition
+  // off a finished/result_published/walkover/disputed match throws Forbidden for every role. A
+  // match_officer hitting a locked-status transition (reopen/restore/publish) gets a clean message
+  // instead of a 500.
+  try {
+    await payload.update({ collection: 'matches', id: match.id, data: updateData, user })
+  } catch (error) {
+    if (error instanceof Forbidden) {
+      return { ok: false, error: 'transition_forbidden' }
+    }
+    throw error
+  }
+
+  const actorUserId = user.id
+
+  await recordAuditLog({
+    payload,
+    action: 'match.status_transition',
+    entityType: 'matches',
+    entityId: match.id,
+    before: beforeSnapshot,
+    after: { ...beforeSnapshot, ...updateData },
+    actorUserId,
+  })
+
+  const nextMatch = { ...match, ...updateData, status: targetStatus } as MinimalMatch
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match: nextMatch,
+    matchNumber,
+    action: 'match.status_transition',
+    actorUserId,
+    reverting: isReverseToScheduled || isReopen || isReopenPublished,
+  })
+
+  const notice = PUBLIC_STATUS_NOTICES[targetStatus]
+  if (notice && match.event_id) {
+    await postMatchAnnouncement({
+      payload,
+      eventId: match.event_id,
+      categoryId: match.category_id,
+      matchId: match.id,
+      matchNumber,
+      title: `${matchNumber} ${notice.label}`,
+      summary: `${matchNumber} was ${notice.label}.`,
+      urgency: notice.urgency,
+      displayMode: notice.displayMode,
+    })
+  }
+
+  revalidateMatch(matchNumber)
+  return { ok: true, match: nextMatch }
+}
+
+/** Resolves the winner + fresh score summary a `result_published` transition should carry. When
+ * the officer did not pick a winner (the normal case now), it is derived from the sets + ruleset. */
+const resolvePublishResult = async (
+  payload: Payload,
+  match: MinimalMatch,
+  manualWinnerSide: 'a' | 'b' | null,
+): Promise<{ winnerEntryId: string | number | null; scoreSummary: string | null; outcome: MatchOutcome }> => {
+  const ruleset = await loadRulesetForMatch(payload, {
+    categoryId: match.category_id,
+    stageId: match.stage_id,
+  })
+  const sets = await loadMatchSets(payload, match.id)
+  const outcomeSets = outcomeSetsFrom(match, sets)
+  const outcome = deriveMatchOutcome(ruleset, outcomeSets)
+
+  let winnerSide: 'a' | 'b' | null = manualWinnerSide
+  if (!winnerSide && outcome.decided && outcome.winnerSide) {
+    winnerSide = outcome.winnerSide
+  }
+  const winnerEntryId = winnerSide ? sideEntryId(match, winnerSide) ?? null : null
+
+  const labels = await loadParticipantLabels(payload, match)
+  const scoreSummary = formatScoreSummary(labels.a, labels.b, outcomeSets, outcome) || null
+
+  return { winnerEntryId, scoreSummary, outcome }
+}
+
 export async function transitionMatchStatusAction(formData: FormData): Promise<void> {
   const matchNumber = toStringField(formData.get('matchNumber'))
   const targetStatus = toStringField(formData.get('targetStatus'))
-  const winnerSide = toStringField(formData.get('winnerSide'))
+  const winnerSideRaw = toStringField(formData.get('winnerSide'))
+  const winnerSide = winnerSideRaw === 'a' || winnerSideRaw === 'b' ? winnerSideRaw : null
   const returnTo = getSafeReturnTo(
     formData,
     matchNumber ? `/workspaces/matches/${matchNumber}` : '/workspaces/match-officer',
@@ -427,102 +697,75 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     redirect(`${returnTo}?matchError=not_found`)
   }
 
-  if (!isValidTransition(match.status, targetStatus)) {
-    redirect(`${returnTo}?matchError=invalid_transition`)
+  let opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {}
+  if (targetStatus === 'result_published') {
+    const resolved = await resolvePublishResult(payload, match, winnerSide)
+    opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+  } else if (targetStatus === 'walkover' && winnerSide) {
+    opts = { winnerEntryId: sideEntryId(match, winnerSide) ?? null }
   }
 
-  const updateData: Record<string, unknown> = { status: targetStatus }
+  const result = await performMatchTransition(payload, user, match, matchNumber, targetStatus, opts)
+  if (!result.ok) {
+    const error =
+      result.error === 'winner_required' && targetStatus === 'result_published'
+        ? 'match_not_decided'
+        : result.error
+    redirect(`${returnTo}?matchError=${error}`)
+  }
+  redirect(`${returnTo}?matchUpdated=1`)
+}
 
-  if (targetStatus === 'ongoing' && !match.actual_start_at) {
-    updateData.actual_start_at = new Date().toISOString()
+/** One-tap "Finish & publish result" for the Live Score screen: only offered once the sets + the
+ * ruleset show a decided match. Chains ongoing/paused -> finished -> result_published with the
+ * derived winner, so the officer never picks it by hand. */
+export async function finishAndPublishMatchAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const returnTo = getSafeReturnTo(
+    formData,
+    matchNumber ? `/workspaces/matches/${matchNumber}` : '/workspaces/match-officer',
+  )
+
+  if (!matchNumber) {
+    redirect(`${returnTo}?matchError=invalid_request`)
   }
 
-  if (targetStatus === 'finished' && !match.actual_end_at) {
-    updateData.actual_end_at = new Date().toISOString()
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
+
+  if (!match) {
+    redirect(`${returnTo}?matchError=not_found`)
   }
 
-  if (targetStatus === 'result_published' || targetStatus === 'walkover') {
-    const winnerEntryId =
-      winnerSide === 'a'
-        ? match.participant_a_entry_id
-        : winnerSide === 'b'
-          ? match.participant_b_entry_id
-          : null
+  const resolved = await resolvePublishResult(payload, match, null)
+  if (!resolved.outcome.decided || !resolved.winnerEntryId) {
+    redirect(`${returnTo}?matchError=match_not_decided`)
+  }
 
-    if (winnerEntryId) {
-      updateData.winner_entry_id = winnerEntryId
+  const opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+
+  let current = match
+  if (current.status === 'ongoing' || current.status === 'paused') {
+    const step = await performMatchTransition(payload, user, current, matchNumber, 'finished', opts)
+    if (!step.ok) {
+      redirect(`${returnTo}?matchError=${step.error}`)
+    }
+    current = step.match
+  }
+
+  // Publishing off a `finished` match is a locked-result mutation - only event_admin/super_admin
+  // may do it (src/access/roles.ts). A match officer's tap finishes the match with the winner
+  // already recorded; the Finish result panel then offers one-click publish to an admin.
+  const canPublish = (user.roles ?? []).some((role) => role === 'super_admin' || role === 'event_admin')
+  if (canPublish && (current.status === 'finished' || current.status === 'under_review')) {
+    const publish = await performMatchTransition(payload, user, current, matchNumber, 'result_published', opts)
+    if (!publish.ok) {
+      redirect(`${returnTo}?matchError=${publish.error === 'winner_required' ? 'match_not_decided' : publish.error}`)
     }
   }
-
-  // AUDIT_E2E MAT-02: `requiresWinnerSelection` on the transition table was previously only UI
-  // metadata (used to decide whether the confirm dialog shows a winner picker) - the action itself
-  // never checked it, so a match could be published/walked-over with no winner_entry_id at all,
-  // which then silently broke standings/bracket advancement downstream. Enforced here, at the one
-  // place every status transition goes through.
-  const transition = MATCH_TRANSITIONS.find(
-    (candidate) => candidate.from.includes(match.status) && candidate.to === targetStatus,
-  )
-  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id) {
-    redirect(`${returnTo}?matchError=winner_required`)
-  }
-
-  const beforeSnapshot = {
-    status: match.status,
-    actual_start_at: match.actual_start_at ?? null,
-    actual_end_at: match.actual_end_at ?? null,
-    winner_entry_id: match.winner_entry_id ?? null,
-  }
-
-  // AUDIT_UI_UX_CSS: enforceMatchMutationCapabilities (src/access/roles.ts) reads req.user to
-  // decide whether this status change is allowed on an already-locked match - Payload's Local API
-  // does not otherwise know who's calling, so omitting `user` here made every transition off a
-  // finished/result_published/walkover/disputed match throw Forbidden unconditionally, for every
-  // role including super_admin. This was the actual reason "Confirm and Publish Result" never
-  // worked, discovered while adding the dispute-workflow transitions (which hit the exact same
-  // path from a different angle).
-  await payload.update({
-    collection: 'matches',
-    id: match.id,
-    data: updateData,
-    user,
-  })
-
-  const actorUserId = user.id
-
-  await recordAuditLog({
-    payload,
-    action: 'match.status_transition',
-    entityType: 'matches',
-    entityId: match.id,
-    before: beforeSnapshot,
-    after: { ...beforeSnapshot, ...updateData },
-    actorUserId,
-  })
-
-  await recalculateResultCachesBestEffort({
-    payload,
-    match: { ...match, ...updateData, status: targetStatus },
-    matchNumber,
-    action: 'match.status_transition',
-    actorUserId,
-  })
-
-  const notice = PUBLIC_STATUS_NOTICES[targetStatus]
-  if (notice && match.event_id) {
-    await postMatchAnnouncement({
-      payload,
-      eventId: match.event_id,
-      categoryId: match.category_id,
-      matchId: match.id,
-      matchNumber,
-      title: `${matchNumber} ${notice.label}`,
-      summary: `${matchNumber} was ${notice.label}.`,
-      urgency: notice.urgency,
-      displayMode: notice.displayMode,
-    })
-  }
-
-  revalidateMatch(matchNumber)
   redirect(`${returnTo}?matchUpdated=1`)
 }
 
@@ -530,6 +773,9 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
   const matchNumber = toStringField(formData.get('matchNumber'))
   const matchSetId = toStringField(formData.get('matchSetId'))
   const winnerSide = toStringField(formData.get('winnerSide'))
+  // The set winner is normally derived from the score + ruleset. `manualWinnerOverride=1` is the
+  // hidden "Correct manually" path for retirement / DQ / a score the rules can't resolve.
+  const manualWinnerOverride = toStringField(formData.get('manualWinnerOverride')) === '1'
   const notes = toStringField(formData.get('notes'))
   const revisionReason = toStringField(formData.get('revisionReason'))
   const participantAScore = parseScore(formData.get('participantAScore'))
@@ -558,14 +804,6 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     redirect(`${returnTo}?matchError=not_found`)
   }
 
-  const winnerSideValue = winnerSide === 'a' || winnerSide === 'b' ? winnerSide : null
-  const winnerEntryId =
-    winnerSideValue === 'a'
-      ? match.participant_a_entry_id
-      : winnerSideValue === 'b'
-        ? match.participant_b_entry_id
-        : null
-
   const existingSet = (await payload.findByID({
     collection: 'match-sets',
     id: matchSetId,
@@ -579,11 +817,26 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
   // AUDIT_E2E RULE-01: the ruleset's target_score/max_score/deuce_enabled/allow_draw were
   // previously never read at all - any score plus any winner selection was accepted outright.
   const ruleset = await loadRulesetForMatch(payload, { categoryId: match.category_id, stageId: match.stage_id })
+
+  // Derive the set winner from the score + ruleset. On manual override, take the posted side as-is
+  // (a/b, or blank = no winner) and skip validateSetScore's "winner must match the higher score"
+  // rule so a genuine override (retirement, DQ) can be recorded.
+  const manualSide = winnerSide === 'a' || winnerSide === 'b' ? winnerSide : null
+  const winnerSideValue = manualWinnerOverride
+    ? manualSide
+    : deriveSetWinnerSide(ruleset, participantAScore, participantBScore)
+  const winnerEntryId =
+    winnerSideValue === 'a'
+      ? match.participant_a_entry_id
+      : winnerSideValue === 'b'
+        ? match.participant_b_entry_id
+        : null
+
   const scoreValidation = validateSetScore({
     ruleset,
     participantAScore,
     participantBScore,
-    winnerSide: winnerSideValue,
+    winnerSide: manualWinnerOverride ? null : winnerSideValue,
   })
   if (!scoreValidation.valid) {
     redirect(`${returnTo}?matchError=ruleset_violation`)
@@ -639,6 +892,8 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     after: { ...afterSnapshot, revision_reason: lockedResult ? revisionReason : null },
     actorUserId,
   })
+
+  await refreshScoreSummary(payload, match, ruleset, await loadMatchSets(payload, match.id), user)
 
   await recalculateResultCachesBestEffort({
     payload,
@@ -729,6 +984,82 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     match,
     matchNumber,
     action: 'match_set.create',
+    actorUserId,
+  })
+
+  revalidateMatch(matchNumber)
+  redirect(`${returnTo}?matchUpdated=1`)
+}
+
+/** Counterpart to addMatchSetAction - removes a set added by mistake. Only the highest-numbered
+ * set can go (keeps set_number gap-free), and only while the match isn't locked. */
+export async function deleteMatchSetAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const matchSetId = toStringField(formData.get('matchSetId'))
+  const returnTo = getSafeReturnTo(
+    formData,
+    matchNumber ? `/workspaces/matches/${matchNumber}` : '/workspaces/match-officer',
+  )
+
+  if (!matchNumber || !matchSetId) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+  const { match } = await findMatchByNumber(payload, matchNumber)
+
+  if (!match) {
+    redirect(`${returnTo}?matchError=not_found`)
+  }
+
+  if (['finished', 'result_published', 'walkover', 'disputed'].includes(match.status)) {
+    redirect(`${returnTo}?matchError=set_delete_locked`)
+  }
+
+  const sets = await loadMatchSets(payload, match.id)
+  const target = sets.find((set) => String(set.id) === String(matchSetId))
+  if (!target) {
+    redirect(`${returnTo}?matchError=invalid_request`)
+  }
+  const highestSetNumber = sets.reduce((max, set) => Math.max(max, set.set_number), 0)
+  if (target.set_number !== highestSetNumber) {
+    redirect(`${returnTo}?matchError=set_delete_not_last`)
+  }
+
+  await payload.delete({ collection: 'match-sets', id: matchSetId, user })
+
+  const actorUserId = user.id
+  await recordAuditLog({
+    payload,
+    action: 'match_set.delete',
+    entityType: 'match-sets',
+    entityId: matchSetId,
+    before: {
+      set_number: target.set_number,
+      participant_a_score: target.participant_a_score ?? null,
+      participant_b_score: target.participant_b_score ?? null,
+    },
+    after: null,
+    actorUserId,
+  })
+
+  const ruleset = await loadRulesetForMatch(payload, { categoryId: match.category_id, stageId: match.stage_id })
+  await refreshScoreSummary(
+    payload,
+    match,
+    ruleset,
+    sets.filter((set) => String(set.id) !== String(matchSetId)),
+    user,
+  )
+
+  await recalculateResultCachesBestEffort({
+    payload,
+    match,
+    matchNumber,
+    action: 'match_set.delete',
     actorUserId,
   })
 
@@ -903,7 +1234,15 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
 // separate read-then-write in application code for a race to land between, and Postgres serializes
 // concurrent UPDATEs to the same row automatically.
 export type ApplyLiveScorePointResult =
-  | { ok: true; participant_a_score: number; participant_b_score: number }
+  | {
+      ok: true
+      participant_a_score: number
+      participant_b_score: number
+      // Derived from the new score + ruleset so the client can show "set complete" / "match
+      // complete" the instant the deciding point syncs, without waiting for a refresh.
+      set_winner_side: 'a' | 'b' | null
+      match_outcome: { decided: boolean; winner_side: 'a' | 'b' | null; sets_won_a: number; sets_won_b: number }
+    }
   | { ok: false; error: 'invalid_request' | 'not_found' | 'invalid_match_state' }
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.2 "offline scoring": extracted from the old
@@ -918,15 +1257,16 @@ export async function applyLiveScorePoint({
   matchSetId,
   side,
   delta,
-  actorUserId,
+  user,
 }: {
   payload: Payload
   matchNumber: string
   matchSetId: string
   side: 'a' | 'b'
   delta: 1 | -1
-  actorUserId: string | number
+  user: { id: string | number; roles?: string[] | null }
 }): Promise<ApplyLiveScorePointResult> {
+  const actorUserId = user.id
   const { match } = await findMatchByNumber(payload, matchNumber)
 
   if (!match) {
@@ -963,6 +1303,31 @@ export async function applyLiveScorePoint({
   `)
 
   const updatedRow = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0]
+  const newA = Number(updatedRow?.participant_a_score ?? existingSet.participant_a_score ?? 0)
+  const newB = Number(updatedRow?.participant_b_score ?? existingSet.participant_b_score ?? 0)
+
+  // The set winner follows the score under the ruleset - the officer never picks it. When this set
+  // just crossed (or fell back over) the decided line, persist that and refresh the match summary.
+  const derivedSetSide = deriveSetWinnerSide(ruleset, newA, newB)
+  const priorSetSide = setWinnerSideFromDoc(match, existingSet as MinimalMatchSet)
+  const setStateChanged = derivedSetSide !== priorSetSide
+
+  if (setStateChanged) {
+    const derivedWinnerId = derivedSetSide ? sideEntryId(match, derivedSetSide) ?? null : null
+    await payload.db.drizzle.execute(sql`
+      UPDATE match_sets
+      SET winner_entry_id = ${derivedWinnerId == null ? null : Number(derivedWinnerId)}
+      WHERE id = ${Number(matchSetId)}
+    `)
+  }
+
+  // Recompute the match outcome from every set every tap (one small indexed query) so the client's
+  // "match complete" prompt stays correct even as the score keeps moving past the deciding point.
+  const allSets = await loadMatchSets(payload, match.id)
+  const matchOutcome = deriveMatchOutcome(ruleset, outcomeSetsFrom(match, allSets))
+  if (setStateChanged) {
+    await refreshScoreSummary(payload, match, ruleset, allSets, user)
+  }
 
   await recordAuditLog({
     payload,
@@ -972,8 +1337,9 @@ export async function applyLiveScorePoint({
     before: {
       participant_a_score: existingSet.participant_a_score ?? null,
       participant_b_score: existingSet.participant_b_score ?? null,
+      winner_side: priorSetSide,
     },
-    after: updatedRow || null,
+    after: { participant_a_score: newA, participant_b_score: newB, winner_side: derivedSetSide },
     actorUserId,
   })
 
@@ -989,7 +1355,14 @@ export async function applyLiveScorePoint({
 
   return {
     ok: true,
-    participant_a_score: Number(updatedRow?.participant_a_score ?? existingSet.participant_a_score ?? 0),
-    participant_b_score: Number(updatedRow?.participant_b_score ?? existingSet.participant_b_score ?? 0),
+    participant_a_score: newA,
+    participant_b_score: newB,
+    set_winner_side: derivedSetSide,
+    match_outcome: {
+      decided: matchOutcome.decided,
+      winner_side: matchOutcome.winnerSide,
+      sets_won_a: matchOutcome.setsWonA,
+      sets_won_b: matchOutcome.setsWonB,
+    },
   }
 }

@@ -529,3 +529,57 @@ export async function cancelScheduleImportAction(formData: FormData): Promise<vo
   await deleteScratch(text(formData, 'scratchFile'))
   redirect(importReturn)
 }
+
+const DELETABLE_MATCH_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'published',
+  'check_in_open',
+  'ready_to_start',
+])
+
+// Deletes a manually-created fixture (League / Friendly / ad-hoc). Bracket-generated matches are
+// wired into an advancement graph, so those go through Clear & regenerate, not here. Event Admin
+// only (canDeleteMatch), and only while the match has not started.
+export async function deleteScheduledMatchAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: scheduleReturn,
+  })
+  const event = await getActiveEvent(payload)
+  const matchNumber = text(formData, 'matchNumber')
+  if (!event || !matchNumber) redirect(`${scheduleReturn}?scheduleError=invalid_match`)
+
+  const found = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 1,
+    where: { match_number: { equals: matchNumber } },
+  })
+  const match = found.docs[0] as { id: string | number; event_id?: unknown; status?: string; generation_source?: string } | undefined
+  if (!match || String(getRelationshipId(match.event_id as RelationshipDoc)) !== String(event!.id)) {
+    redirect(`${scheduleReturn}?scheduleError=invalid_match`)
+  }
+  if (match!.generation_source !== 'manual') {
+    redirect(`${scheduleReturn}?scheduleError=match_not_manual`)
+  }
+  if (!DELETABLE_MATCH_STATUSES.has(String(match!.status))) {
+    redirect(`${scheduleReturn}?scheduleError=match_already_started`)
+  }
+
+  await payload.delete({ collection: 'match-sets', where: { match_id: { equals: match!.id } } }).catch(() => null)
+  await payload.delete({ collection: 'matches', id: match!.id, user })
+  await recordAuditLog({
+    payload,
+    action: 'schedule.match_delete',
+    entityType: 'matches',
+    entityId: match!.id,
+    before: { match_number: matchNumber, status: match!.status },
+    after: null,
+    actorUserId: user.id,
+  })
+
+  refreshSchedule()
+  redirect(`${scheduleReturn}?scheduleDeleted=1`)
+}

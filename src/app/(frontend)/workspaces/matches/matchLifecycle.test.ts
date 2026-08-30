@@ -18,10 +18,27 @@ describe('match lifecycle', () => {
     }
   })
 
-  it('does not allow starting a match that is already over', () => {
-    for (const status of ['finished', 'result_published', 'walkover', 'cancelled']) {
+  it('does not let a published or walked-over match go back to ongoing', () => {
+    for (const status of ['result_published', 'walkover']) {
       expect(isValidTransition(status, 'ongoing')).toBe(false)
     }
+  })
+
+  it('offers the reverse "oops" steps', () => {
+    // Undo Start
+    expect(isValidTransition('ongoing', 'scheduled')).toBe(true)
+    expect(isValidTransition('paused', 'scheduled')).toBe(true)
+    // Reopen Match
+    expect(isValidTransition('finished', 'ongoing')).toBe(true)
+    expect(isValidTransition('under_review', 'ongoing')).toBe(true)
+    // Restore Match
+    expect(isValidTransition('cancelled', 'scheduled')).toBe(true)
+    // Reopen Result / Undo Walkover (Event-Admin-gated, with advancement retraction)
+    expect(isValidTransition('result_published', 'under_review')).toBe(true)
+    expect(isValidTransition('walkover', 'scheduled')).toBe(true)
+    // a published result still can't jump straight back to ongoing/scheduled
+    expect(isValidTransition('result_published', 'ongoing')).toBe(false)
+    expect(isValidTransition('result_published', 'scheduled')).toBe(false)
   })
 
   it('keeps the normal in-play transitions intact', () => {

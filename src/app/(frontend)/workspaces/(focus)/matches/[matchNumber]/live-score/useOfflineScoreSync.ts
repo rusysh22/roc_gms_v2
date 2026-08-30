@@ -1,13 +1,29 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { enqueuePoint, listPendingPoints, removePendingPoint, type QueuedPoint } from './offlineScoreQueue'
 
 const RETRY_INTERVAL_MS = 15000
 
+export type SyncedMatchOutcome = {
+  decided: boolean
+  winner_side: 'a' | 'b' | null
+  sets_won_a: number
+  sets_won_b: number
+}
+
+type OkBody = {
+  ok: true
+  participant_a_score: number
+  participant_b_score: number
+  set_winner_side?: 'a' | 'b' | null
+  match_outcome?: SyncedMatchOutcome
+}
+
 type PostPointResult =
-  | { kind: 'ok'; participant_a_score: number; participant_b_score: number }
+  | ({ kind: 'ok' } & OkBody)
   | { kind: 'network_error' }
   | { kind: 'rejected'; retryable: boolean }
 
@@ -33,16 +49,13 @@ const postPoint = async (item: QueuedPoint): Promise<PostPointResult> => {
     return { kind: 'rejected', retryable: true }
   }
 
-  const body = (await response.json().catch(() => null)) as
-    | { ok: true; participant_a_score: number; participant_b_score: number }
-    | { ok: false; error: string }
-    | null
+  const body = (await response.json().catch(() => null)) as OkBody | { ok: false; error: string } | null
 
   if (!body) {
     return { kind: 'network_error' }
   }
   if (body.ok) {
-    return { kind: 'ok', participant_a_score: body.participant_a_score, participant_b_score: body.participant_b_score }
+    return { kind: 'ok', ...body }
   }
   return { kind: 'rejected', retryable: false }
 }
@@ -53,16 +66,24 @@ const postPoint = async (item: QueuedPoint): Promise<PostPointResult> => {
 // parallel) because the server clamps each delta to the ruleset's max_score, so replay order can
 // change the final score near that cap.
 export function useOfflineScoreSync(matchNumber: string) {
+  const router = useRouter()
   const [pending, setPending] = useState<QueuedPoint[]>([])
   const [failed, setFailed] = useState<QueuedPoint[]>([])
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [syncing, setSyncing] = useState(false)
+  // The server returns the authoritative post-tap score with every OK response; keep the latest per
+  // set so the displayed number stays correct after a tap syncs (issue #1: it used to snap back to
+  // the stale prop). `lastOutcome` carries the ruleset-derived match state for the "match complete"
+  // prompt without waiting for a refresh.
+  const [confirmed, setConfirmed] = useState<Record<string, { a: number; b: number }>>({})
+  const [lastOutcome, setLastOutcome] = useState<SyncedMatchOutcome | null>(null)
   const flushingRef = useRef(false)
 
   const flush = useCallback(async () => {
     if (flushingRef.current) return
     flushingRef.current = true
     setSyncing(true)
+    let syncedAny = false
     try {
       // Re-read from IndexedDB at flush time rather than trusting the `pending` closure, so a
       // point enqueued by a fast double-tap during an in-flight flush is never skipped.
@@ -72,6 +93,14 @@ export function useOfflineScoreSync(matchNumber: string) {
         const result = await postPoint(item)
 
         if (result.kind === 'ok') {
+          syncedAny = true
+          setConfirmed((prev) => ({
+            ...prev,
+            [item.matchSetId]: { a: result.participant_a_score, b: result.participant_b_score },
+          }))
+          if (result.match_outcome) {
+            setLastOutcome(result.match_outcome)
+          }
           await removePendingPoint(item.id)
           queue = queue.slice(1)
           setPending(queue)
@@ -93,8 +122,14 @@ export function useOfflineScoreSync(matchNumber: string) {
     } finally {
       flushingRef.current = false
       setSyncing(false)
+      // Once the queue is fully drained, pull a fresh server render so the side "Sets" list, match
+      // status and Match-flow actions catch up. `confirmed` keeps the big score steady across it.
+      const remaining = await listPendingPoints(matchNumber)
+      if (syncedAny && remaining.length === 0) {
+        router.refresh()
+      }
     }
-  }, [matchNumber])
+  }, [matchNumber, router])
 
   useEffect(() => {
     listPendingPoints(matchNumber).then(setPending)
@@ -139,6 +174,14 @@ export function useOfflineScoreSync(matchNumber: string) {
     [pending],
   )
 
+  const confirmedScoreForSet = useCallback(
+    (matchSetId: string, side: 'a' | 'b'): number | undefined => {
+      const row = confirmed[matchSetId]
+      return row ? row[side] : undefined
+    },
+    [confirmed],
+  )
+
   const dismissFailed = useCallback(() => setFailed([]), [])
 
   return {
@@ -148,6 +191,8 @@ export function useOfflineScoreSync(matchNumber: string) {
     failedCount: failed.length,
     addPoint,
     pendingDeltaForSet,
+    confirmedScoreForSet,
+    lastSyncOutcome: lastOutcome,
     dismissFailed,
   }
 }

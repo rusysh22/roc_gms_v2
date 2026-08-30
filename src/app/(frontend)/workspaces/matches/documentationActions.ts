@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import { validateDocumentationFile } from '@/lib/documentationValidation'
 
@@ -75,4 +76,49 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
   revalidatePath(`/workspaces/matches/${matchNumber}`)
   revalidatePath(`/matches/${matchNumber}`)
   redirect(`/workspaces/matches/${matchNumber}?docUpdated=1`)
+}
+
+// Remove a documentation asset uploaded by mistake. The uploader can delete their own; an
+// event_admin / super_admin can delete any.
+export async function deleteDocumentationAssetAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const assetId = toStringField(formData.get('assetId'))
+  const returnTo = `/workspaces/matches/${matchNumber || ''}`
+
+  if (!matchNumber || !assetId) {
+    redirect(`${returnTo}?docError=invalid_request`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+
+  const asset = await payload
+    .findByID({ collection: 'documentation-assets', id: assetId, depth: 0 })
+    .catch(() => null)
+  if (!asset) {
+    redirect(`${returnTo}?docError=not_found`)
+  }
+
+  const isAdmin = (user.roles ?? []).some((role) => role === 'super_admin' || role === 'event_admin')
+  const isUploader = asset!.uploaded_by != null && String(asset!.uploaded_by) === String(user.id)
+  if (!isAdmin && !isUploader) {
+    redirect(`${returnTo}?docError=not_allowed`)
+  }
+
+  await payload.delete({ collection: 'documentation-assets', id: assetId })
+  await recordAuditLog({
+    payload,
+    action: 'documentation_asset.delete',
+    entityType: 'documentation-assets',
+    entityId: assetId,
+    before: asset,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(`/workspaces/matches/${matchNumber}`)
+  revalidatePath(`/matches/${matchNumber}`)
+  redirect(`${returnTo}?docUpdated=1`)
 }

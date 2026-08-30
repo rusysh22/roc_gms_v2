@@ -278,6 +278,90 @@ const routeSemifinalLoserToBronze = async (
   }
 }
 
+export type AdvancementRetractionResult = {
+  retracted: boolean
+  reason: string
+  /** match_number of the downstream match that blocked the retraction, if any. */
+  blockedBy?: string
+  /** match_numbers whose participant slots were cleared. */
+  clearedFrom: string[]
+}
+
+// The reverse of attemptSingleEliminationWinnerAdvancement: used when a published result is
+// reopened. Pulls this match's winner (and, for a Bronze-Final-wired semifinal, its loser) back
+// out of the next-round slots they were pushed into - but only while those downstream matches have
+// not progressed. If any has (checked in / started / scored / finished), nothing is touched and
+// the blocking match is reported, so the admin resolves it by hand instead of losing real results.
+export const retractSingleEliminationAdvancement = async (
+  payload: Payload,
+  matchId: Id,
+): Promise<AdvancementRetractionResult> => {
+  const match = await getMatchById(payload, matchId)
+  const stageType =
+    match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
+  if (stageType !== 'single_elimination') {
+    return { retracted: false, reason: 'Not a single-elimination stage.', clearedFrom: [] }
+  }
+
+  const winnerEntryId = getRelationshipId(match.winner_entry_id)
+  const participantAId = getRelationshipId(match.participant_a_entry_id)
+  const participantBId = getRelationshipId(match.participant_b_entry_id)
+  const loserEntryId = idsEqual(participantAId, winnerEntryId) ? participantBId : participantAId
+
+  type Target = { matchId: Id; slot: 'a' | 'b'; entryId: Id | undefined }
+  const targets: Target[] = []
+  const winnerTargetId = getRelationshipId(match.next_match_id)
+  if (winnerTargetId && match.next_match_slot && winnerEntryId) {
+    targets.push({ matchId: winnerTargetId, slot: match.next_match_slot, entryId: winnerEntryId })
+  }
+  const loserTargetId = getRelationshipId(match.next_loser_match_id)
+  if (loserTargetId && match.next_loser_match_slot && loserEntryId) {
+    targets.push({ matchId: loserTargetId, slot: match.next_loser_match_slot, entryId: loserEntryId })
+  }
+
+  // Pass 1: check every downstream match is still safe to touch.
+  const resolved: Array<Target & { match: AdvancementMatch; occupantId: Id | undefined }> = []
+  for (const target of targets) {
+    const targetMatch = await getMatchById(payload, target.matchId)
+    const occupantId = getRelationshipId(
+      target.slot === 'a' ? targetMatch.participant_a_entry_id : targetMatch.participant_b_entry_id,
+    )
+    if (idsEqual(occupantId, target.entryId) && !UNSTARTED_TARGET_STATUSES.has(targetMatch.status)) {
+      return {
+        retracted: false,
+        reason: `${targetMatch.match_number} has already progressed (status: ${targetMatch.status}). Resolve it before reopening this result.`,
+        blockedBy: targetMatch.match_number,
+        clearedFrom: [],
+      }
+    }
+    resolved.push({ ...target, match: targetMatch, occupantId })
+  }
+
+  // Pass 2: clear the slots this match had filled.
+  const clearedFrom: string[] = []
+  for (const target of resolved) {
+    if (!idsEqual(target.occupantId, target.entryId)) continue
+    await payload.update({
+      collection: 'matches',
+      id: target.matchId,
+      data:
+        target.slot === 'a'
+          ? { participant_a_entry_id: null }
+          : { participant_b_entry_id: null },
+    })
+    clearedFrom.push(target.match.match_number)
+  }
+
+  return {
+    retracted: true,
+    reason:
+      clearedFrom.length > 0
+        ? `Pulled the result back out of ${clearedFrom.join(', ')}.`
+        : 'No downstream slot needed clearing.',
+    clearedFrom,
+  }
+}
+
 export const attemptSingleEliminationWinnerAdvancement = async (
   payload: Payload,
   matchId: Id,

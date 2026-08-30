@@ -99,3 +99,47 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${matchNumber}`)
   redirect(`${returnTo}?commentUpdated=1`)
 }
+
+// The delete counterpart to addMatchCommentAction - remove an internal comment / official note.
+// The author can delete their own; an event_admin / super_admin can delete any.
+export async function deleteMatchCommentAction(formData: FormData): Promise<void> {
+  const matchNumber = toStringField(formData.get('matchNumber'))
+  const commentId = toStringField(formData.get('commentId'))
+  const returnTo = getSafeReturnTo(formData, `/workspaces/matches/${matchNumber}`)
+
+  if (!matchNumber || !commentId) {
+    redirect(`${returnTo}?commentError=invalid_request`)
+  }
+
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.matchOfficer,
+    returnTo,
+  })
+
+  const comment = await payload.findByID({ collection: 'comments', id: commentId, depth: 0 }).catch(() => null)
+  if (!comment || comment.entity_type !== 'matches') {
+    redirect(`${returnTo}?commentError=not_found`)
+  }
+
+  const isAdmin = (user.roles ?? []).some((role) => role === 'super_admin' || role === 'event_admin')
+  const isAuthor =
+    comment!.author_user_id != null && String(comment!.author_user_id) === String(user.id)
+  if (!isAdmin && !isAuthor) {
+    redirect(`${returnTo}?commentError=not_allowed`)
+  }
+
+  await payload.delete({ collection: 'comments', id: commentId })
+  await recordAuditLog({
+    payload,
+    action: 'comment.delete',
+    entityType: 'comments',
+    entityId: commentId,
+    before: comment,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(`/workspaces/matches/${matchNumber}`)
+  revalidatePath(`/matches/${matchNumber}`)
+  redirect(`${returnTo}?commentUpdated=1`)
+}

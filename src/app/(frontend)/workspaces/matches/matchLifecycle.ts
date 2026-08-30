@@ -4,6 +4,9 @@ export type MatchTransition = {
   label: string
   requiresConfirm?: boolean
   requiresWinnerSelection?: boolean
+  /** A "back" step (Undo Start / Reopen / Restore). Surfaced on the Match Details page but kept off
+   *  the Live Score quick-action panel, which is for driving a match forward. */
+  reverse?: boolean
 }
 
 export const MATCH_TRANSITIONS: MatchTransition[] = [
@@ -16,6 +19,22 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
   { from: ['ongoing'], to: 'paused', label: 'Pause Match' },
   { from: ['paused'], to: 'ongoing', label: 'Resume Match' },
   { from: ['ongoing'], to: 'finished', label: 'Finish Match' },
+  // Reverse steps for the common "oops" cases. `transitionMatchStatusAction` clears the timestamps
+  // and derived winner these unwind. Set scores are kept (the winner re-derives from them).
+  { from: ['ongoing', 'paused'], to: 'scheduled', label: 'Undo Start', requiresConfirm: true, reverse: true },
+  {
+    from: ['finished', 'under_review'],
+    to: 'ongoing',
+    label: 'Reopen Match',
+    requiresConfirm: true,
+    reverse: true,
+  },
+  { from: ['cancelled'], to: 'scheduled', label: 'Restore Match', requiresConfirm: true, reverse: true },
+  // Reopening a final result / undoing a walkover. Event Admin only (locked-status hook). For
+  // single elimination the winner is pulled back out of the next round first, and it is blocked if
+  // that next match has already progressed; not supported for double elimination.
+  { from: ['result_published'], to: 'under_review', label: 'Reopen Result', requiresConfirm: true, reverse: true },
+  { from: ['walkover'], to: 'scheduled', label: 'Undo Walkover', requiresConfirm: true, reverse: true },
   {
     from: ['finished', 'under_review'],
     to: 'result_published',
@@ -124,6 +143,16 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
   invalid_score: 'Scores must be zero or a positive whole number.',
   not_found: 'Match could not be found.',
   winner_required: 'This transition requires selecting a winner before it can be confirmed.',
+  match_not_decided:
+    "The rules don't show a winner yet - finish the deciding set, or use \"Correct manually\" to set the result.",
+  transition_forbidden:
+    'That change needs an Event Admin - a finished, published, walked-over, or cancelled match is locked to Match Officers.',
+  reopen_not_supported:
+    "Reopening isn't supported for double-elimination results. Use Undo Phase or Clear & regenerate if nothing has started, or mark the match Disputed.",
+  reopen_blocked_downstream:
+    'The next-round match this result fed has already progressed. Reopen or resolve that match first.',
+  set_delete_locked: 'Sets cannot be removed once the match result is finished or published.',
+  set_delete_not_last: 'Only the most recent set can be removed. Delete later sets first.',
   ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
   best_of_decided: 'This match is already decided under its best-of format - no further sets can be added.',
   invalid_match_state: 'Scores can only be entered while a match is ongoing, paused, or under review.',

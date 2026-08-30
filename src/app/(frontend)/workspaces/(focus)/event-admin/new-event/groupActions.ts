@@ -96,6 +96,10 @@ export async function createGroupsAction(formData: FormData): Promise<void> {
       },
     }))
 
+  if (stage.status === 'completed') {
+    redirectToGenerate(eventId, categoryId, '&wizardError=group_stage_finalized')
+  }
+
   const existingGroups = await payload.find({
     collection: 'groups',
     depth: 0,
@@ -105,18 +109,93 @@ export async function createGroupsAction(formData: FormData): Promise<void> {
   })
 
   const toCreate = groupCount - existingGroups.totalDocs
-  for (let index = 0; index < toCreate; index += 1) {
-    const order = existingGroups.totalDocs + index + 1
-    await payload.create({
-      collection: 'groups',
-      data: {
-        event_id: Number(eventId),
-        stage_id: stage.id,
-        name: `Group ${String.fromCharCode(65 + order - 1)}`,
-        order,
-      },
-    })
+  if (toCreate > 0) {
+    for (let index = 0; index < toCreate; index += 1) {
+      const order = existingGroups.totalDocs + index + 1
+      await payload.create({
+        collection: 'groups',
+        data: {
+          event_id: Number(eventId),
+          stage_id: stage.id,
+          name: `Group ${String.fromCharCode(65 + order - 1)}`,
+          order,
+        },
+      })
+    }
+  } else if (toCreate < 0) {
+    // Shrink: drop the highest-order groups, but only when they hold nothing yet. A group with an
+    // assigned entry or a generated match must be emptied first (reassign entries / Clear &
+    // regenerate).
+    const removable = existingGroups.docs.slice(groupCount)
+    const [groupedEntries, groupMatches] = await Promise.all([
+      payload.find({
+        collection: 'competition-entries',
+        depth: 0,
+        limit: 1,
+        where: { group_id: { in: removable.map((group) => group.id) } },
+      }),
+      payload.find({
+        collection: 'matches',
+        depth: 0,
+        limit: 1,
+        where: { group_id: { in: removable.map((group) => group.id) } },
+      }),
+    ])
+    if (groupedEntries.totalDocs > 0 || groupMatches.totalDocs > 0) {
+      redirectToGenerate(eventId, categoryId, '&wizardError=group_not_empty')
+    }
+    await payload.delete({ collection: 'groups', where: { id: { in: removable.map((group) => group.id) } } })
   }
+
+  revalidatePath(wizardPage)
+  redirectToGenerate(eventId, categoryId, '&wizardUpdated=1')
+}
+
+// The reverse of finalizeGroupStandingsAction: a finalized-but-not-yet-promoted group stage back to
+// `ready`, clearing the qualified/eliminated marks, so a wrong group result can be corrected and
+// the stage re-finalized. Once promoted, Undo Phase (undoPromoteToKnockoutAction) is the way back.
+export async function reopenGroupStageAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+
+  const stage = await findGroupStage(payload, categoryId)
+  if (!stage || String(stage.event_id) !== String(eventId)) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=missing_groups')
+  }
+  if (stage!.status !== 'completed') {
+    redirectToGenerate(eventId, categoryId, '&wizardError=group_stage_not_finalized')
+  }
+  if (await findKnockoutStage(payload, categoryId)) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=already_promoted')
+  }
+
+  await payload.update({ collection: 'stages', id: stage!.id, data: { status: 'ready' } })
+  const standings = await payload.find({
+    collection: 'standings',
+    depth: 0,
+    limit: 500,
+    where: { stage_id: { equals: stage!.id } },
+  })
+  for (const standing of standings.docs) {
+    if (standing.qualified_status && standing.qualified_status !== 'pending') {
+      await payload.update({ collection: 'standings', id: standing.id, data: { qualified_status: 'pending' } })
+    }
+  }
+
+  await recordAuditLog({
+    payload,
+    action: 'group_stage.reopen',
+    entityType: 'stages',
+    entityId: stage!.id,
+    before: { status: 'completed' },
+    after: { status: 'ready' },
+    actorUserId: user.id,
+  })
 
   revalidatePath(wizardPage)
   redirectToGenerate(eventId, categoryId, '&wizardUpdated=1')

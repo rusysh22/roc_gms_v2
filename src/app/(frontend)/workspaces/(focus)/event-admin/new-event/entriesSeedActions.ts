@@ -6,7 +6,24 @@ import { redirect } from 'next/navigation'
 import { recordAuditLog } from '@/lib/audit'
 import { advanceCategoriesStatus, advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
+import { recalculateResultCachesBestEffort } from '../../../matches/matchActions'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
+
+const UNSTARTED_MATCH_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'published',
+  'check_in_open',
+  'ready_to_start',
+])
+const relId = (value: unknown): string | number | null => {
+  if (value == null) return null
+  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+    return (value as { id: string | number }).id
+  }
+  return value as string | number
+}
 
 // "pair" entries are backed by Teams (not bare Players) because Rosters always require a
 // team_id - a doubles pair is modeled as a 2-player team.
@@ -62,20 +79,35 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
     limit: 500,
     where: { category_id: { equals: categoryId } },
   })
-  const enteredSourceIds = new Set(
-    existing.docs.map((entry) => {
-      const linkedId =
-        collection === 'teams' ? entry.team_id
-        : collection === 'clubs' ? entry.club_id
-        : entry.player_id
-      return String(linkedId)
-    }),
-  )
+  const linkedIdOf = (entry: (typeof existing.docs)[number]) =>
+    String(collection === 'teams' ? entry.team_id : collection === 'clubs' ? entry.club_id : entry.player_id)
+  const enteredSourceIds = new Set(existing.docs.map(linkedIdOf))
+  // A previously withdrawn entry for the same source is reactivated rather than skipped - "add"
+  // then "withdraw" then "add again" now round-trips (previously the second add did nothing).
+  const withdrawnBySource = new Map<string, (typeof existing.docs)[number]>()
+  for (const entry of existing.docs) {
+    if (entry.status === 'withdrawn') withdrawnBySource.set(linkedIdOf(entry), entry)
+  }
   let nextSeed =
     existing.docs.reduce((max, entry) => Math.max(max, Number(entry.seed_number) || 0), 0) + 1
 
   let addedCount = 0
   for (const sourceId of sourceIds) {
+    const withdrawn = withdrawnBySource.get(sourceId)
+    if (withdrawn) {
+      await payload.update({ collection: 'competition-entries', id: withdrawn.id, data: { status: 'confirmed' } })
+      await recordAuditLog({
+        payload,
+        action: 'competition_entry.reinstate',
+        entityType: 'competition-entries',
+        entityId: withdrawn.id,
+        before: withdrawn,
+        after: { ...withdrawn, status: 'confirmed' },
+        actorUserId: user.id,
+      })
+      addedCount += 1
+      continue
+    }
     // Silently skip already-entered/invalid sources instead of failing the whole batch - the
     // checklist can't fully prevent a stale checkbox (another admin adding the same person in a
     // race, or a duplicate row before the page refreshed) from being submitted alongside valid ones.
@@ -321,23 +353,6 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
     redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=invalid_relationship`)
   }
 
-  // Withdrawing an entry that's already drawn into a match would leave that match pointing at a
-  // withdrawn participant (broken bracket / standings). Block it here - the organiser clears the
-  // category's fixtures on the Generate step first, then withdraws, then regenerates.
-  const inFixtures = await payload.count({
-    collection: 'matches',
-    where: {
-      or: [
-        { participant_a_entry_id: { equals: entryId } },
-        { participant_b_entry_id: { equals: entryId } },
-        { winner_entry_id: { equals: entryId } },
-      ],
-    },
-  })
-  if (inFixtures.totalDocs > 0) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=entry_has_fixtures`)
-  }
-
   const data = { status: 'withdrawn' as const }
   await payload.update({ collection: 'competition-entries', id: entryId, data })
   await recordAuditLog({
@@ -350,8 +365,94 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
     actorUserId: user.id,
   })
 
+  // A withdrawal before an already-generated match is played hands that match to the opponent as a
+  // walkover (the standard bracket behaviour). Only fully-populated, not-yet-started matches - one
+  // with a still-TBD opponent, or one already in progress, is left for the officer.
+  const pendingMatches = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 200,
+    where: {
+      and: [
+        { or: [{ participant_a_entry_id: { equals: entryId } }, { participant_b_entry_id: { equals: entryId } }] },
+        { status: { in: [...UNSTARTED_MATCH_STATUSES] } },
+      ],
+    },
+  })
+  let walkoverCount = 0
+  for (const match of pendingMatches.docs) {
+    const aId = relId(match.participant_a_entry_id)
+    const bId = relId(match.participant_b_entry_id)
+    const opponentId = String(aId) === String(entryId) ? bId : aId
+    if (!opponentId) continue
+
+    const updated = { status: 'walkover' as const, winner_entry_id: Number(opponentId), actual_end_at: new Date().toISOString() }
+    await payload.update({ collection: 'matches', id: match.id, data: updated, user })
+    await recordAuditLog({
+      payload,
+      action: 'match.walkover_on_withdrawal',
+      entityType: 'matches',
+      entityId: match.id,
+      before: { status: match.status },
+      after: updated,
+      actorUserId: user.id,
+    })
+    await recalculateResultCachesBestEffort({
+      payload,
+      match: { ...(match as unknown as Record<string, unknown>), ...updated } as Parameters<
+        typeof recalculateResultCachesBestEffort
+      >[0]['match'],
+      matchNumber: String(match.match_number),
+      action: 'match.walkover_on_withdrawal',
+      actorUserId: user.id,
+    })
+    walkoverCount += 1
+  }
+
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardUpdated=1`)
+  const suffix = walkoverCount > 0 ? `&wizardWalkovers=${walkoverCount}` : '&wizardUpdated=1'
+  redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}${suffix}`)
+}
+
+// The reverse of withdrawEntryAction: put a withdrawn entry back to `confirmed`. Its seed number is
+// kept; if a bracket was already generated the entry re-appears where it was. Any walkovers the
+// withdrawal handed to opponents stay - use "Undo Walkover" on those matches (Match Details) to
+// reverse them, one at a time, while the opponent hasn't progressed.
+export async function reinstateEntryAction(entryId: string, formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const back = `${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}`
+  if (!entryId) {
+    redirect(`${back}&wizardError=invalid_entry`)
+  }
+
+  const before = await payload.findByID({ collection: 'competition-entries', id: entryId, depth: 0 }).catch(() => null)
+  if (!before || String(before.event_id) !== String(eventId)) {
+    redirect(`${back}&wizardError=invalid_relationship`)
+  }
+  if (before.status !== 'withdrawn') {
+    redirect(`${back}&wizardError=entry_not_withdrawn`)
+  }
+
+  const data = { status: 'confirmed' as const }
+  await payload.update({ collection: 'competition-entries', id: entryId, data })
+  await recordAuditLog({
+    payload,
+    action: 'competition_entry.reinstate',
+    entityType: 'competition-entries',
+    entityId: entryId,
+    before,
+    after: { ...before, ...data },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${back}&wizardUpdated=1`)
 }
 
 export async function saveSeedOrderAction(formData: FormData): Promise<void> {

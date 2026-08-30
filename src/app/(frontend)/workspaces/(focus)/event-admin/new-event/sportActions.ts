@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { categoryHasStartedMatch, deleteCategoryCascade } from '@/lib/cascadeDelete'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
@@ -87,13 +88,34 @@ export async function deleteSportAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=invalid_relationship`)
   }
 
-  const [categories, courts, matches] = await Promise.all([
-    payload.count({ collection: 'competition-categories', where: { sport_id: { equals: sportId } } }),
-    payload.count({ collection: 'courts', where: { sport_id: { equals: sportId } } }),
+  // `cascade=1` (behind a stronger confirm) removes the sport and everything under it: every
+  // category (with its entries/stages/matches, via deleteCategoryCascade), its rulesets, and it
+  // detaches its courts (they become sport-agnostic rather than being deleted).
+  const cascade = text(formData, 'cascade') === '1'
+
+  const [categoriesResult, courts, matches] = await Promise.all([
+    payload.find({ collection: 'competition-categories', depth: 0, limit: 500, where: { sport_id: { equals: sportId } } }),
+    payload.find({ collection: 'courts', depth: 0, limit: 500, where: { sport_id: { equals: sportId } } }),
     payload.count({ collection: 'matches', where: { sport_id: { equals: sportId } } }),
   ])
-  if (categories.totalDocs > 0 || courts.totalDocs > 0 || matches.totalDocs > 0) {
+  const hasData = categoriesResult.totalDocs > 0 || courts.totalDocs > 0 || matches.totalDocs > 0
+
+  if (hasData && !cascade) {
     redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=sport_in_use`)
+  }
+
+  if (cascade) {
+    for (const category of categoriesResult.docs) {
+      if (await categoryHasStartedMatch(payload, category.id)) {
+        redirect(`${wizardPage}?eventId=${eventId}&step=sports&wizardError=sport_has_started_match`)
+      }
+    }
+    for (const category of categoriesResult.docs) {
+      await deleteCategoryCascade(payload, category.id)
+    }
+    for (const court of courts.docs) {
+      await payload.update({ collection: 'courts', id: court.id, data: { sport_id: null } }).catch(() => null)
+    }
   }
 
   const rulesets = await payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { sport_id: { equals: sportId } } })
@@ -104,10 +126,10 @@ export async function deleteSportAction(formData: FormData): Promise<void> {
   await payload.delete({ collection: 'sports', id: sportId })
   await recordAuditLog({
     payload,
-    action: 'sport.delete',
+    action: cascade ? 'sport.delete_cascade' : 'sport.delete',
     entityType: 'sports',
     entityId: sportId,
-    before: sport,
+    before: { ...sport, categoryCount: categoriesResult.totalDocs },
     after: null,
     actorUserId: user.id,
   })

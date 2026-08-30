@@ -28,10 +28,13 @@ import {
   getRelationshipLabel,
   getSetWinnerSide,
 } from '../../../workspaceComponents'
+import { loadRulesetForMatch } from '@/lib/ruleValidation'
+import { deriveSetWinnerSide } from '@/lib/matchResult'
 import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import {
   addMatchSetAction,
   assignMatchOfficersAction,
+  deleteMatchSetAction,
   recordRankingResultAction,
   transitionMatchStatusAction,
   updateMatchSetScoreAction,
@@ -41,9 +44,12 @@ import {
   getAllowedTransitions,
   getPublishResultConfirmMessage,
 } from '../../../matches/matchLifecycle'
-import { addDocumentationAssetAction } from '../../../matches/documentationActions'
+import {
+  addDocumentationAssetAction,
+  deleteDocumentationAssetAction,
+} from '../../../matches/documentationActions'
 import { DOCUMENTATION_ACTION_ERROR_MESSAGES } from '../../../matches/documentationErrors'
-import { addMatchCommentAction } from '../../../matches/commentActions'
+import { addMatchCommentAction, deleteMatchCommentAction } from '../../../matches/commentActions'
 import { COMMENT_ACTION_ERROR_MESSAGES } from '../../../matches/commentErrors'
 
 export const dynamic = 'force-dynamic'
@@ -114,6 +120,14 @@ export default async function AdminMatchDetailPage({
       ? (match.stage_id as { stage_type?: string }).stage_type
       : undefined
   const isRankingMatch = stageType === 'time_trial' || stageType === 'score_ranking'
+  // The set winner follows the score + ruleset; the form shows it read-only with a manual-override
+  // disclosure rather than a plain dropdown.
+  const scoreRuleset = await loadRulesetForMatch(access.payload, {
+    categoryId: getRelationshipId(match.category_id),
+    stageId: getRelationshipId(match.stage_id),
+  })
+  const lastSetNumber = matchSets.reduce((max, set) => Math.max(max, set.set_number), 0)
+  const canDeleteSets = !['finished', 'result_published', 'walkover', 'disputed'].includes(match.status)
   const resultUnit =
     match.category_id && typeof match.category_id === 'object' ? match.category_id.result_unit : undefined
   const publishConfirmMessage = getPublishResultConfirmMessage(stageType)
@@ -500,7 +514,11 @@ export default async function AdminMatchDetailPage({
                         confirmMessage={
                           transition.to === 'result_published'
                             ? getPublishResultConfirmMessage(stageType)
-                            : `${transition.label}. Are you sure?`
+                            : transition.label === 'Reopen Result'
+                              ? 'Reopen this published result? The winner is pulled back out of the next round (blocked if that match has started), standings are recomputed, and the result goes back to Under Review.'
+                              : transition.label === 'Undo Walkover'
+                                ? 'Undo this walkover? The winner is pulled back out of the next round and the match returns to Scheduled.'
+                                : `${transition.label}. Are you sure?`
                         }
                       >
                         {transition.label}
@@ -524,52 +542,91 @@ export default async function AdminMatchDetailPage({
             <EmptyState>No match sets recorded yet.</EmptyState>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {matchSets.map((set) => (
-                <form
-                  key={set.id}
-                  action={updateMatchSetScoreAction}
-                  className="flex flex-col gap-3 rounded-card border border-line bg-mist p-4"
-                >
-                  <input type="hidden" name="matchNumber" value={match.match_number} />
-                  <input type="hidden" name="matchSetId" value={set.id} />
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-extrabold text-ink">Set {set.set_number}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label={getRelationshipLabel(match.participant_a_entry_id)}>
-                      <Input type="number" name="participantAScore" min={0} defaultValue={set.participant_a_score ?? 0} />
+              {matchSets.map((set) => {
+                const storedSide = getSetWinnerSide(match, set)
+                const derivedSide = deriveSetWinnerSide(
+                  scoreRuleset,
+                  set.participant_a_score ?? 0,
+                  set.participant_b_score ?? 0,
+                )
+                const shownSide = storedSide || derivedSide
+                const winnerLabel =
+                  shownSide === 'a'
+                    ? getRelationshipLabel(match.participant_a_entry_id)
+                    : shownSide === 'b'
+                      ? getRelationshipLabel(match.participant_b_entry_id)
+                      : 'Not decided by the score yet'
+                return (
+                  <form
+                    key={set.id}
+                    action={updateMatchSetScoreAction}
+                    className="flex flex-col gap-3 rounded-card border border-line bg-mist p-4"
+                  >
+                    <input type="hidden" name="matchNumber" value={match.match_number} />
+                    <input type="hidden" name="matchSetId" value={set.id} />
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-extrabold text-ink">Set {set.set_number}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label={getRelationshipLabel(match.participant_a_entry_id)}>
+                        <Input type="number" name="participantAScore" min={0} defaultValue={set.participant_a_score ?? 0} />
+                      </Field>
+                      <Field label={getRelationshipLabel(match.participant_b_entry_id)}>
+                        <Input type="number" name="participantBScore" min={0} defaultValue={set.participant_b_score ?? 0} />
+                      </Field>
+                    </div>
+                    <p className="text-sm font-semibold text-ink">
+                      Winner: <span className="font-bold">{winnerLabel}</span>
+                    </p>
+                    <details className="text-sm">
+                      <summary className="cursor-pointer font-bold text-ink-soft select-none">Correct manually</summary>
+                      <input type="hidden" name="manualWinnerOverride" value="1" />
+                      <Field label="Set winner (override)" className="mt-2">
+                        <Select name="winnerSide" defaultValue={storedSide}>
+                          <option value="">No winner</option>
+                          <option value="a">{getRelationshipLabel(match.participant_a_entry_id)}</option>
+                          <option value="b">{getRelationshipLabel(match.participant_b_entry_id)}</option>
+                        </Select>
+                      </Field>
+                    </details>
+                    <Field label="Notes">
+                      <Textarea name="notes" rows={2} defaultValue={set.notes || ''} />
                     </Field>
-                    <Field label={getRelationshipLabel(match.participant_b_entry_id)}>
-                      <Input type="number" name="participantBScore" min={0} defaultValue={set.participant_b_score ?? 0} />
-                    </Field>
-                  </div>
-                  <Field label="Set Winner">
-                    <Select name="winnerSide" defaultValue={getSetWinnerSide(match, set)}>
-                      <option value="">Not decided</option>
-                      <option value="a">{getRelationshipLabel(match.participant_a_entry_id)}</option>
-                      <option value="b">{getRelationshipLabel(match.participant_b_entry_id)}</option>
-                    </Select>
-                  </Field>
-                  <Field label="Notes">
-                    <Textarea name="notes" rows={2} defaultValue={set.notes || ''} />
-                  </Field>
-                  {['finished', 'result_published'].includes(match.status) ? (
-                    <Field label="Revision reason (required for finished results)">
-                      <Textarea name="revisionReason" rows={2} required />
-                    </Field>
-                  ) : null}
-                  <SubmitButton>Save Set {set.set_number}</SubmitButton>
-                </form>
-              ))}
+                    {['finished', 'result_published'].includes(match.status) ? (
+                      <Field label="Revision reason (required for finished results)">
+                        <Textarea name="revisionReason" rows={2} required />
+                      </Field>
+                    ) : null}
+                    <SubmitButton>Save Set {set.set_number}</SubmitButton>
+                  </form>
+                )
+              })}
             </div>
           )}
 
-          <form action={addMatchSetAction}>
-            <input type="hidden" name="matchNumber" value={match.match_number} />
-            <SubmitButton variant="secondary">
-              Add Set {matchSets.length + 1}
-            </SubmitButton>
-          </form>
+          <div className="flex flex-wrap gap-3">
+            <form action={addMatchSetAction}>
+              <input type="hidden" name="matchNumber" value={match.match_number} />
+              <SubmitButton variant="secondary">
+                Add Set {matchSets.length + 1}
+              </SubmitButton>
+            </form>
+            {matchSets.length > 0 && canDeleteSets ? (
+              <form id="detail-delete-last-set-form" action={deleteMatchSetAction}>
+                <input type="hidden" name="matchNumber" value={match.match_number} />
+                <input type="hidden" name="matchSetId" value={String(matchSets[matchSets.length - 1].id)} />
+                <ConfirmSubmitButton
+                  formId="detail-delete-last-set-form"
+                  tone="destructive"
+                  variant="ghost"
+                  className="text-danger"
+                  confirmMessage={`Delete Set ${lastSetNumber}? Its scores will be removed.`}
+                >
+                  Delete Set {lastSetNumber}
+                </ConfirmSubmitButton>
+              </form>
+            ) : null}
+          </div>
         </Card>
 
         <Card className="flex flex-col gap-3 md:col-span-2">
@@ -582,7 +639,13 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Documentation</CardTitle>
-          <DocumentationAssetList assets={documentationAssets} showVisibility timezone={timezone} />
+          <DocumentationAssetList
+            assets={documentationAssets}
+            showVisibility
+            timezone={timezone}
+            deleteAction={deleteDocumentationAssetAction}
+            matchNumber={match.match_number}
+          />
           <form action={addDocumentationAssetAction} className="grid gap-4 sm:grid-cols-2">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <Field label="Asset Type">
@@ -622,7 +685,13 @@ export default async function AdminMatchDetailPage({
 
         <Card className="flex flex-col gap-4 md:col-span-2">
           <CardTitle>Internal Comments</CardTitle>
-          <CommentList comments={internalComments} showStatus timezone={timezone} />
+          <CommentList
+            comments={internalComments}
+            showStatus
+            timezone={timezone}
+            deleteAction={deleteMatchCommentAction}
+            matchNumber={match.match_number}
+          />
           <form action={addMatchCommentAction} className="flex flex-col gap-4">
             <input type="hidden" name="matchNumber" value={match.match_number} />
             <div className="grid gap-4 sm:grid-cols-2">

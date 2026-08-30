@@ -10,7 +10,7 @@ import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
-import { discardEventAction, updateEventDetailsAction } from './detailsActions'
+import { deleteEventAction, updateEventDetailsAction } from './detailsActions'
 import { ReadinessChecklist } from './ReadinessChecklist'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ const detailsErrorMessages: Record<string, string> = {
   missing_event: 'No active event to edit yet.',
   schedule_outside_window:
     'Some matches are scheduled outside the new start/end window. Reschedule (or clear) those matches first, then narrow the dates.',
-  discard_name_mismatch: 'The event name you typed did not match. Nothing was discarded.',
+  confirm_name_mismatch: 'Type the exact event name to confirm. Nothing was changed.',
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -96,6 +96,12 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
   const detailsError = get(params, 'detailsError')
   const detailsUpdated = get(params, 'detailsUpdated')
   const event = activeEvent as unknown as EventDetailsDoc
+
+  const matchCount = await access.payload.count({
+    collection: 'matches',
+    where: { event_id: { equals: activeEvent.id } },
+  })
+  const canDeleteEvent = event.status === 'draft' && matchCount.totalDocs === 0
 
   return (
     <>
@@ -314,30 +320,41 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
         </div>
       </form>
 
-      <Card className="mt-6 flex flex-col gap-3 border-danger/40">
-        <div>
-          <CardTitle>Discard this event</CardTitle>
-          <p className="mt-1 text-sm text-ink-soft">
-            An event with no sports, categories, participants, or matches is deleted outright.
-            Anything further along is <strong>archived</strong> instead - hidden from the event
-            switcher and the public site, but recoverable. Either way you&apos;ll be switched to
-            another event. Type <strong>{event.name}</strong> to confirm.
-          </p>
-        </div>
-        <form id="discard-event-form" action={discardEventAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <Field label="Confirm event name" className="sm:max-w-xs">
-            <Input name="confirmName" autoComplete="off" placeholder={event.name || ''} />
+      <Card className="mt-6 flex flex-col gap-3 border-danger/30 bg-danger-surface">
+        <CardTitle>{canDeleteEvent ? 'Delete this event' : 'Archive this event'}</CardTitle>
+        <p className="text-sm text-ink-soft">
+          {canDeleteEvent ? (
+            <>
+              Permanently removes <strong>{event.name}</strong> and everything under it &mdash;
+              sports, categories, entries, clubs, teams, players, venues, courts, rulesets, and
+              scoped content. There is no undo.
+            </>
+          ) : (
+            <>
+              This event has matches or is past draft, so it can&apos;t be deleted. Archiving{' '}
+              <strong>{event.name}</strong> hides it from the event switcher and the public site but
+              keeps every record recoverable.
+            </>
+          )}{' '}
+          You&apos;ll be switched to another event.
+        </p>
+        <form id="delete-event-form" action={deleteEventAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Field label="Type the event name to confirm" className="sm:max-w-xs">
+            <Input name="confirmName" placeholder={event.name || ''} autoComplete="off" />
           </Field>
-        </form>
-        <div>
           <ConfirmSubmitButton
-            formId="discard-event-form"
-            variant="destructive"
-            confirmMessage={`Discard "${event.name}"? If it has any setup data it will be archived (recoverable); if it's empty it will be permanently deleted.`}
+            formId="delete-event-form"
+            tone="destructive"
+            className="text-danger"
+            confirmMessage={
+              canDeleteEvent
+                ? `Delete "${event.name}" and all of its data? This cannot be undone.`
+                : `Archive "${event.name}"? It leaves the workspace but stays recoverable.`
+            }
           >
-            Discard event
+            {canDeleteEvent ? 'Delete event' : 'Archive event'}
           </ConfirmSubmitButton>
-        </div>
+        </form>
       </Card>
     </>
   )

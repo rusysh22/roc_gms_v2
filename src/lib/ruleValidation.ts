@@ -1,5 +1,7 @@
 import type { Payload } from 'payload'
 
+import { isSetDecidedByRules } from './matchResult'
+
 // AUDIT_E2E RULE-01: score entry never read best_of/target_score/max_score/deuce_enabled/
 // allow_draw at all, so an operator could submit any score and pick any winner regardless of the
 // category's own rules (e.g. badminton target 21/max 30 happily accepted 7-4 as a finished set).
@@ -58,16 +60,14 @@ export const validateSetScore = ({
     return fail(`Score cannot exceed the maximum of ${max} for this category.`)
   }
 
-  if (target !== null && target !== undefined) {
-    const reachedCap = max !== null && max !== undefined && winnerScore === max
-    if (!reachedCap) {
-      if (winnerScore < target) {
-        return fail(`A set is not decided until a side reaches ${target} points for this category.`)
-      }
-      if (ruleset.deuce_enabled && winnerScore - loserScore < 2) {
-        return fail('This category requires winning by at least 2 points once past the target score.')
-      }
+  // Decidedness (target reached, win-by-2 on deuce, capped at max) is computed once in
+  // src/lib/matchResult.ts and reused here so validation and the auto-derived set winner can
+  // never disagree about whether a set is finished.
+  if (target !== null && target !== undefined && !isSetDecidedByRules(ruleset, winnerScore, loserScore)) {
+    if (winnerScore < target) {
+      return fail(`A set is not decided until a side reaches ${target} points for this category.`)
     }
+    return fail('This category requires winning by at least 2 points once past the target score.')
   }
 
   return ok

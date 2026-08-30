@@ -20,14 +20,9 @@ import {
 import { advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
+import { categoryHasStartedMatch, clearCategoryGeneratedData } from '@/lib/cascadeDelete'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
-import {
-  AUTO_GENERATE_FORMATS as supportedFormats,
-  CLEARABLE_FIXTURE_STATUSES,
-  getWizardEvent,
-  text,
-  wizardPage,
-} from './wizardShared'
+import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
 export async function generateMatchesAction(formData: FormData): Promise<void> {
   const { payload } = await assertWorkspaceActionAccess({
@@ -267,104 +262,6 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
   )
 }
 
-// The backward counterpart to generateMatchesAction: wipe a category's generated fixtures so the
-// organiser can fix seeding / entries / format and regenerate. Deliberately narrow - it only runs
-// while nothing has actually happened yet (every match still in CLEARABLE_FIXTURE_STATUSES, no
-// winner, no recorded sets). group_stage_to_knockout is out of scope here (its groups / assignments
-// / knockout stage are managed from GroupKnockoutPanel, which already has "Undo Phase").
-export async function clearCategoryFixturesAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
-
-  const eventId = text(formData, 'eventId')
-  const categoryId = text(formData, 'categoryId')
-
-  const backToGenerate = (suffix: string): never =>
-    redirect(`${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}${suffix}`)
-
-  if (!categoryId) {
-    backToGenerate('&wizardError=invalid_category')
-  }
-
-  const category = await payload
-    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
-    .catch(() => null)
-  if (!category || String(category.event_id) !== String(eventId)) {
-    backToGenerate('&wizardError=invalid_relationship')
-  }
-
-  if (String(category!.format_type) === 'group_stage_to_knockout') {
-    backToGenerate('&wizardError=use_groups_panel')
-  }
-
-  const matches = await payload.find({
-    collection: 'matches',
-    depth: 0,
-    limit: 500,
-    where: { category_id: { equals: categoryId } },
-  })
-  if (matches.totalDocs === 0) {
-    backToGenerate('&wizardUpdated=1')
-  }
-
-  const inPlay = matches.docs.some(
-    (match) => !CLEARABLE_FIXTURE_STATUSES.has(String(match.status)) || match.winner_entry_id != null,
-  )
-  const matchIds = matches.docs.map((match) => match.id)
-  const recordedSets =
-    matchIds.length > 0
-      ? await payload.count({ collection: 'match-sets', where: { match_id: { in: matchIds } } })
-      : { totalDocs: 0 }
-  if (inPlay || recordedSets.totalDocs > 0) {
-    backToGenerate('&wizardError=fixtures_in_play')
-  }
-
-  const stages = await payload.find({
-    collection: 'stages',
-    depth: 0,
-    limit: 50,
-    where: { category_id: { equals: categoryId } },
-  })
-  const stageIds = stages.docs.map((stage) => stage.id)
-
-  if (matchIds.length > 0) {
-    await payload.delete({ collection: 'match-sets', where: { match_id: { in: matchIds } } }).catch(() => null)
-    await payload.delete({ collection: 'matches', where: { id: { in: matchIds } } })
-  }
-  // Standings rows are (re)built by generateMatchesAction's recalculate* call - drop them too so a
-  // stale table doesn't linger on the public category page after the fixtures behind it are gone.
-  await payload.delete({ collection: 'standings', where: { category_id: { equals: categoryId } } }).catch(() => null)
-  if (stageIds.length > 0) {
-    // brackets.stage_id is required + unique - drop the bracket before its stage.
-    await payload.delete({ collection: 'brackets', where: { stage_id: { in: stageIds } } }).catch(() => null)
-    await payload.delete({ collection: 'stages', where: { id: { in: stageIds } } })
-  }
-
-  // advanceCategoryStatus is monotonic (draft->open->locked->published) and can't walk back the
-  // status generateMatchesAction / publish moved this category to - do it directly, same as
-  // undoPromoteToKnockoutAction resets its group stage. Back to `open` so registration/draw stay
-  // editable and (if it was published) the empty bracket drops off the public site.
-  const statusBefore = String(category!.status)
-  const needsReset = statusBefore === 'locked' || statusBefore === 'published'
-  if (needsReset) {
-    await payload.update({ collection: 'competition-categories', id: categoryId, data: { status: 'open' } })
-  }
-
-  await recordAuditLog({
-    payload,
-    action: 'competition_category.clear_fixtures',
-    entityType: 'competition-categories',
-    entityId: categoryId,
-    before: { matchCount: matches.totalDocs, stageCount: stages.totalDocs, status: statusBefore },
-    after: { matchCount: 0, stageCount: 0, status: needsReset ? 'open' : statusBefore },
-    actorUserId: user.id,
-  })
-
-  revalidatePath(wizardPage)
-  backToGenerate('&wizardCleared=1')
-}
 
 // MSG-03: sets or clears a stage's ruleset override. Empty rulesetId clears it back to "inherit
 // from category" (Stages.ruleset_id is optional) rather than being rejected as invalid input.
@@ -403,4 +300,62 @@ export async function setStageRulesetOverrideAction(formData: FormData): Promise
 
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardUpdated=1`)
+}
+
+// The backward step for "Generate matches" / the Groups panel: wipe every generated artefact for
+// one category (matches, sets, stages, groups, bracket + standings caches, and each entry's group
+// assignment) so the draw can be built again from scratch - e.g. after fixing seeds or a late
+// entry. Refuses once any match has started; a decided result must go through the match lifecycle,
+// not a bulk delete. Mirrors undoPromoteToKnockoutAction (groupActions.ts).
+export async function clearGeneratedMatchesAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const backTo = `${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}`
+
+  const category = await payload
+    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .catch(() => null)
+  if (!category || String(category.event_id) !== String(eventId)) {
+    redirect(`${backTo}&wizardError=invalid_relationship`)
+  }
+
+  const matchCount = await payload.count({
+    collection: 'matches',
+    where: { category_id: { equals: categoryId } },
+  })
+  if (matchCount.totalDocs === 0) {
+    redirect(`${backTo}&wizardError=nothing_to_clear`)
+  }
+  if (await categoryHasStartedMatch(payload, categoryId)) {
+    redirect(`${backTo}&wizardError=matches_already_started`)
+  }
+
+  const { matchCount: cleared, stageCount } = await clearCategoryGeneratedData(payload, categoryId)
+
+  // advanceCategoryStatus is monotonic and can't walk back the status generate/publish moved this
+  // category to - do it directly. Back to `open` so registration/draw stay editable and, if it was
+  // published, the now-empty bracket drops off the public site.
+  const statusBefore = String(category!.status)
+  const needsReset = statusBefore === 'locked' || statusBefore === 'published'
+  if (needsReset) {
+    await payload.update({ collection: 'competition-categories', id: categoryId, data: { status: 'open' } })
+  }
+
+  await recordAuditLog({
+    payload,
+    action: 'competition_category.clear_generated_matches',
+    entityType: 'competition-categories',
+    entityId: categoryId,
+    before: { matchCount: cleared, stageCount, status: statusBefore },
+    after: { status: needsReset ? 'open' : statusBefore },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${backTo}&wizardCleared=${cleared}`)
 }

@@ -45,11 +45,15 @@ type NextMatchDoc = {
 // counts as "next up" for the score-update shortcut below.
 const MATCH_DAY_STATUSES = ['published', 'scheduled', 'check_in_open', 'ready_to_start', 'ongoing']
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>
-
-export default async function EventAdminWorkspacePage({ searchParams }: { searchParams?: SearchParams }) {
+export default async function EventAdminWorkspacePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
   const params = searchParams ? await searchParams : {}
-  const discarded = Array.isArray(params.eventDiscarded) ? params.eventDiscarded[0] : params.eventDiscarded
+  const eventDeleted = params.eventDeleted === '1'
+  const eventArchived =
+    (Array.isArray(params.eventDiscarded) ? params.eventDiscarded[0] : params.eventDiscarded) === 'archived'
   const access = await requireWorkspaceAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: '/workspaces/event-admin',
@@ -149,6 +153,11 @@ export default async function EventAdminWorkspacePage({ searchParams }: { search
 
   return (
     <>
+      {eventDeleted ? (
+        <AlertBanner tone="success" className="mb-4">
+          Event deleted, along with all of its data.
+        </AlertBanner>
+      ) : null}
       <PageHero
         eyebrow="Event Admin Workspace"
         title={event?.name || 'Set up your first event'}
@@ -181,11 +190,10 @@ export default async function EventAdminWorkspacePage({ searchParams }: { search
         }
       />
 
-      {discarded === 'deleted' || discarded === 'archived' ? (
+      {eventArchived ? (
         <AlertBanner tone="success" className="mb-4">
-          {discarded === 'deleted'
-            ? 'Event deleted. It had no setup data, so it was removed permanently.'
-            : 'Event archived. It is hidden from the switcher and the public site but can be restored from Payload admin.'}
+          Event archived. It is hidden from the event switcher and the public site but can be
+          restored from Payload admin.
         </AlertBanner>
       ) : null}
 

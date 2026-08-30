@@ -36,7 +36,7 @@ Shipped 2026-08-29:
 Still pending: explicit `Registrations` sheet, downloadable CSV of the issue list, upsert for
 Players/Pairs (need a stable per-person key — `identification_number`), and all of IMP-3.
 Created: 2026-08-29
-Relates to: `NOVICE_ADMIN_FLOW_UX_REDESIGN.md` (items 1, 2, 8), `prd/decision-log.md`,
+Relates to: `prd/design/NOVICE_ADMIN_FLOW_UX_REDESIGN.md` (items 1, 2, 8), `prd/decision-log.md`,
 `src/app/(frontend)/workspaces/(focus)/event-admin/new-event/`
 
 ---

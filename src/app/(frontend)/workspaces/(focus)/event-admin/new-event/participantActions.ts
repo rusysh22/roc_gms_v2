@@ -1611,11 +1611,11 @@ export async function updateClubAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&tab=clubs&wizardUpdated=1`)
 }
 
-// Mirrors deletePlayerAction's guard - a club with teams, players, or entries still hanging off it
-// is not safe to hard-delete (that data would be orphaned). Remove those first.
+// Delete a club/contingent. Blocked while any team, player, or entry still points at it - detach
+// those first (edit the team/player, or withdraw the club entry).
 export async function deleteClubAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
@@ -1624,10 +1624,11 @@ export async function deleteClubAction(formData: FormData): Promise<void> {
 
   const eventId = text(formData, 'eventId')
   const clubId = text(formData, 'clubId')
+  const back = `${wizardPage}?eventId=${eventId}&step=participants&tab=clubs`
 
   const club = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 }).catch(() => null)
   if (!club || String(club.event_id) !== String(eventId)) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+    redirect(`${back}&wizardError=invalid_relationship`)
   }
 
   const [teams, players, entries] = await Promise.all([
@@ -1636,7 +1637,7 @@ export async function deleteClubAction(formData: FormData): Promise<void> {
     payload.count({ collection: 'competition-entries', where: { club_id: { equals: clubId } } }),
   ])
   if (teams.totalDocs > 0 || players.totalDocs > 0 || entries.totalDocs > 0) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=club_in_use`)
+    redirect(`${back}&wizardError=club_in_use`)
   }
 
   await payload.delete({ collection: 'clubs', id: clubId })
@@ -1651,7 +1652,7 @@ export async function deleteClubAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+  redirect(`${back}&wizardUpdated=1`)
 }
 
 // Teams (and pairs, which are teams under the hood) got the same rename affordance. Slug untouched.
@@ -1698,11 +1699,11 @@ export async function updateTeamAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&tab=teams&wizardUpdated=1`)
 }
 
-// A team/pair is safe to delete only while it has no competition entry. Its roster rows are just
-// membership bookkeeping (a pair's two players), so they cascade with it rather than blocking.
+// Delete a team or a doubles pair (both are the `teams` collection). Its roster rows go with it;
+// blocked while the team is still entered in a category.
 export async function deleteTeamAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
@@ -1711,18 +1712,16 @@ export async function deleteTeamAction(formData: FormData): Promise<void> {
 
   const eventId = text(formData, 'eventId')
   const teamId = text(formData, 'teamId')
+  const back = `${wizardPage}?eventId=${eventId}&step=participants&tab=teams`
 
   const team = await payload.findByID({ collection: 'teams', id: teamId, depth: 0 }).catch(() => null)
   if (!team || String(team.event_id) !== String(eventId)) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+    redirect(`${back}&wizardError=invalid_relationship`)
   }
 
-  const entries = await payload.count({
-    collection: 'competition-entries',
-    where: { team_id: { equals: teamId } },
-  })
+  const entries = await payload.count({ collection: 'competition-entries', where: { team_id: { equals: teamId } } })
   if (entries.totalDocs > 0) {
-    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=team_in_use`)
+    redirect(`${back}&wizardError=team_in_use`)
   }
 
   await payload.delete({ collection: 'rosters', where: { team_id: { equals: teamId } } }).catch(() => null)
@@ -1738,5 +1737,5 @@ export async function deleteTeamAction(formData: FormData): Promise<void> {
   })
 
   revalidatePath(wizardPage)
-  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+  redirect(`${back}&wizardUpdated=1`)
 }
