@@ -87,11 +87,15 @@ the next match you get **quick status actions**, and two links per match:
 
 Opened from Match Officer or Match Details. Designed for a phone or tablet at the court:
 
+- **Start the match first.** Point entry is only accepted while the match is *ongoing* (or *paused*
+  / *under review*). If the match is still *scheduled*, the point buttons are disabled and a note
+  points you to **Start Match** in the *Match flow* panel. Tapping points on a match that is not
+  ongoing is what produces the message *"N points could not be applied (match/set state changed)"*.
 - Big **Add point** and **Undo** buttons for the selected side.
 - Switch the side you are scoring; move between sets.
 - **Works offline** — points are queued and sync automatically when the connection returns. It tells
-  you how many points are pending, syncing, or failed (a failure means the match/set state changed
-  under you).
+  you how many points are pending, syncing, or failed (a failure means the match or set state
+  changed under you — e.g. the match was finished on another device).
 - The screen stays awake while it is open.
 
 ---
@@ -104,16 +108,16 @@ Every match has a **status**. The transitions available at any moment depend on 
 
 ```
 scheduled / published
-        │  (match time arrives, officer takes the court)
+        │  Start Match  (officer takes the court)
         ▼
-ready to start ──▶ ongoing ⇄ paused ──▶ finished ──▶ result published
-                                              │              ▲
-                                              └──▶ under review ┘
+     ongoing ⇄ paused ──▶ finished ──▶ result published
+                              │              ▲
+                              └──▶ under review ┘
 ```
 
 | Action | From → To | Notes |
 |---|---|---|
-| **Start Match** | ready to start → ongoing | Records the actual start time |
+| **Start Match** | scheduled / published → ongoing | Records the actual start time. **Do this first** — point entry in Live Score is disabled until the match is *ongoing*. |
 | **Pause Match** / **Resume Match** | ongoing ⇄ paused | |
 | **Finish Match** | ongoing → finished | Result is still **provisional** |
 | **Send for Review** | finished → under review | Optional check before publishing |

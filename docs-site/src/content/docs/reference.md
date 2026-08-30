@@ -126,6 +126,12 @@ The category needs at least two entries with status *confirmed*. Add them in the
 Add a venue and at least one court under **Facilities & Venues**, then schedule the matches (the
 Scheduler workspace, or the Command Center's queue).
 
+**Live Score says "N points could not be applied (match/set state changed)".**
+Points are only accepted while the match is *ongoing* (or *paused* / *under review*). The usual
+cause is tapping before the match is started — open the **Match flow** panel and tap **Start
+Match**, then score. It also appears if the match was already *finished* / *result published*
+(possibly on another device), or if you are on a stale Live Score tab whose set no longer exists.
+
 **A published result is wrong.**
 Only **Event Admin** and **Super Admin** can revise a published result. Open the Match Details page
 and use the Match Actions there.

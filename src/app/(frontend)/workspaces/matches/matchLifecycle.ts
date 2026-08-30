@@ -7,7 +7,12 @@ export type MatchTransition = {
 }
 
 export const MATCH_TRANSITIONS: MatchTransition[] = [
-  { from: ['ready_to_start'], to: 'ongoing', label: 'Start Match' },
+  // Nothing in the app currently advances a match into `check_in_open` / `ready_to_start` - those
+  // auto-check-in steps aren't built yet (see the note in src/lib/delayPropagation.ts) - so a
+  // `scheduled` or `published` match had no path to `ongoing` at all, and the officer's Live Score
+  // point taps failed with `invalid_match_state`. Allow starting straight from the scheduled
+  // states; `transitionMatchStatusAction` still stamps `actual_start_at` on the way in.
+  { from: ['scheduled', 'published', 'check_in_open', 'ready_to_start'], to: 'ongoing', label: 'Start Match' },
   { from: ['ongoing'], to: 'paused', label: 'Pause Match' },
   { from: ['paused'], to: 'ongoing', label: 'Resume Match' },
   { from: ['ongoing'], to: 'finished', label: 'Finish Match' },
@@ -55,6 +60,14 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
 
 export const getAllowedTransitions = (status: string) =>
   MATCH_TRANSITIONS.filter((transition) => transition.from.includes(status))
+
+// The match statuses in which per-point / per-set score entry is accepted. Kept here so the Live
+// Score UI can disable its controls up front instead of letting every tap fail server-side with
+// `invalid_match_state`, and so matchActions.ts's guard reads from the same list.
+export const SCOREABLE_MATCH_STATUSES = ['ongoing', 'paused', 'under_review'] as const
+
+export const isScoreableStatus = (status: string): boolean =>
+  (SCOREABLE_MATCH_STATUSES as readonly string[]).includes(status)
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.6: only status changes a spectator would actually care
 // about post to the public "Match Updates" feed - ongoing/paused/finished/under_review are

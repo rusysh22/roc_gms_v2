@@ -19,7 +19,12 @@ import {
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { attemptSingleEliminationWinnerAdvancement } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
-import { MATCH_TRANSITIONS, PUBLIC_STATUS_NOTICES, isValidTransition } from './matchLifecycle'
+import {
+  MATCH_TRANSITIONS,
+  PUBLIC_STATUS_NOTICES,
+  SCOREABLE_MATCH_STATUSES,
+  isValidTransition,
+} from './matchLifecycle'
 
 export type MinimalMatch = {
   id: string | number
@@ -100,7 +105,7 @@ const standingStageTypes = new Set(['group_stage', 'round_robin', 'league', 'swi
 // left the standings table showing pre-walkover numbers indefinitely, since this gate previously
 // never recognized that status.
 const standingResultStatuses = new Set(['finished', 'result_published', 'walkover'])
-const ACTIVE_SCORE_ENTRY_STATUSES = new Set(['ongoing', 'paused', 'under_review'])
+const ACTIVE_SCORE_ENTRY_STATUSES = new Set<string>(SCOREABLE_MATCH_STATUSES)
 const rankingStageTypes = new Set(['time_trial', 'score_ranking'])
 
 // MSG-02: called from every branch of recalculateResultCachesBestEffort below, after that
