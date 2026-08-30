@@ -1,0 +1,57 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      network: host
+      args:
+        PAYLOAD_SECRET: ${PAYLOAD_SECRET}
+        DATABASE_URL: postgres://roc_gms:${POSTGRES_PASSWORD}@localhost:15432/roc_gms
+    container_name: roc-gms-web
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - "3000"
+    restart: unless-stopped
+    networks:
+      - default
+      - berlanggan_default
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: roc-gms-postgres
+    environment:
+      POSTGRES_DB: roc_gms
+      POSTGRES_USER: roc_gms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # Loopback-only; needed so `docker compose build` (host network) can reach Postgres for
+      # build-time static generation. Not reachable from outside this machine.
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roc_gms -d roc_gms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: roc-gms-redis
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  berlanggan_default:
+    external: true
