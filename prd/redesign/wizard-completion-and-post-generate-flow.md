@@ -1,8 +1,17 @@
 # New Event Wizard — Completion & Post-"Generate Matches" Flow
 
 Owner: Rusydani
-Status: **SPEC — not started**
+Status: **SHIPPED 2026-08-30** (commit `e319b67`)
 Created: 2026-08-30
+
+Shipped:
+- `wizardProgress.ts` — group→KO `generate`/`bracket` done at group fixtures; `groupStageIds` input.
+- GenerateStep — per-category "Continue to Publish →", "Fixtures generated" marker.
+- GroupKnockoutPanel — Card 2 "Setup is done" panel + Continue button; Card 3 "X of Y … have a
+  result" line, reframed as event-time.
+- BracketStep — "You're set up" card (fixtures + optional schedule checklist + Matches-workspace
+  note); primary "View public competition page"; publish/draft copy → public page.
+- Verified: group fixtures ⇒ `isComplete: true`, no "Resume Setup" on Event Admin landing.
 
 ---
 
