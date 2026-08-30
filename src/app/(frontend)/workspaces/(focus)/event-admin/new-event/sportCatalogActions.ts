@@ -157,14 +157,22 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
       issues.push({ name: catalogEvent.name, reason: 'Could not derive a URL slug' })
       continue
     }
+    // Scoped to this sport - a same-named category under a *different* sport in the event is not a
+    // collision (see CompetitionCategories.ts index).
     const duplicate = await payload.find({
       collection: 'competition-categories',
       depth: 0,
       limit: 1,
-      where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
+      where: {
+        and: [
+          { slug: { equals: slug } },
+          { event_id: { equals: eventId } },
+          { sport_id: { equals: sportId } },
+        ],
+      },
     })
     if (duplicate.docs.length > 0) {
-      issues.push({ name: catalogEvent.name, reason: 'A category with this name already exists' })
+      issues.push({ name: catalogEvent.name, reason: 'This sport already has a category with this name' })
       continue
     }
     const categoryData = {

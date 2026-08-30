@@ -26,6 +26,14 @@ export const slugify = (value: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 80)
 
+// `redirect()` / `notFound()` work by throwing a control-flow error Next.js re-catches upstream -
+// a try/catch around a server action's body must let those through untouched and only swallow real
+// failures. https://nextjs.org/docs/app/api-reference/functions/redirect#behavior
+export const isNextControlFlowError = (error: unknown): boolean =>
+  typeof (error as { digest?: unknown })?.digest === 'string' &&
+  ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
+    (error as { digest: string }).digest === 'NEXT_NOT_FOUND')
+
 export const getWizardEvent = async (payload: Payload, eventId: string) => {
   if (!eventId) {
     return null

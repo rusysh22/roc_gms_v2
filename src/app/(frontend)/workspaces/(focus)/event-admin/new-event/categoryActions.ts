@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
-import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
+import { getWizardEvent, isNextControlFlowError, slugify, text, wizardPage } from './wizardShared'
 
 const categoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
 const participantModes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd'])
@@ -68,11 +68,19 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
   }
 
+  // Slug only has to be unique within this sport - a different sport in the same event can reuse
+  // the name (see CompetitionCategories.ts index).
   const duplicate = await payload.find({
     collection: 'competition-categories',
     depth: 0,
     limit: 1,
-    where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
+    where: {
+      and: [
+        { slug: { equals: slug } },
+        { event_id: { equals: eventId } },
+        { sport_id: { equals: Number(sportId) } },
+      ],
+    },
   })
   if (duplicate.docs.length > 0) {
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=duplicate_slug`)
@@ -106,7 +114,19 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     third_place_policy: thirdPlacePolicy as 'none' | 'match' | 'shared',
     status: 'draft' as const,
   }
-  const created = await payload.create({ collection: 'competition-categories', data })
+  let created
+  try {
+    created = await payload.create({ collection: 'competition-categories', data })
+  } catch (error) {
+    if (isNextControlFlowError(error)) throw error
+    // The in-memory check above should have caught a real collision - anything reaching here is a
+    // DB-level unique violation (e.g. the (event, sport, slug) index) or a transient failure.
+    // Report it instead of falling through to the framework error page.
+    payload.logger.error(
+      `addCategoryAction failed for event ${eventId}: ${error instanceof Error ? error.stack : String(error)}`,
+    )
+    redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=duplicate_slug`)
+  }
   await recordAuditLog({
     payload,
     action: 'competition_category.create',
@@ -258,15 +278,22 @@ export async function duplicateCategoryAction(formData: FormData): Promise<void>
   let name = baseName
   let slug = slugify(name)
   let attempt = 1
-  // Slugs are unique per event - "(copy)", "(copy) 2", "(copy) 3"... until one doesn't collide,
-  // covering the case where a category has already been duplicated once before.
+  // Slugs are unique per (event, sport) - "(copy)", "(copy) 2", "(copy) 3"... until one doesn't
+  // collide within this category's own sport, covering the case where a category has already been
+  // duplicated once before.
   while (
     (
       await payload.find({
         collection: 'competition-categories',
         depth: 0,
         limit: 1,
-        where: { and: [{ slug: { equals: slug } }, { event_id: { equals: eventId } }] },
+        where: {
+          and: [
+            { slug: { equals: slug } },
+            { event_id: { equals: eventId } },
+            { sport_id: { equals: source!.sport_id } },
+          ],
+        },
       })
     ).docs.length > 0
   ) {

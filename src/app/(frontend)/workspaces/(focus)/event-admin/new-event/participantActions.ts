@@ -19,17 +19,9 @@ import {
   type PreviewRowStatus,
   type SheetPreview,
 } from './importScratch'
-import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
+import { getWizardEvent, isNextControlFlowError, slugify, text, wizardPage } from './wizardShared'
 
 const emailValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-
-// `redirect()` / `notFound()` work by throwing a control-flow error Next.js re-catches upstream -
-// a `try/catch` around import processing must let those through untouched and only swallow real
-// failures. See https://nextjs.org/docs/app/api-reference/functions/redirect#behavior.
-const isNextControlFlowError = (error: unknown): boolean =>
-  typeof (error as { digest?: unknown })?.digest === 'string' &&
-  ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
-    (error as { digest: string }).digest === 'NEXT_NOT_FOUND')
 
 export async function addClubAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
@@ -345,7 +337,15 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   // Sports row in the same workbook - the sheet slug is derived deterministically from the name.
   const knownSportSlugs = new Set(existingSports.docs.map((sport) => String(sport.slug)))
   const knownSportNames = new Set(existingSports.docs.map((sport) => String(sport.name).trim().toLowerCase()))
-  const knownSportCategorySlugs = new Set(existingCategories.docs.map((category) => String(category.slug)))
+  const sportSlugById = new Map(existingSports.docs.map((sport) => [String(sport.id), String(sport.slug)]))
+  // Category slugs are unique per (sport, slug), not event-wide - key the dedup set the same way so
+  // two sports can each carry an "Open" / "Men's Team" category (see CompetitionCategories.ts).
+  const categoryKey = (sportName: string | undefined, slug: string) => `${slugify(sportName || '')}::${slug}`
+  const knownSportCategorySlugs = new Set(
+    existingCategories.docs.map(
+      (category) => `${sportSlugById.get(String(category.sport_id)) ?? ''}::${String(category.slug)}`,
+    ),
+  )
   const knownClubNames = new Set(existingClubs.docs.map((club) => String(club.name).trim().toLowerCase()))
   const knownTeamSlugs = new Set(existingTeams.docs.map((team) => String(team.slug)))
   const knownIdentificationNumbers = new Set(
@@ -360,7 +360,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   // whose slug already exists so an existing+sheet pairing doesn't read as a false "ambiguous".
   for (const row of parsed.categories) {
     const slug = slugify(row.name)
-    if (!slug || !row.sportName || knownSportCategorySlugs.has(slug)) continue
+    if (!slug || !row.sportName || knownSportCategorySlugs.has(categoryKey(row.sportName, slug))) continue
     const key = row.name.trim().toLowerCase()
     const list = categoriesByName.get(key) || []
     list.push({ id: `sheet:${slug}`, name: row.name, participant_mode: row.participantMode || 'open' })
@@ -535,12 +535,13 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Categories', row.name, `third_place_policy "${row.thirdPlacePolicy}" is not valid - will use "none"`)
       notes.push(`third_place_policy "${row.thirdPlacePolicy}" invalid -> "none"`)
     }
-    if (knownSportCategorySlugs.has(slug)) {
+    const catKey = categoryKey(row.sportName, slug)
+    if (knownSportCategorySlugs.has(catKey)) {
       categoriesToUpdate += 1
       recordRow('Categories', CATEGORIES_COLS, cells, 'update', notes)
     } else {
       categoriesToCreate += 1
-      knownSportCategorySlugs.add(slug)
+      knownSportCategorySlugs.add(catKey)
       recordRow('Categories', CATEGORIES_COLS, cells, 'create', notes)
     }
   }
@@ -812,9 +813,12 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     rulesetIdByName.set(String(ruleset.name).trim().toLowerCase(), Number(ruleset.id))
     rulesetIdBySlug.set(String(ruleset.slug), Number(ruleset.id))
   }
+  // Keyed by `${sportId}::${slug}` - a category slug is unique per sport, not event-wide, so two
+  // sports can each own an "Open" / "Men's Team" category (see CompetitionCategories.ts).
+  const categoryKey = (sportId: number | string, slug: string) => `${sportId}::${slug}`
   const categoryIdBySlug = new Map<string, number>()
   for (const category of existingCategories.docs) {
-    categoryIdBySlug.set(String(category.slug), Number(category.id))
+    categoryIdBySlug.set(categoryKey(String(category.sport_id), String(category.slug)), Number(category.id))
   }
   const clubIdByName = new Map<string, number>()
   for (const club of existingClubs.docs) {
@@ -1080,7 +1084,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       medal_weight: row.medalWeight,
     }
     try {
-      const existingId = categoryIdBySlug.get(slug)
+      const existingId = categoryIdBySlug.get(categoryKey(sportId, slug))
       if (existingId) {
         const before = await payload
           .findByID({ collection: 'competition-categories', id: existingId, depth: 0 })
@@ -1101,7 +1105,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
           collection: 'competition-categories',
           data: { event_id: Number(eventId), slug, ...data },
         })
-        categoryIdBySlug.set(slug, Number(doc.id))
+        categoryIdBySlug.set(categoryKey(sportId, slug), Number(doc.id))
         // Make the just-created category resolvable by `category_name` on the participant sheets
         // below (queueRegistration reads categoriesByName).
         const key = row.name.trim().toLowerCase()

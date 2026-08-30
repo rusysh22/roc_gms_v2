@@ -17,10 +17,12 @@ export const CompetitionCategories: CollectionConfig = {
     read: publicReadScopedToEvent(),
     update: scopedToUserEvents(canManageEventStructure),
   },
-  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 9: slug uniqueness must be scoped per
-  // event, not global, so two different events can each have their own
-  // "mens-singles" category without colliding at the DB level.
-  indexes: [{ fields: ['event_id', 'slug'], unique: true }],
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 9: slug uniqueness is scoped per (event, sport), not
+  // global and not event-wide. Two events can each have their own "mens-singles"; within one
+  // event two *different sports* can each have a "Men's Team" / "Open" / "U-15" category (public
+  // URLs are /events/<e>/sports/<sport>/<category>, so the slug only has to be unique under its
+  // sport). An event-wide unique index wrongly rejected the second sport's same-named category.
+  indexes: [{ fields: ['event_id', 'sport_id', 'slug'], unique: true }],
   fields: [
     {
       name: 'event_id',
