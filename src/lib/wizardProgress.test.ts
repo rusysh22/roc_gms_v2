@@ -10,7 +10,7 @@ const baseInput = (overrides: Partial<WizardProgressInput> = {}): WizardProgress
   playersCount: 0,
   confirmedEntries: [],
   matches: [],
-  knockoutStageIds: [],
+  groupStageIds: [],
   ...overrides,
 })
 
@@ -97,26 +97,43 @@ describe('deriveWizardProgress', () => {
     expect(progress.isComplete).toBe(true)
   })
 
-  it('requires a knockout-stage match (not just any group match) for a group->knockout category', () => {
+  it('completes generate/bracket for a group->knockout category once its GROUP fixtures exist', () => {
+    // prd/redesign/wizard-completion-and-post-generate-flow.md: finalizing the group standings and
+    // promoting to the knockout are event-time actions - the wizard is "done" at group fixtures.
     const common = {
       sportsCount: 1,
       categories: [{ id: 1, status: 'open', format_type: 'group_stage_to_knockout' as const }],
       playersCount: 8,
       confirmedEntries: [{ category_id: 1 }, { category_id: 1 }],
-      knockoutStageIds: [200],
+      groupStageIds: [100],
     }
-    const groupOnly = deriveWizardProgress(baseInput({ ...common, matches: [{ category_id: 1, stage_id: 100 }] }))
-    expect(groupOnly.completedSteps.has('generate')).toBe(false)
 
-    const promoted = deriveWizardProgress(
+    const noFixtures = deriveWizardProgress(baseInput({ ...common, matches: [] }))
+    expect(noFixtures.completedSteps.has('generate')).toBe(false)
+    expect(noFixtures.firstIncompleteStep).toBe('generate')
+
+    const groupFixtures = deriveWizardProgress(
+      baseInput({ ...common, matches: [{ category_id: 1, stage_id: 100 }] }),
+    )
+    expect(groupFixtures.completedSteps.has('generate')).toBe(true)
+    expect(groupFixtures.completedSteps.has('bracket')).toBe(true)
+    expect(groupFixtures.isComplete).toBe(true)
+    expect(groupFixtures.firstIncompleteStep).toBe('bracket')
+  })
+
+  it('does not count a group->knockout category done just because a knockout match exists without group fixtures', () => {
+    // Defensive: a stray knockout-stage match (stage 200) is not a group-stage match, so it must
+    // not satisfy the generate bar on its own.
+    const progress = deriveWizardProgress(
       baseInput({
-        ...common,
-        matches: [
-          { category_id: 1, stage_id: 100 },
-          { category_id: 1, stage_id: 200 },
-        ],
+        sportsCount: 1,
+        categories: [{ id: 1, status: 'open', format_type: 'group_stage_to_knockout' as const }],
+        playersCount: 8,
+        confirmedEntries: [{ category_id: 1 }, { category_id: 1 }],
+        groupStageIds: [100],
+        matches: [{ category_id: 1, stage_id: 200 }],
       }),
     )
-    expect(promoted.completedSteps.has('generate')).toBe(true)
+    expect(progress.completedSteps.has('generate')).toBe(false)
   })
 })

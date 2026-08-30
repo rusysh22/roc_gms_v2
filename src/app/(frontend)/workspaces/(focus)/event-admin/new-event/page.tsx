@@ -488,6 +488,7 @@ export default async function NewEventWizardPage({
               generated={get(params, 'wizardGenerated')}
               failed={get(params, 'wizardGenerateFailed')}
               published={get(params, 'wizardPublished')}
+              setupComplete={Boolean(progress?.isComplete)}
             />
           ) : null}
           {step === 'history' && event ? <HistoryStep payload={payload} eventId={eventId} /> : null}
@@ -3432,6 +3433,18 @@ const GenerateStep = async ({
     confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
   }
 
+  // Which categories already have their fixtures generated - drives the "Continue to Publish" CTA.
+  const generatedMatches =
+    categoryIds.length > 0
+      ? await payload.find({
+          collection: 'matches',
+          depth: 0,
+          limit: 5000,
+          where: { category_id: { in: categoryIds } },
+        })
+      : { docs: [] as { category_id?: unknown }[] }
+  const categoriesWithFixtures = new Set(generatedMatches.docs.map((match) => String(match.category_id)))
+
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 6: "Venue availability sebelum generation" - matches
   // used to generate with zero signal about whether there's anywhere to actually play them, so the
   // gap only surfaced later in the Scheduler workspace. A court with no sport_id set is usable by
@@ -3495,6 +3508,7 @@ const GenerateStep = async ({
   const categoriesWithCounts = categories.docs.map((category) => ({
     category,
     confirmedCount: confirmedCountByCategory.get(String(category.id)) || 0,
+    hasFixtures: categoriesWithFixtures.has(String(category.id)),
     hasCourt: anyCourtIsSportAgnostic || sportIdsWithCourts.has(String(category.sport_id)),
     courtCount:
       (anyCourtIsSportAgnostic ? courts.docs.filter((court) => !court.sport_id).length : 0) +
@@ -3532,7 +3546,7 @@ const GenerateStep = async ({
           </AlertBanner>
         ) : null}
         <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt, courtCount }) => {
+          {categoriesWithCounts.map(({ category, confirmedCount, hasFixtures, hasCourt, courtCount }) => {
             const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
             const estimate = getGenerationEstimate(String(category.format_type), confirmedCount)
             return (
@@ -3545,38 +3559,58 @@ const GenerateStep = async ({
                   <span className="text-xs font-semibold text-ink-soft">
                     {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
                   </span>
-                  {estimate ? (
+                  {hasFixtures ? (
+                    <span className="block text-xs font-semibold text-green">
+                      Fixtures generated{isGroupStageToKnockout ? ' (group stage)' : ''}
+                    </span>
+                  ) : estimate ? (
                     <span className="block text-xs text-ink-soft">
                       Will generate: {estimate} &middot; {courtCount} court{courtCount === 1 ? '' : 's'} available
                       for this sport
                     </span>
                   ) : null}
-                  {!hasCourt && courts.docs.length > 0 ? (
+                  {!hasCourt && courts.docs.length > 0 && !hasFixtures ? (
                     <span className="block text-xs font-semibold text-gold">
                       No court covers this sport yet
                     </span>
                   ) : null}
                 </div>
-                {isGroupStageToKnockout ? (
-                  <Button asChild size="sm" variant={String(category.id) === categoryId ? 'primary' : 'secondary'}>
-                    <Link
-                      href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${category.id}`}
-                    >
-                      Manage Groups
-                    </Link>
-                  </Button>
-                ) : (
-                  <form action={generateMatchesAction}>
-                    <input type="hidden" name="eventId" value={eventId} />
-                    <input type="hidden" name="categoryId" value={category.id} />
-                    <SubmitButton
+                <div className="flex shrink-0 items-center gap-2">
+                  {hasFixtures ? (
+                    <Button asChild size="sm">
+                      <Link
+                        href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=bracket&categoryId=${category.id}`}
+                      >
+                        Continue to Publish →
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {isGroupStageToKnockout ? (
+                    <Button
+                      asChild
                       size="sm"
-                      disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
+                      variant={String(category.id) === categoryId ? 'primary' : 'secondary'}
                     >
-                      Generate Matches
-                    </SubmitButton>
-                  </form>
-                )}
+                      <Link
+                        href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${category.id}`}
+                      >
+                        {hasFixtures ? 'Manage Groups' : 'Set up Groups'}
+                      </Link>
+                    </Button>
+                  ) : (
+                    <form action={generateMatchesAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="categoryId" value={category.id} />
+                      <SubmitButton
+                        size="sm"
+                        variant={hasFixtures ? 'secondary' : 'primary'}
+                        disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
+                      >
+                        {hasFixtures ? 'Re-generate' : 'Generate Matches'}
+                      </SubmitButton>
+                    </form>
+                  )}
+                </div>
               </div>
             )
           })}
@@ -3609,6 +3643,7 @@ const BracketStep = async ({
   generated,
   failed,
   published,
+  setupComplete,
 }: {
   payload: Payload
   eventId: string
@@ -3619,6 +3654,7 @@ const BracketStep = async ({
   generated: string
   failed: string
   published: string
+  setupComplete: boolean
 }) => {
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 14: this step used to dead-end on "Generate matches for
   // a category first" whenever the URL had no `categoryId`, even if the event already had several
@@ -3633,6 +3669,13 @@ const BracketStep = async ({
     where: { event_id: { equals: eventId } },
     sort: 'name',
   })
+  // Any match with a time set ⇒ the schedule step has been done at least partly.
+  const scheduledCount = await payload.count({
+    collection: 'matches',
+    where: { and: [{ event_id: { equals: eventId } }, { scheduled_start_at: { exists: true } }] },
+  })
+  const scheduleIsSet = scheduledCount.totalDocs > 0
+
   // MSG-10: fetched unconditionally (not just when `categoryId` is absent) - the switcher list
   // below needs every category's bracket status, not just whichever one is currently selected.
   const categoryIds = categories.docs.map((cat) => String(cat.id))
@@ -3836,7 +3879,43 @@ const BracketStep = async ({
         <RoundRobinFixtureList payload={payload} stageId={String(stage.id)} />
       )}
 
+      {setupComplete ? (
+        <Card className="flex flex-col gap-3 border-green">
+          <CardTitle>You&apos;re set up</CardTitle>
+          <ul className="flex flex-col gap-1.5 text-sm text-ink-soft">
+            <li>✅ Sports, categories, participants</li>
+            <li>✅ Fixtures generated for every category</li>
+            <li className="flex flex-wrap items-center gap-2">
+              {scheduleIsSet ? '✅' : '⬜'} Schedule (dates &amp; courts)
+              <span className="text-xs">- optional</span>
+              {!scheduleIsSet ? (
+                <form action={openScheduleImportAction}>
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <SubmitButton size="sm" variant="ghost">
+                    Set schedule
+                  </SubmitButton>
+                </form>
+              ) : null}
+            </li>
+          </ul>
+          <p className="text-sm text-ink">
+            <strong>Next:</strong> publish below, then open your public competition page.
+          </p>
+          <p className="text-xs text-ink-soft">
+            During the event, enter results in the{' '}
+            <Link href="/workspaces/matches" className="font-semibold underline">
+              Matches workspace
+            </Link>{' '}
+            (group→knockout categories: play the group matches, then finalize &amp; promote from the
+            Generate step). The public bracket and standings update automatically.
+          </p>
+        </Card>
+      ) : null}
+
       <StepActions>
+        <Button asChild>
+          <Link href={`/events/${eventSlug}`}>View public competition page</Link>
+        </Button>
         <Button asChild variant="secondary">
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=registration`}>
             Generate another category
@@ -3861,10 +3940,18 @@ const BracketStep = async ({
           <CardTitle>Publish</CardTitle>
           <p className="mt-1 text-sm text-ink-soft">
             Choose what visitors can see right now. You can change this anytime from Event Details.
+            &ldquo;Publish event &amp; schedule&rdquo; takes you straight to your public competition
+            page.
           </p>
         </div>
         {published === 'draft' ? (
-          <AlertBanner tone="info">Saved as draft. Nothing is visible to visitors yet.</AlertBanner>
+          <AlertBanner tone="info">
+            Saved as draft. Nothing is visible to visitors yet -{' '}
+            <Link href={`/events/${eventSlug}`} className="font-semibold underline">
+              preview the public page
+            </Link>
+            .
+          </AlertBanner>
         ) : null}
         <p className="text-xs font-semibold text-ink-soft">
           Current status: <span className="text-ink">{eventStatus.replaceAll('_', ' ')}</span>

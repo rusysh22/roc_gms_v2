@@ -55,8 +55,13 @@ export type WizardProgressInput = {
   confirmedEntries: { category_id: string | number }[]
   /** Every match for the event - `category_id` and `stage_id` are read. */
   matches: { category_id: string | number; stage_id: string | number }[]
-  /** Ids of stages that are `order: 2` + `single_elimination` (the knockout stage of a group→KO category). */
-  knockoutStageIds: (string | number)[]
+  /**
+   * Ids of `order: 1` + `group_stage` stages (the group stage of a group→KO category). Wizard
+   * setup for such a category is "done" once its *group* fixtures exist - finalizing the group
+   * standings and promoting to the knockout are event-time actions, not part of setup. See
+   * prd/redesign/wizard-completion-and-post-generate-flow.md.
+   */
+  groupStageIds: (string | number)[]
 }
 
 export type WizardProgress = {
@@ -104,16 +109,19 @@ export const deriveWizardProgress = (input: WizardProgressInput): WizardProgress
   const groupKnockoutCategories = nonDraftCategories.filter(
     (category) => category.format_type === 'group_stage_to_knockout',
   )
-  const knockoutStageIds = new Set(input.knockoutStageIds.map((id) => String(id)))
-  const categoriesWithKnockoutMatches = new Set(
+  const groupStageIds = new Set(input.groupStageIds.map((id) => String(id)))
+  const categoriesWithGroupMatches = new Set(
     input.matches
-      .filter((match) => knockoutStageIds.has(String(match.stage_id)))
+      .filter((match) => groupStageIds.has(String(match.stage_id)))
       .map((match) => String(match.category_id)),
   )
   const generateReadyCategories = [...autoGenerateCategories, ...groupKnockoutCategories]
+  // For a group→KO category, "generate done" means the *group* fixtures exist. Playing them,
+  // finalizing the standings and promoting the qualifiers into the knockout bracket all happen
+  // when the event runs - the wizard never blocks on them.
   const isGenerateDone = (category: ProgressCategory) =>
     category.format_type === 'group_stage_to_knockout'
-      ? categoriesWithKnockoutMatches.has(String(category.id))
+      ? categoriesWithGroupMatches.has(String(category.id))
       : categoriesWithMatches.has(String(category.id))
   if (generateReadyCategories.length > 0 && generateReadyCategories.every(isGenerateDone)) {
     completedSteps.add('generate')
@@ -156,16 +164,16 @@ export const computeWizardProgress = async (
     ])
 
   const categories = categoriesResult.docs as ProgressCategory[]
-  const needsKnockoutStages = categories.some(
+  const needsGroupStages = categories.some(
     (category) => category.status !== 'draft' && category.format_type === 'group_stage_to_knockout',
   )
-  const knockoutStagesResult = needsKnockoutStages
+  const groupStagesResult = needsGroupStages
     ? await payload.find({
         collection: 'stages',
         depth: 0,
         limit: 200,
         where: {
-          and: [eventWhere, { order: { equals: 2 } }, { stage_type: { equals: 'single_elimination' } }],
+          and: [eventWhere, { order: { equals: 1 } }, { stage_type: { equals: 'group_stage' } }],
         },
       })
     : null
@@ -178,6 +186,6 @@ export const computeWizardProgress = async (
     playersCount: playersCount.totalDocs,
     confirmedEntries: confirmedEntries.docs as { category_id: string | number }[],
     matches: eventMatches.docs as { category_id: string | number; stage_id: string | number }[],
-    knockoutStageIds: (knockoutStagesResult?.docs ?? []).map((stage) => stage.id),
+    groupStageIds: (groupStagesResult?.docs ?? []).map((stage) => stage.id),
   })
 }

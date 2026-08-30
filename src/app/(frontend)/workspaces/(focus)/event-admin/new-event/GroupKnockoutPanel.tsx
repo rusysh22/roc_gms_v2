@@ -129,8 +129,9 @@ export const GroupKnockoutPanel = async ({
       decidedCountByGroup.set(key, (decidedCountByGroup.get(key) || 0) + 1)
     }
   }
-  const allGroupMatchesDecided =
-    groupMatchesResult.docs.length > 0 && groupMatchesResult.docs.every((match) => RESULT_STATUSES.has(String(match.status)))
+  const totalGroupMatches = groupMatches.length
+  const decidedGroupMatches = groupMatches.filter((match) => RESULT_STATUSES.has(String(match.status))).length
+  const allGroupMatchesDecided = totalGroupMatches > 0 && decidedGroupMatches === totalGroupMatches
   const isFinalized = groupStage?.status === 'completed'
 
   // ---- Card 1: groups & qualifiers -------------------------------------------------------------
@@ -279,16 +280,32 @@ export const GroupKnockoutPanel = async ({
             </form>
           ) : (
             <div className="flex flex-col gap-5">
-              <div>
+              <div className="flex flex-col gap-2 rounded-card border border-line bg-mist/50 p-3">
                 <p className="text-xs text-ink-soft">
-                  Enter each match&apos;s final score below to record its result. Full lifecycle
-                  scoring (live points, per-set, referees) lives in the{' '}
+                  <strong className="text-ink">Setup is done for this category.</strong> The group
+                  fixtures below are created. The rest happens <em>when the event runs</em>: these
+                  matches get played and scored, then you come back here to finalize the standings
+                  and promote the top {category.group_qualify_count || 'N'} of each group into the
+                  knockout. You can publish now and leave the wizard - resume from the Event Admin
+                  page anytime.
+                </p>
+                <p className="text-xs text-ink-soft">
+                  Recording results: during a live event use the{' '}
                   <Link href="/workspaces/matches" className="font-semibold underline">
                     Matches workspace
                   </Link>{' '}
-                  - this shortcut is for an organizer scoring a small group stage themselves. Every
-                  group match needs a result before you can finalize and promote to the knockout.
+                  (live points, per-set, referees). Running a small group stage yourself? Just type
+                  each final score below once the match is played.
                 </p>
+                <div>
+                  <Button asChild size="sm">
+                    <Link
+                      href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=bracket&categoryId=${categoryId}`}
+                    >
+                      Continue to Publish →
+                    </Link>
+                  </Button>
+                </div>
               </div>
               {groups.map((group) => {
                 const groupFixtures = matchesByGroupId.get(String(group.id)) ?? []
@@ -386,8 +403,9 @@ export const GroupKnockoutPanel = async ({
       <div>
         <CardTitle>Standings &amp; finalize</CardTitle>
         <p className="mt-1 text-sm text-ink-soft">
-          Standings update live as results come in. Finalizing locks them in and marks who
-          qualifies for the knockout stage.
+          Standings update live as results come in. <strong>Finalize during the event</strong>, once
+          every group match has been played - it locks the standings and marks who advances to the
+          knockout stage. This is not a setup step; you can publish the event first.
         </p>
       </div>
       {groups.length === 0 ? (
@@ -437,11 +455,11 @@ export const GroupKnockoutPanel = async ({
             <form action={finalizeGroupStandingsAction} className="flex flex-col gap-2">
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="categoryId" value={categoryId} />
-              {!allGroupMatchesDecided ? (
-                <p className="text-xs font-semibold text-gold">
-                  Every group match needs a published result before finalizing.
-                </p>
-              ) : null}
+              <p className="text-xs font-semibold text-ink-soft">
+                {decidedGroupMatches} of {totalGroupMatches} group match
+                {totalGroupMatches === 1 ? '' : 'es'} have a result.
+                {!allGroupMatchesDecided ? ' Finalize becomes available once they all do.' : ''}
+              </p>
               <div>
                 <SubmitButton disabled={!allGroupMatchesDecided}>Finalize &amp; lock group stage</SubmitButton>
               </div>
