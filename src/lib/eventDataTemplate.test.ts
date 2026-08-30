@@ -47,8 +47,51 @@ describe('buildEventDataTemplateWorkbook', () => {
       rulesetName: 'BWF 21',
       participantMode: 'individual',
     })
-    // The example participant rows use a real category name and are flagged for deletion.
-    expect(parsed.players[0]).toMatchObject({ name: 'DELETE THIS EXAMPLE ROW', categoryNames: ['Badminton Singles Men'] })
+    // Individual categories get worked example Players registered straight into them; every
+    // generated name is prefixed "EXAMPLE - " so the organizer can spot and bulk-delete them.
+    const examples = parsed.players.filter((p) => p.name.startsWith('EXAMPLE - '))
+    expect(examples.length).toBeGreaterThanOrEqual(4)
+    expect(examples.every((p) => p.categoryNames?.[0] === 'Badminton Singles Men')).toBe(true)
+  })
+
+  it('builds pair/team example rows from the event categories with matching participant_mode', async () => {
+    const payloadWithModes = {
+      find: async ({ collection }: { collection: string }) => {
+        const docs: Record<string, unknown[]> = {
+          sports: [
+            { id: 1, name: 'Badminton', sport_type: 'court' },
+            { id: 2, name: 'Petanque', sport_type: 'field' },
+          ],
+          rulesets: [],
+          'competition-categories': [
+            { id: 100, name: 'Badminton Doubles Men', sport_id: { id: 1, name: 'Badminton' }, participant_mode: 'pair' },
+            { id: 101, name: 'Petanque Triples', sport_id: { id: 2, name: 'Petanque' }, participant_mode: 'team' },
+          ],
+          clubs: [],
+        }
+        return { docs: docs[collection] ?? [] }
+      },
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buffer = await buildEventDataTemplateWorkbook(payloadWithModes as any, '1')
+    const parsed = parseParticipantsWorkbook(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+    )
+
+    // pair category -> example Pairs, each built from two example Players on the Players sheet
+    const pairExamples = parsed.pairs.filter((p) => p.player1Name.startsWith('EXAMPLE - '))
+    expect(pairExamples.length).toBeGreaterThanOrEqual(3)
+    expect(pairExamples.every((p) => p.categoryNames?.[0] === 'Badminton Doubles Men')).toBe(true)
+    const playerNames = new Set(parsed.players.map((p) => p.name))
+    for (const pair of pairExamples) {
+      expect(playerNames.has(pair.player1Name)).toBe(true)
+      expect(playerNames.has(pair.player2Name)).toBe(true)
+    }
+
+    // team category -> example Teams tied to a contingent
+    const teamExamples = parsed.teams.filter((t) => t.name.startsWith('EXAMPLE - '))
+    expect(teamExamples.length).toBeGreaterThanOrEqual(3)
+    expect(teamExamples.every((t) => t.categoryNames?.[0] === 'Petanque Triples')).toBe(true)
   })
 
   it('adds list data validations and a hidden _Reference sheet', async () => {
