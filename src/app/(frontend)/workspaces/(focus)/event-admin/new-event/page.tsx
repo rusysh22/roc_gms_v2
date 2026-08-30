@@ -52,7 +52,7 @@ import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '
 import { FocusHeader } from '../../FocusHeader'
 import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
-import { createEventAction, publishEventAction } from './eventActions'
+import { createEventAction, openScheduleImportAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { readImportSidecar } from './importScratch'
 import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
@@ -3874,6 +3874,40 @@ const BracketStep = async ({
               </Select>
             </Field>
             <SubmitButton variant="secondary">Save</SubmitButton>
+          </form>
+        </Card>
+      ) : null}
+
+      {stage ? (
+        <Card className="flex flex-col gap-3">
+          <div>
+            <CardTitle>Adjust dates, times &amp; courts (Excel)</CardTitle>
+            <p className="mt-1 text-sm text-ink-soft">
+              Fixtures exist now, but without dates or courts. To set or change them in bulk:
+            </p>
+            <ol className="mt-2 list-decimal pl-5 text-sm text-ink-soft">
+              <li>
+                Add your venues and courts first (
+                <Link
+                  href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=venues`}
+                  className="font-semibold underline"
+                >
+                  step {stepNumber('venues')}
+                </Link>
+                ) if you haven&apos;t.
+              </li>
+              <li>Open the schedule sheet - it lists every match in this event.</li>
+              <li>
+                Fill in <strong>New Start</strong>, <strong>New End</strong>, <strong>New Venue</strong>,
+                and <strong>New Court</strong> for the matches you want to place (all four together;
+                leave a row blank to skip it).
+              </li>
+              <li>Upload it back on that page - each row is validated and applied on its own.</li>
+            </ol>
+          </div>
+          <form action={openScheduleImportAction}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <SubmitButton variant="secondary">Open the schedule sheet</SubmitButton>
           </form>
         </Card>
       ) : null}

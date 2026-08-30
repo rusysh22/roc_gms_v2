@@ -173,6 +173,33 @@ export async function createEventAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${created.id}&step=sports&wizardCreated=1`)
 }
 
+// The bulk schedule-revision spreadsheet (export current schedule -> edit dates/venues/courts in
+// Excel -> upload) already exists in the Scheduler workspace. Rather than duplicate it into the
+// wizard, this points there with the wizard's event set as the active one first, so the Scheduler's
+// cookie-based event resolution lands on the right event even mid-wizard.
+export async function openScheduleImportAction(formData: FormData): Promise<void> {
+  const { payload } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+  const eventId = text(formData, 'eventId')
+  const event = eventId
+    ? await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+    : null
+  if (!event) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+  const cookieStore = await cookies()
+  cookieStore.set(ACTIVE_EVENT_COOKIE, String(event!.id), {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24 * 365,
+  })
+  redirect('/workspaces/scheduler/import')
+}
+
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 9: the wizard's last step used to be a single "Finish
 // Setup & View Event Page" link that never actually changed the event's own status/visibility -
 // every event stayed status=draft/visibility=hidden (the create-time default) forever unless the
