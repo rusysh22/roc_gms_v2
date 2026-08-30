@@ -6,6 +6,30 @@ Document status: Draft v1
 Last updated: 2026-07-02  
 Primary language for system structure: English-first
 
+---
+
+## Documents in `prd/`
+
+This file is the master PRD. The rest of the folder:
+
+| File | Purpose |
+|---|---|
+| `implementation-plan.md` | Phased build plan |
+| `decision-log.md` | Running log of design decisions and their rationale |
+| `session-handoff.md` | State carried between AI-assisted / Vibe Coding sessions |
+| `vibe-coding-guide.md` | How to continue this project across chat sessions |
+| `phase-6-content-sharing.md` | Phase 6 (content + sharing) spec |
+| `redesign/` | Active redesign specs (`import-data-and-draft-persistence.md`, …) |
+| `design/` | Long-form design docs — `PRODUCT_FLOW_BLUEPRINT_ROC_GMS_V2.md`, `NOVICE_ADMIN_FLOW_UX_REDESIGN.md`, `MULTI_SPORT_GAMES_ENHANCEMENTS_DESIGN.md` |
+| `audits/` | Audit reports — `AUDIT_E2E_ROC_GMS_V2.md`, `AUDIT_UI_UX_CSS_ROC_GMS_V2.md` |
+| `runbooks/` | Operational walkthroughs — `ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md` |
+
+The `design/` and `audits/` documents were moved here from the repository root. Inline code
+comments still reference them by bare filename (`NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 5`,
+`AUDIT_E2E MAT-05`, `AUDIT_UI_UX_CSS CSS-11`) — searching the filename or audit code finds them.
+
+---
+
 ## 1. Executive Summary
 
 ROC Game Management System V2 is a web-based event operating system for managing an internal office olympiad. The product is not only a CMS and not only a tournament bracket app. It is designed as a complete operational cockpit for event committees, schedulers, match officers, content admins, and public participants.
