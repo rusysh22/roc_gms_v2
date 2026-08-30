@@ -45,7 +45,10 @@ export function EventSwitcher({
       >
         {events.map((event) => (
           <option key={event.id} value={String(event.id)}>
+            {/* A draft event is one whose setup was never finished/published - flag it here so an
+                admin juggling several events can tell at a glance which one still needs work. */}
             {event.name}
+            {event.status === 'draft' ? ' · draft' : ''}
           </option>
         ))}
       </select>
