@@ -54,6 +54,7 @@ import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
+import { readImportSidecar } from './importScratch'
 import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
 import { SportCatalogPicker } from './SportCatalogPicker'
 import {
@@ -522,8 +523,7 @@ export default async function NewEventWizardPage({
               importUpdated={get(params, 'wizardImportUpdated')}
               importRegistered={get(params, 'wizardRegistered')}
               importSkipped={get(params, 'wizardImportSkipped')}
-              importIssues={get(params, 'wizardImportIssues')}
-              importMoreIssues={get(params, 'wizardImportMoreIssues')}
+              importResultId={get(params, 'wizardImportResultId')}
               importPreviewFile={get(params, 'importPreviewFile')}
               importPreviewSports={get(params, 'importPreviewSports')}
               importPreviewSportsUpdate={get(params, 'importPreviewSportsUpdate')}
@@ -539,8 +539,6 @@ export default async function NewEventWizardPage({
               importPreviewPairs={get(params, 'importPreviewPairs')}
               importPreviewEntries={get(params, 'importPreviewEntries')}
               importPreviewSkipped={get(params, 'importPreviewSkipped')}
-              importPreviewIssues={get(params, 'importPreviewIssues')}
-              importPreviewMoreIssues={get(params, 'importPreviewMoreIssues')}
             />
           ) : null}
           {step === 'registration' && event ? (
@@ -1896,8 +1894,7 @@ const ParticipantsStep = async ({
   importUpdated,
   importRegistered,
   importSkipped,
-  importIssues,
-  importMoreIssues,
+  importResultId,
   importPreviewFile,
   importPreviewSports,
   importPreviewSportsUpdate,
@@ -1913,8 +1910,6 @@ const ParticipantsStep = async ({
   importPreviewPairs,
   importPreviewEntries,
   importPreviewSkipped,
-  importPreviewIssues,
-  importPreviewMoreIssues,
 }: {
   payload: Payload
   eventId: string
@@ -1924,8 +1919,7 @@ const ParticipantsStep = async ({
   importUpdated?: string
   importRegistered?: string
   importSkipped?: string
-  importIssues?: string
-  importMoreIssues?: string
+  importResultId?: string
   importPreviewFile?: string
   importPreviewSports?: string
   importPreviewSportsUpdate?: string
@@ -1941,27 +1935,17 @@ const ParticipantsStep = async ({
   importPreviewPairs?: string
   importPreviewEntries?: string
   importPreviewSkipped?: string
-  importPreviewIssues?: string
-  importPreviewMoreIssues?: string
 }) => {
-  let issues: ImportIssue[] = []
-  if (importIssues) {
-    try {
-      const parsed = JSON.parse(importIssues)
-      if (Array.isArray(parsed)) issues = parsed
-    } catch {
-      issues = []
-    }
-  }
-  let previewIssues: ImportIssue[] = []
-  if (importPreviewIssues) {
-    try {
-      const parsed = JSON.parse(importPreviewIssues)
-      if (Array.isArray(parsed)) previewIssues = parsed
-    } catch {
-      previewIssues = []
-    }
-  }
+  // Row-level import notes are read from a sidecar file (keyed by the preview's scratch id, or a
+  // fresh id for a confirmed import) rather than the redirect URL - see importScratch.ts.
+  const [resultSidecar, previewSidecar] = await Promise.all([
+    readImportSidecar(importResultId),
+    readImportSidecar(importPreviewFile?.replace(/\.xlsx$/, '')),
+  ])
+  const issues: ImportIssue[] = resultSidecar?.issues ?? []
+  const issuesMoreIssues = resultSidecar?.moreIssues ?? 0
+  const previewIssues: ImportIssue[] = previewSidecar?.issues ?? []
+  const previewMoreIssues = previewSidecar?.moreIssues ?? 0
   const [clubs, teams, players, categories] = await Promise.all([
     payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -2019,7 +2003,7 @@ const ParticipantsStep = async ({
           {issues.length > 0 ? (
             <details className="mt-2">
               <summary className="cursor-pointer text-xs font-bold underline underline-offset-2">
-                View row-by-row details ({issues.length}{importMoreIssues ? `, showing first ${issues.length}` : ''})
+                View row-by-row details ({issues.length}{issuesMoreIssues ? `, showing first ${issues.length}` : ''})
               </summary>
               <ul className="mt-2 flex flex-col gap-1 text-xs">
                 {issues.map((issue, index) => (
@@ -2032,9 +2016,9 @@ const ParticipantsStep = async ({
                   </li>
                 ))}
               </ul>
-              {importMoreIssues ? (
+              {issuesMoreIssues ? (
                 <p className="mt-1 text-xs font-semibold">
-                  + {importMoreIssues} more row(s) with issues not shown here.
+                  + {issuesMoreIssues} more row(s) with issues not shown here.
                 </p>
               ) : null}
             </details>
@@ -2139,7 +2123,7 @@ const ParticipantsStep = async ({
               <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
                 {importPreviewSkipped ? `${importPreviewSkipped} row(s) will be skipped. ` : ''}
                 View row-by-row details ({previewIssues.length}
-                {importPreviewMoreIssues ? `, showing first ${previewIssues.length}` : ''})
+                {previewMoreIssues ? `, showing first ${previewIssues.length}` : ''})
               </summary>
               <ul className="mt-2 flex flex-col gap-1 text-xs">
                 {previewIssues.map((issue, index) => (
@@ -2152,9 +2136,9 @@ const ParticipantsStep = async ({
                   </li>
                 ))}
               </ul>
-              {importPreviewMoreIssues ? (
+              {previewMoreIssues ? (
                 <p className="mt-1 text-xs font-semibold">
-                  + {importPreviewMoreIssues} more row(s) with issues not shown here.
+                  + {previewMoreIssues} more row(s) with issues not shown here.
                 </p>
               ) : null}
             </details>

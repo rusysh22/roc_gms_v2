@@ -10,6 +10,12 @@ import type { Payload } from 'payload'
 import { recordAuditLog } from '@/lib/audit'
 import { parseParticipantsWorkbook, type ParsedParticipantsWorkbook } from '@/lib/participantsImport'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
+import {
+  SCRATCH_DIR,
+  deleteImportSidecar,
+  scratchFilePath,
+  writeImportSidecar,
+} from './importScratch'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
 const emailValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -302,21 +308,6 @@ const resolveImportCategory = (
   return { category: modeMatches[0] }
 }
 
-// Bare filesystem scratch storage - NOT the Media collection. Media enforces "this must be a real,
-// decodable image" (validateMediaUpload/validateImageBuffer in src/collections/Media.ts) at the
-// collection boundary, which an .xlsx workbook can never satisfy; routing the preview upload
-// through Media used to fail every import with "File could not be read as a valid image." before
-// a single row was ever parsed. The preview step writes here as scratch storage rather than
-// committing anything yet; confirm re-reads and deletes it, cancel just deletes it. The filename
-// is a server-generated UUID threaded back through the page as a plain query param - validated
-// against SCRATCH_FILENAME_PATTERN before ever touching the filesystem again, since at that point
-// it's client-controlled input and a forged value must not be able to path-traverse out of this
-// directory.
-const SCRATCH_DIR = path.resolve(process.cwd(), 'media/import-scratch')
-const SCRATCH_FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.xlsx$/
-const scratchFilePath = (filename: string): string | null =>
-  SCRATCH_FILENAME_PATTERN.test(filename) ? path.join(SCRATCH_DIR, filename) : null
-
 const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedParticipantsWorkbook | null> => {
   if (!(file instanceof File) || file.size === 0) {
     return null
@@ -581,12 +572,6 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   }
 }
 
-const MAX_ISSUES_IN_URL = 25
-const encodeIssues = (issues: { sheet: string; name: string; reason: string }[]) => ({
-  issuesParam: issues.length > 0 ? encodeURIComponent(JSON.stringify(issues.slice(0, MAX_ISSUES_IN_URL))) : '',
-  moreIssues: issues.length > MAX_ISSUES_IN_URL ? issues.length - MAX_ISSUES_IN_URL : 0,
-})
-
 export async function previewParticipantsImportAction(formData: FormData): Promise<void> {
   const { payload } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
@@ -630,6 +615,9 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
     // redirect/second form submission; a plain filesystem write makes re-reading it back cheap.
     await fs.mkdir(SCRATCH_DIR, { recursive: true })
     await fs.writeFile(path.join(SCRATCH_DIR, scratchFilename), buffer)
+    // Row-level notes go in a sidecar file keyed by the same id, NOT the redirect URL - dozens of
+    // skipped/warned rows used to push the URL past what some reverse proxies accept.
+    await writeImportSidecar(scratchFilename.replace(/\.xlsx$/, ''), plan.issues)
   } catch (error) {
     if (isNextControlFlowError(error)) throw error
     // A malformed workbook that still parsed but breaks the dry run (bad cell types, an
@@ -643,7 +631,6 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=import_failed`)
   }
 
-  const { issuesParam, moreIssues } = encodeIssues(plan.issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&importPreviewFile=${scratchFilename}` +
       `&importPreviewSports=${plan.sportsToCreate}&importPreviewSportsUpdate=${plan.sportsToUpdate}` +
@@ -654,9 +641,7 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
       `&importPreviewPlayers=${plan.playersToCreate}` +
       `&importPreviewPairs=${plan.pairsToCreate}` +
       (plan.entriesToRegister ? `&importPreviewEntries=${plan.entriesToRegister}` : '') +
-      (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : '') +
-      (issuesParam ? `&importPreviewIssues=${issuesParam}` : '') +
-      (moreIssues ? `&importPreviewMoreIssues=${moreIssues}` : ''),
+      (plan.skippedCount ? `&importPreviewSkipped=${plan.skippedCount}` : ''),
   )
 }
 
@@ -671,6 +656,7 @@ export async function cancelParticipantsImportAction(formData: FormData): Promis
   const filePath = scratchFile ? scratchFilePath(scratchFile) : null
   if (filePath) {
     await fs.unlink(filePath).catch(() => {})
+    await deleteImportSidecar(scratchFile.replace(/\.xlsx$/, ''))
   }
 
   redirect(`${wizardPage}?eventId=${eventId}&step=participants`)
@@ -1348,18 +1334,20 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   })
 
   // Scratch upload only - the real data now lives in clubs/teams/players, this file has served
-  // its purpose.
+  // its purpose. Its preview sidecar goes too; the post-import notes get their own.
   await fs.unlink(filePath!).catch(() => {})
+  await deleteImportSidecar(scratchFile.replace(/\.xlsx$/, ''))
+
+  const resultId = randomUUID()
+  await writeImportSidecar(resultId, issues)
 
   revalidatePath(wizardPage)
-  const { issuesParam, moreIssues } = encodeIssues(issues)
   redirect(
     `${wizardPage}?eventId=${eventId}&step=participants&wizardImported=${created}` +
       (updated ? `&wizardImportUpdated=${updated}` : '') +
       (registered ? `&wizardRegistered=${registered}` : '') +
       (skipped ? `&wizardImportSkipped=${skipped}` : '') +
-      (issuesParam ? `&wizardImportIssues=${issuesParam}` : '') +
-      (moreIssues ? `&wizardImportMoreIssues=${moreIssues}` : ''),
+      (issues.length > 0 ? `&wizardImportResultId=${resultId}` : ''),
   )
   } catch (error) {
     if (isNextControlFlowError(error)) throw error
