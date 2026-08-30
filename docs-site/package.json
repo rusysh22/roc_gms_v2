@@ -1,0 +1,19 @@
+{
+  "name": "intourney-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "User documentation for InTourney, published at https://docs.intourney.id",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.10",
+    "astro": "^7.2.9",
+    "sharp": "^0.35.4"
+  }
+}
