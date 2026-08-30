@@ -29,6 +29,7 @@ import {
   MATCH_ACTION_ERROR_MESSAGES,
   getAllowedTransitions,
   getPublishResultConfirmMessage,
+  isScoreableStatus,
 } from '../../../../matches/matchLifecycle'
 import { FocusHeader } from '../../../FocusHeader'
 import { KioskWakeLock } from './KioskWakeLock'
@@ -160,6 +161,8 @@ export default async function LiveScorePage({
       participantBName={participantBName}
       participantAScore={currentSet.participant_a_score ?? 0}
       participantBScore={currentSet.participant_b_score ?? 0}
+      scoreable={isScoreableStatus(match.status)}
+      matchStatusLabel={formatStatus(match.status)}
     />
   ) : (
     <div className="grid flex-1 place-items-center text-center">

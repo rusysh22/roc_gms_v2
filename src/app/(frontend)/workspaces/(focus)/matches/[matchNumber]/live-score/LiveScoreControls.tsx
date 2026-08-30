@@ -17,6 +17,11 @@ type LiveScoreControlsProps = {
   participantBName: string
   participantAScore: number
   participantBScore: number
+  // Point entry is only accepted while the match is ongoing/paused/under review. When it isn't,
+  // disable the controls here instead of letting every tap round-trip and fail server-side with
+  // "match/set state changed".
+  scoreable: boolean
+  matchStatusLabel: string
 }
 
 const participantButtonClass =
@@ -37,6 +42,8 @@ export function LiveScoreControls({
   participantBName,
   participantAScore,
   participantBScore,
+  scoreable,
+  matchStatusLabel,
 }: LiveScoreControlsProps) {
   const [selectedSide, setSelectedSide] = useState<ParticipantSide>('a')
   const selectedName = selectedSide === 'a' ? participantAName : participantBName
@@ -49,11 +56,18 @@ export function LiveScoreControls({
   const displayScoreB = participantBScore + pendingDeltaForSet(setIdKey, 'b')
 
   const tapPoint = (delta: 1 | -1) => {
+    if (!scoreable) return
     void addPoint(setIdKey, selectedSide, delta)
   }
 
   return (
-    <section className="grid flex-1 grid-rows-[auto_auto_1fr_auto] gap-4" aria-label="Live score controls">
+    <section
+      className={cn(
+        'grid flex-1 gap-4',
+        scoreable ? 'grid-rows-[auto_auto_1fr_auto]' : 'grid-rows-[auto_auto_auto_1fr_auto]',
+      )}
+      aria-label="Live score controls"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Current set</p>
@@ -99,6 +113,16 @@ export function LiveScoreControls({
         ) : null}
       </div>
 
+      {!scoreable ? (
+        <div
+          role="status"
+          className="rounded-card border border-gold/40 bg-mist px-3 py-2 text-xs font-bold text-ink-soft"
+        >
+          This match is {matchStatusLabel}. Tap <strong className="text-ink">Start Match</strong> in
+          Match flow before entering points &mdash; scoring is disabled until then.
+        </div>
+      ) : null}
+
       <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
         <button
           type="button"
@@ -141,6 +165,7 @@ export function LiveScoreControls({
         <Button
           variant="secondary"
           onClick={() => tapPoint(-1)}
+          disabled={!scoreable}
           className="flex h-auto min-h-24 flex-col items-center justify-center gap-2 rounded-panel text-sm"
         >
           <RotateCcw className="h-5 w-5" aria-hidden="true" />
@@ -152,6 +177,7 @@ export function LiveScoreControls({
 
         <Button
           onClick={() => tapPoint(1)}
+          disabled={!scoreable}
           className="h-auto min-h-24 w-full rounded-panel text-xl md:text-2xl"
         >
           <Plus className="h-7 w-7" aria-hidden="true" />
