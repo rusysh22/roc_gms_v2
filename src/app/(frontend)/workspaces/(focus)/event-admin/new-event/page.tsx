@@ -53,7 +53,7 @@ import { FocusHeader } from '../../FocusHeader'
 import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction, openScheduleImportAction, publishEventAction } from './eventActions'
-import { AUTO_GENERATE_FORMATS } from './wizardShared'
+import { AUTO_GENERATE_FORMATS, summarizeCategoryFixtures } from './wizardShared'
 import { readImportSidecar } from './importScratch'
 import { computeWizardProgress } from '@/lib/wizardProgress'
 import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
@@ -74,8 +74,12 @@ import {
   addTeamAction,
   cancelParticipantsImportAction,
   confirmParticipantsImportAction,
+  deleteClubAction,
   deletePlayerAction,
+  deleteTeamAction,
   previewParticipantsImportAction,
+  updateClubAction,
+  updateTeamAction,
 } from './participantActions'
 import {
   addBulkCategoryAssignmentsAction,
@@ -83,7 +87,11 @@ import {
   shuffleSeedsAction,
   withdrawEntryAction,
 } from './entriesSeedActions'
-import { generateMatchesAction, setStageRulesetOverrideAction } from './generateActions'
+import {
+  clearCategoryFixturesAction,
+  generateMatchesAction,
+  setStageRulesetOverrideAction,
+} from './generateActions'
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
 import { WizardFormDraft } from './WizardFormDraft'
@@ -173,6 +181,19 @@ const errorMessages: Record<string, string> = {
     'This category already has entries, stages, or matches - archive it instead of deleting.',
   sport_in_use: 'This sport already has categories, courts, or matches - remove those first.',
   player_in_use: 'This player already has entries or roster spots - remove those first.',
+  club_in_use: 'This club still has teams, players, or entries linked to it - remove those first.',
+  team_in_use: 'This team still has roster members or entries - remove those first.',
+  category_format_locked:
+    "This category already has fixtures. Use 'Clear & rebuild' on the Generate step before changing its format.",
+  entry_has_fixtures:
+    "This entry is already in a generated match. Clear the category's fixtures on the Generate step before withdrawing it.",
+  seed_locked:
+    'Fixtures are already generated for this category. Clear them on the Generate step to re-seed, then regenerate.',
+  fixtures_in_play:
+    'Some matches in this category have already started or have a result - they can no longer be cleared from the wizard.',
+  use_groups_panel: "Manage this category's fixtures from the Groups panel on the Generate step.",
+  category_status_downgrade_blocked:
+    'This category already has confirmed entries or fixtures. Move it to Archived to hide it, or clear its fixtures first - it cannot be sent back to an earlier setup stage.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -399,6 +420,12 @@ export default async function NewEventWizardPage({
               revision.
             </AlertBanner>
           ) : null}
+          {get(params, 'wizardCleared') ? (
+            <AlertBanner tone="success">
+              Fixtures cleared. This category is back to setup - adjust entries or seeding, then
+              generate again.
+            </AlertBanner>
+          ) : null}
           {get(params, 'wizardPromoteWarning') ? (
             <AlertBanner tone="warning">
               {get(params, 'wizardPromoteWarning')} qualifier(s) were withdrawn/disqualified after
@@ -460,6 +487,8 @@ export default async function NewEventWizardPage({
               importPreviewPairs={get(params, 'importPreviewPairs')}
               importPreviewEntries={get(params, 'importPreviewEntries')}
               importPreviewSkipped={get(params, 'importPreviewSkipped')}
+              editingClubId={get(params, 'editClub')}
+              editingTeamId={get(params, 'editTeam')}
             />
           ) : null}
           {step === 'registration' && event ? (
@@ -2008,6 +2037,8 @@ const ParticipantsStep = async ({
   importPreviewPairs,
   importPreviewEntries,
   importPreviewSkipped,
+  editingClubId,
+  editingTeamId,
 }: {
   payload: Payload
   eventId: string
@@ -2033,6 +2064,8 @@ const ParticipantsStep = async ({
   importPreviewPairs?: string
   importPreviewEntries?: string
   importPreviewSkipped?: string
+  editingClubId?: string
+  editingTeamId?: string
 }) => {
   // Row-level import notes are read from a sidecar file (keyed by the preview's scratch id, or a
   // fresh id for a confirmed import) rather than the redirect URL - see importScratch.ts.
@@ -2384,11 +2417,59 @@ const ParticipantsStep = async ({
             <SubmitButton>Add club</SubmitButton>
           </form>
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {clubs.docs.map((club) => (
-              <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                <strong className="text-sm font-bold text-ink">{club.name}</strong>
-              </div>
-            ))}
+            {clubs.docs.map((club) => {
+              const editing = editingClubId === String(club.id)
+              const deleteFormId = `delete-club-${club.id}`
+              const closeHref = `/workspaces/event-admin/new-event?eventId=${eventId}&step=participants&tab=clubs`
+              return (
+                <div
+                  key={club.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2"
+                >
+                  <strong className="min-w-0 truncate text-sm font-bold text-ink">{club.name}</strong>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <CrudFormModal
+                      key={editing ? `edit-${club.id}` : `closed-${club.id}`}
+                      title={`Edit ${club.name}`}
+                      openDefault={editing}
+                      closeHref={closeHref}
+                      trigger={
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`${closeHref}&editClub=${club.id}`}>Edit</Link>
+                        </Button>
+                      }
+                    >
+                      <form action={updateClubAction} className="flex flex-col gap-4">
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="clubId" value={String(club.id)} />
+                        <Field label="Club name">
+                          <Input name="name" defaultValue={String(club.name)} required />
+                        </Field>
+                        <Field label="Contact person">
+                          <Input name="contactPerson" defaultValue={String(club.contact_person ?? '')} />
+                        </Field>
+                        <Field label="Contact email">
+                          <Input name="contactEmail" type="email" defaultValue={String(club.contact_email ?? '')} />
+                        </Field>
+                        <SubmitButton>Save club</SubmitButton>
+                      </form>
+                    </CrudFormModal>
+                    <form id={deleteFormId} action={deleteClubAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="clubId" value={String(club.id)} />
+                    </form>
+                    <ConfirmSubmitButton
+                      formId={deleteFormId}
+                      size="sm"
+                      variant="ghost"
+                      confirmMessage={`Delete "${club.name}"? Only allowed if it has no teams, players, or entries yet.`}
+                    >
+                      Delete
+                    </ConfirmSubmitButton>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </Card>
       ) : null}
@@ -2416,10 +2497,67 @@ const ParticipantsStep = async ({
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {teams.docs.map((team) => {
               const clubLabel = getRelationshipLabel(team.club_id as RelationshipDoc, '')
+              const clubIdValue =
+                team.club_id && typeof team.club_id === 'object'
+                  ? String((team.club_id as RelationshipDoc).id ?? '')
+                  : String(team.club_id ?? '')
+              const editing = editingTeamId === String(team.id)
+              const deleteFormId = `delete-team-${team.id}`
+              const closeHref = `/workspaces/event-admin/new-event?eventId=${eventId}&step=participants&tab=teams`
               return (
-                <div key={team.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                  <strong className="block text-sm font-bold text-ink">{team.name}</strong>
-                  {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                <div
+                  key={team.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-bold text-ink">{team.name}</strong>
+                    {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <CrudFormModal
+                      key={editing ? `edit-${team.id}` : `closed-${team.id}`}
+                      title={`Edit ${team.name}`}
+                      openDefault={editing}
+                      closeHref={closeHref}
+                      trigger={
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`${closeHref}&editTeam=${team.id}`}>Edit</Link>
+                        </Button>
+                      }
+                    >
+                      <form action={updateTeamAction} className="flex flex-col gap-4">
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="teamId" value={String(team.id)} />
+                        <Field label="Team name">
+                          <Input name="name" defaultValue={String(team.name)} required />
+                        </Field>
+                        <Field label="Club">
+                          <SearchableSelect
+                            name="clubId"
+                            placeholder="None"
+                            defaultValue={clubIdValue}
+                            options={toOptions(clubs.docs).map((club) => ({ value: club.id, label: club.label }))}
+                          />
+                        </Field>
+                        <Field label="Contact email">
+                          <Input name="contactEmail" type="email" defaultValue={String(team.contact_email ?? '')} />
+                        </Field>
+                        <SubmitButton>Save team</SubmitButton>
+                      </form>
+                    </CrudFormModal>
+                    <form id={deleteFormId} action={deleteTeamAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="teamId" value={String(team.id)} />
+                    </form>
+                    <ConfirmSubmitButton
+                      formId={deleteFormId}
+                      size="sm"
+                      variant="ghost"
+                      confirmMessage={`Delete "${team.name}"? Only allowed if it has no entries yet.`}
+                    >
+                      Delete
+                    </ConfirmSubmitButton>
+                  </div>
                 </div>
               )
             })}
@@ -2671,6 +2809,15 @@ const RegistrationStep = async ({
         }),
   ])
   const clubFilterOptions = clubOptionsResult?.docs ?? []
+
+  // Once fixtures are generated the entry list is frozen - withdrawEntryAction refuses to pull an
+  // entry that's already drawn into a match. Reflect that here so the Remove buttons don't look
+  // live when they aren't.
+  const categoryFixtures = await payload.count({
+    collection: 'matches',
+    where: { category_id: { equals: selectedCategoryId } },
+  })
+  const entriesLockedByFixtures = categoryFixtures.totalDocs > 0
 
   const enteredSourceIds = new Set(
     entries.docs.map((entry) =>
@@ -3107,6 +3254,19 @@ const RegistrationStep = async ({
 
       <Card className="flex flex-col gap-4">
         <CardTitle>Registered ({entries.totalDocs})</CardTitle>
+        {entriesLockedByFixtures ? (
+          <AlertBanner tone="warning">
+            Fixtures are generated for this category, so the entry list is locked. To add or remove
+            someone, use{' '}
+            <Link
+              href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${selectedCategoryId}`}
+              className="font-bold underline"
+            >
+              Clear &amp; rebuild on the Generate step
+            </Link>{' '}
+            first.
+          </AlertBanner>
+        ) : null}
         {entries.docs.length === 0 ? (
           <EmptyState>No one is registered in this category yet.</EmptyState>
         ) : (
@@ -3129,14 +3289,18 @@ const RegistrationStep = async ({
                       <span className="block truncate text-xs text-ink-soft">{clubLabel}</span>
                     ) : null}
                   </div>
-                  <ConfirmSubmitButton
-                    formId={formId}
-                    confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Remove
-                  </ConfirmSubmitButton>
+                  {entriesLockedByFixtures ? (
+                    <span className="shrink-0 text-xs font-semibold text-ink-soft">Locked</span>
+                  ) : (
+                    <ConfirmSubmitButton
+                      formId={formId}
+                      confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      Remove
+                    </ConfirmSubmitButton>
+                  )}
                 </form>
               )
             })}
@@ -3293,15 +3457,21 @@ const DrawStep = async ({
   }
 
   const collection = ParticipantModeToCollection[String(selectedCategory.participant_mode)] || 'players'
-  const entries = await payload.find({
-    collection: 'competition-entries',
-    depth: 2,
-    limit: 300,
-    where: {
-      and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'confirmed' } }],
-    },
-    sort: 'seed_number',
-  })
+  const [entries, drawFixtures] = await Promise.all([
+    payload.find({
+      collection: 'competition-entries',
+      depth: 2,
+      limit: 300,
+      where: {
+        and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'confirmed' } }],
+      },
+      sort: 'seed_number',
+    }),
+    payload.count({ collection: 'matches', where: { category_id: { equals: selectedCategoryId } } }),
+  ])
+  // Fixtures exist -> seeding is frozen (saveSeedOrderAction / shuffleSeedsAction both reject it and
+  // a reordered bracket isn't reflowed). Show it read-only.
+  const seedingLocked = drawFixtures.totalDocs > 0
 
   const getEntryClubLabel = (entry: { team_id?: unknown; player_id?: unknown }) => {
     if (collection === 'clubs') {
@@ -3355,26 +3525,29 @@ const DrawStep = async ({
           </EmptyState>
         ) : (
           <>
-            <form id="shuffle-seeds-form" action={shuffleSeedsAction}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="categoryId" value={selectedCategoryId} />
-              {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: this used to fire an immediate random
-                  mutation with zero warning - a misclick threw away a seed order someone may have
-                  spent real time arranging, with no preview or way back. A real ConfirmDialog
-                  closes the actual data-loss risk and matches the same pattern already used for
-                  withdrawing an entry (ConfirmSubmitButton, see RegistrationStep). */}
-              <ConfirmSubmitButton
-                formId="shuffle-seeds-form"
-                confirmMessage={`Shuffle seed order for all ${entries.totalDocs} entries in ${getRelationshipLabel(selectedCategory as RelationshipDoc)}? This replaces the current order and can't be undone automatically.`}
-                variant="secondary"
-                size="sm"
-              >
-                Shuffle Seeds
-              </ConfirmSubmitButton>
-            </form>
+            {seedingLocked ? null : (
+              <form id="shuffle-seeds-form" action={shuffleSeedsAction}>
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                {/* NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 4: this used to fire an immediate random
+                    mutation with zero warning - a misclick threw away a seed order someone may have
+                    spent real time arranging, with no preview or way back. A real ConfirmDialog
+                    closes the actual data-loss risk and matches the same pattern already used for
+                    withdrawing an entry (ConfirmSubmitButton, see RegistrationStep). */}
+                <ConfirmSubmitButton
+                  formId="shuffle-seeds-form"
+                  confirmMessage={`Shuffle seed order for all ${entries.totalDocs} entries in ${getRelationshipLabel(selectedCategory as RelationshipDoc)}? This replaces the current order and can't be undone automatically.`}
+                  variant="secondary"
+                  size="sm"
+                >
+                  Shuffle Seeds
+                </ConfirmSubmitButton>
+              </form>
+            )}
             <SeedOrderTable
               eventId={eventId}
               categoryId={selectedCategoryId}
+              locked={seedingLocked}
               entries={entries.docs.map((entry) => ({
                 id: String(entry.id),
                 displayName: String(entry.display_name),
@@ -3444,6 +3617,42 @@ const GenerateStep = async ({
         })
       : { docs: [] as { category_id?: unknown }[] }
   const categoriesWithFixtures = new Set(generatedMatches.docs.map((match) => String(match.category_id)))
+  // Per category: how many fixtures, and whether any has moved past the clearable states - drives
+  // the "Clear & rebuild" affordance below. Reuses the match list already fetched above.
+  const fixtureSummary = summarizeCategoryFixtures(
+    generatedMatches.docs as { category_id?: unknown; status?: unknown; winner_entry_id?: unknown }[],
+  )
+
+  // Entries changed after fixtures were generated (one withdrawn, or a new one confirmed) leaves
+  // the bracket showing a stale participant list. Compare the current confirmed-entry set against
+  // the set of entries actually wired into this category's matches and flag the mismatch so the
+  // organiser knows a Clear & rebuild is needed. group->KO has its own structure and is excluded.
+  const confirmedIdsByCategory = new Map<string, Set<string>>()
+  for (const entry of confirmedEntries.docs as { id?: unknown; category_id?: unknown }[]) {
+    const key = String(entry.category_id)
+    if (!confirmedIdsByCategory.has(key)) confirmedIdsByCategory.set(key, new Set())
+    confirmedIdsByCategory.get(key)!.add(String(entry.id))
+  }
+  const fixtureEntryIdsByCategory = new Map<string, Set<string>>()
+  for (const match of generatedMatches.docs as {
+    category_id?: unknown
+    participant_a_entry_id?: unknown
+    participant_b_entry_id?: unknown
+  }[]) {
+    const key = String(match.category_id)
+    if (!fixtureEntryIdsByCategory.has(key)) fixtureEntryIdsByCategory.set(key, new Set())
+    const set = fixtureEntryIdsByCategory.get(key)!
+    if (match.participant_a_entry_id != null) set.add(String(match.participant_a_entry_id))
+    if (match.participant_b_entry_id != null) set.add(String(match.participant_b_entry_id))
+  }
+  const fixturesAreStale = (categoryId: string) => {
+    const inFixtures = fixtureEntryIdsByCategory.get(categoryId)
+    if (!inFixtures || inFixtures.size === 0) return false
+    const confirmed = confirmedIdsByCategory.get(categoryId) ?? new Set<string>()
+    if (confirmed.size !== inFixtures.size) return true
+    for (const id of confirmed) if (!inFixtures.has(id)) return true
+    return false
+  }
 
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 6: "Venue availability sebelum generation" - matches
   // used to generate with zero signal about whether there's anywhere to actually play them, so the
@@ -3509,6 +3718,9 @@ const GenerateStep = async ({
     category,
     confirmedCount: confirmedCountByCategory.get(String(category.id)) || 0,
     hasFixtures: categoriesWithFixtures.has(String(category.id)),
+    fixtureCount: fixtureSummary.get(String(category.id))?.count ?? 0,
+    fixturesLocked: fixtureSummary.get(String(category.id))?.locked ?? false,
+    fixturesStale: category.format_type !== 'group_stage_to_knockout' && fixturesAreStale(String(category.id)),
     hasCourt: anyCourtIsSportAgnostic || sportIdsWithCourts.has(String(category.sport_id)),
     courtCount:
       (anyCourtIsSportAgnostic ? courts.docs.filter((court) => !court.sport_id).length : 0) +
@@ -3546,9 +3758,10 @@ const GenerateStep = async ({
           </AlertBanner>
         ) : null}
         <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-          {categoriesWithCounts.map(({ category, confirmedCount, hasFixtures, hasCourt, courtCount }) => {
+          {categoriesWithCounts.map(({ category, confirmedCount, hasFixtures, fixtureCount, fixturesLocked, fixturesStale, hasCourt, courtCount }) => {
             const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
             const estimate = getGenerationEstimate(String(category.format_type), confirmedCount)
+            const clearFormId = `clear-fixtures-${category.id}`
             return (
               <div
                 key={category.id}
@@ -3563,7 +3776,18 @@ const GenerateStep = async ({
                     <span className="block text-xs font-semibold text-green">
                       Fixtures generated{isGroupStageToKnockout ? ' (group stage)' : ''}
                     </span>
-                  ) : estimate ? (
+                  ) : null}
+                  {hasFixtures && !isGroupStageToKnockout && fixturesLocked ? (
+                    <span className="block text-xs font-semibold text-gold">
+                      Fixtures locked — a match has started or has a result
+                    </span>
+                  ) : null}
+                  {hasFixtures && !isGroupStageToKnockout && !fixturesLocked && fixturesStale ? (
+                    <span className="block text-xs font-semibold text-gold">
+                      Entry list changed since these fixtures were generated — Clear &amp; rebuild to apply it
+                    </span>
+                  ) : null}
+                  {!hasFixtures && estimate ? (
                     <span className="block text-xs text-ink-soft">
                       Will generate: {estimate} &middot; {courtCount} court{courtCount === 1 ? '' : 's'} available
                       for this sport
@@ -3597,16 +3821,33 @@ const GenerateStep = async ({
                         {hasFixtures ? 'Manage Groups' : 'Set up Groups'}
                       </Link>
                     </Button>
+                  ) : hasFixtures ? (
+                    fixturesLocked ? null : (
+                      <>
+                        <form id={clearFormId} action={clearCategoryFixturesAction}>
+                          <input type="hidden" name="eventId" value={eventId} />
+                          <input type="hidden" name="categoryId" value={category.id} />
+                        </form>
+                        <ConfirmSubmitButton
+                          formId={clearFormId}
+                          size="sm"
+                          variant="ghost"
+                          confirmMessage={`Delete the ${fixtureCount} generated fixture${fixtureCount === 1 ? '' : 's'} for "${category.name}" so you can regenerate? This only works while no match has started.`}
+                        >
+                          Clear & rebuild
+                        </ConfirmSubmitButton>
+                      </>
+                    )
                   ) : (
                     <form action={generateMatchesAction}>
                       <input type="hidden" name="eventId" value={eventId} />
                       <input type="hidden" name="categoryId" value={category.id} />
                       <SubmitButton
                         size="sm"
-                        variant={hasFixtures ? 'secondary' : 'primary'}
+                        variant="primary"
                         disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
                       >
-                        {hasFixtures ? 'Re-generate' : 'Generate Matches'}
+                        Generate Matches
                       </SubmitButton>
                     </form>
                   )}

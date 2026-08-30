@@ -4,10 +4,15 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { CATEGORY_STATUS_ORDER } from '@/lib/categoryLifecycle'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, isNextControlFlowError, slugify, text, wizardPage } from './wizardShared'
 
 const categoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
+const statusRank = (status: string) => {
+  const index = CATEGORY_STATUS_ORDER.indexOf(status as (typeof CATEGORY_STATUS_ORDER)[number])
+  return index < 0 ? 0 : index
+}
 const participantModes = new Set(['individual', 'pair', 'team', 'club', 'open', 'tbd'])
 const thirdPlacePolicies = new Set(['none', 'match', 'shared'])
 const formatTypes = new Set([
@@ -162,6 +167,26 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
   }
 
+  // Walking a category *back* (published -> open, locked -> draft, ...) while it has real
+  // competition data silently pulls it - and its bracket/standings - off the public site with no
+  // warning. Archiving (a deliberate retire) and un-archiving are always allowed; a plain backward
+  // move is only allowed while the category is still unused. Forward moves are never gated.
+  const currentStatus = String(before.status || 'draft')
+  const isBackwardMove =
+    status !== 'archived' && currentStatus !== 'archived' && statusRank(status) < statusRank(currentStatus)
+  if (isBackwardMove) {
+    const [matches, confirmedEntries] = await Promise.all([
+      payload.count({ collection: 'matches', where: { category_id: { equals: categoryId } } }),
+      payload.count({
+        collection: 'competition-entries',
+        where: { and: [{ category_id: { equals: categoryId } }, { status: { equals: 'confirmed' } }] },
+      }),
+    ])
+    if (matches.totalDocs > 0 || confirmedEntries.totalDocs > 0) {
+      redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=category_status_downgrade_blocked`)
+    }
+  }
+
   await payload.update({
     collection: 'competition-categories',
     id: categoryId,
@@ -218,6 +243,20 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
     const ruleset = await payload.findByID({ collection: 'rulesets', id: rulesetId, depth: 0 }).catch(() => null)
     if (!ruleset || String(ruleset.event_id) !== String(eventId)) {
       redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
+    }
+  }
+
+  // Changing the format after fixtures exist would orphan the stage (its stage_type no longer
+  // matches) and desync wizard progress. Name / roster / ruleset edits stay allowed; only a real
+  // format switch is gated, and only once there's something generated to protect. "Clear & rebuild"
+  // on the Generate step is the supported way back.
+  if (formatType !== String(before!.format_type)) {
+    const [stages, matches] = await Promise.all([
+      payload.count({ collection: 'stages', where: { category_id: { equals: categoryId } } }),
+      payload.count({ collection: 'matches', where: { category_id: { equals: categoryId } } }),
+    ])
+    if (stages.totalDocs > 0 || matches.totalDocs > 0) {
+      redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=category_format_locked`)
     }
   }
 

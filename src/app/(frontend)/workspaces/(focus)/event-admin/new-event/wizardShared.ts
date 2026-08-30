@@ -14,6 +14,33 @@ export const AUTO_GENERATE_FORMATS = new Set([
   'score_ranking',
 ])
 
+// A category's generated fixtures can still be cleared (and the category rebuilt) only while every
+// one of its matches is in one of these "nothing has happened yet" states. The moment a match is
+// checked in / started / has a result, the fixtures are load-bearing and the wizard refuses to wipe
+// them - mirrors the UNSTARTED_TARGET_STATUSES guard winnerAdvancement.ts / undoPromoteToKnockout
+// use, kept deliberately stricter here (no `published` / `check_in_open` / `ready_to_start`).
+export const CLEARABLE_FIXTURE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled'])
+
+type FixtureMatch = { category_id?: unknown; status?: unknown; winner_entry_id?: unknown }
+
+// Rolls an already-fetched match list up per category into { count, locked } so a caller that has
+// loaded the matches once (e.g. GenerateStep) doesn't need a second query to decide whether the
+// "Clear & rebuild" affordance is safe to offer. `locked` = at least one match has moved past the
+// clearable states or already has a winner.
+export const summarizeCategoryFixtures = (matches: FixtureMatch[]) => {
+  const byCategory = new Map<string, { count: number; locked: boolean }>()
+  for (const match of matches) {
+    const key = String(match.category_id)
+    const current = byCategory.get(key) ?? { count: 0, locked: false }
+    current.count += 1
+    if (!CLEARABLE_FIXTURE_STATUSES.has(String(match.status)) || match.winner_entry_id != null) {
+      current.locked = true
+    }
+    byCategory.set(key, current)
+  }
+  return byCategory
+}
+
 export const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
 

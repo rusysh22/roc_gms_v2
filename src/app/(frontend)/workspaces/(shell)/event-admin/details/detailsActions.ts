@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
-import { getActiveEvent } from '../../../activeEvent'
+import { ACTIVE_EVENT_COOKIE, getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/details'
@@ -46,6 +47,30 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
   }
   if (new Date(end).getTime() <= new Date(start).getTime()) {
     redirect(`${page}?detailsError=invalid_date_range`)
+  }
+
+  // Shrinking the event window under matches that are already scheduled would strand those matches
+  // outside their own event's dates. Block it - the organiser reschedules (or clears) those matches
+  // first, then narrows the window.
+  const startIso = new Date(start).toISOString()
+  const endIso = new Date(end).toISOString()
+  const outsideWindow = await payload.count({
+    collection: 'matches',
+    where: {
+      and: [
+        { event_id: { equals: event.id } },
+        { scheduled_start_at: { exists: true } },
+        {
+          or: [
+            { scheduled_start_at: { less_than: startIso } },
+            { scheduled_start_at: { greater_than: endIso } },
+          ],
+        },
+      ],
+    },
+  })
+  if (outsideWindow.totalDocs > 0) {
+    redirect(`${page}?detailsError=schedule_outside_window`)
   }
 
   const duplicate = await payload.find({
@@ -108,4 +133,92 @@ export async function updateEventDetailsAction(formData: FormData): Promise<void
   revalidatePath('/workspaces/event-admin')
   revalidatePath(`/events/${slug}`)
   redirect(`${page}?detailsUpdated=1`)
+}
+
+// Backward-flow gap: a mistakenly created event had no way out of the workspace - it sat in the
+// EventSwitcher forever. This gives one:
+//  - an event that never got past "just created" (no sports / categories / participants / matches)
+//    is hard-deleted, logo media included;
+//  - anything with real setup is *archived* instead (status + visibility both `archived`), which
+//    hides it from the switcher and the public site but keeps the data recoverable.
+// Either way the active-event cookie is cleared so the workspace falls back to another event.
+export async function discardEventAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: page,
+  })
+  const event = await getActiveEvent(payload)
+  if (!event) {
+    redirect(`${page}?detailsError=missing_event`)
+  }
+
+  const confirmToken = text(formData, 'confirmName')
+  if (confirmToken !== String(event.name)) {
+    redirect(`${page}?detailsError=discard_name_mismatch`)
+  }
+
+  // Every child collection that carries a foreign key back to the event - if any has a row, a hard
+  // delete would hit an FK, so archive instead. (event-memberships is excluded: every event has the
+  // creator's row and it's cleared explicitly below.)
+  const eventWhere = { event_id: { equals: event.id } }
+  const childCollections = [
+    'sports',
+    'rulesets',
+    'competition-categories',
+    'clubs',
+    'players',
+    'teams',
+    'venues',
+    'courts',
+    'competition-entries',
+    'matches',
+    'registration-submissions',
+    'sponsors',
+    'announcements',
+    'articles',
+  ] as const
+  const childCounts = await Promise.all(
+    childCollections.map((collection) => payload.count({ collection, where: eventWhere })),
+  )
+  const isEmpty = childCounts.every((result) => result.totalDocs === 0)
+
+  const before = await payload.findByID({ collection: 'events', id: event.id, depth: 0 })
+
+  if (isEmpty) {
+    // Every event has at least the creator's event-memberships row (Events.enrollCreatorAsMember);
+    // clear it (and any co-admins added since) before the event row so the FK doesn't block delete.
+    await payload
+      .delete({ collection: 'event-memberships', where: { event_id: { equals: event.id } } })
+      .catch(() => null)
+    await payload.delete({ collection: 'events', id: event.id })
+    if (before.logo) {
+      const logoId = typeof before.logo === 'object' ? (before.logo as { id?: unknown }).id : before.logo
+      if (logoId) {
+        await payload.delete({ collection: 'media', id: String(logoId) }).catch(() => null)
+      }
+    }
+  } else {
+    await payload.update({
+      collection: 'events',
+      id: event.id,
+      data: { status: 'archived', visibility: 'archived' },
+    })
+  }
+
+  await recordAuditLog({
+    payload,
+    action: isEmpty ? 'event.delete' : 'event.archive',
+    entityType: 'events',
+    entityId: event.id,
+    before,
+    after: isEmpty ? null : { ...before, status: 'archived', visibility: 'archived' },
+    actorUserId: user.id,
+  })
+
+  const cookieStore = await cookies()
+  cookieStore.delete(ACTIVE_EVENT_COOKIE)
+
+  revalidatePath(page)
+  revalidatePath('/workspaces/event-admin')
+  redirect(`/workspaces/event-admin?eventDiscarded=${isEmpty ? 'deleted' : 'archived'}`)
 }

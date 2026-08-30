@@ -252,6 +252,16 @@ export async function shuffleSeedsAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?eventId=${eventId}&step=draw&wizardError=invalid_entry`)
   }
 
+  // Same as saveSeedOrderAction: a shuffle against an already-generated bracket does nothing useful
+  // (the bracket isn't reflowed) - block it and point at "Clear & rebuild".
+  const shuffleExistingMatches = await payload.count({
+    collection: 'matches',
+    where: { category_id: { equals: categoryId } },
+  })
+  if (shuffleExistingMatches.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=draw&categoryId=${categoryId}&wizardError=seed_locked`)
+  }
+
   const entries = await payload.find({
     collection: 'competition-entries',
     depth: 0,
@@ -311,6 +321,23 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
     redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=invalid_relationship`)
   }
 
+  // Withdrawing an entry that's already drawn into a match would leave that match pointing at a
+  // withdrawn participant (broken bracket / standings). Block it here - the organiser clears the
+  // category's fixtures on the Generate step first, then withdraws, then regenerates.
+  const inFixtures = await payload.count({
+    collection: 'matches',
+    where: {
+      or: [
+        { participant_a_entry_id: { equals: entryId } },
+        { participant_b_entry_id: { equals: entryId } },
+        { winner_entry_id: { equals: entryId } },
+      ],
+    },
+  })
+  if (inFixtures.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardError=entry_has_fixtures`)
+  }
+
   const data = { status: 'withdrawn' as const }
   await payload.update({ collection: 'competition-entries', id: entryId, data })
   await recordAuditLog({
@@ -337,6 +364,17 @@ export async function saveSeedOrderAction(formData: FormData): Promise<void> {
   const categoryId = text(formData, 'categoryId')
   if (!categoryId) {
     redirect(`${wizardPage}?eventId=${eventId}&step=draw&wizardError=invalid_entry`)
+  }
+
+  // Seeding only feeds the bracket at generation time. Once a category has matches, re-seeding here
+  // silently does nothing to the existing bracket - which reads as a bug. Block it and point the
+  // organiser at "Clear & rebuild" on the Generate step.
+  const existingMatches = await payload.count({
+    collection: 'matches',
+    where: { category_id: { equals: categoryId } },
+  })
+  if (existingMatches.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=draw&categoryId=${categoryId}&wizardError=seed_locked`)
   }
 
   const updates: Array<{ id: string; seed: number }> = []

@@ -9,7 +9,8 @@ import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { updateEventDetailsAction } from './detailsActions'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
+import { discardEventAction, updateEventDetailsAction } from './detailsActions'
 import { ReadinessChecklist } from './ReadinessChecklist'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,9 @@ const detailsErrorMessages: Record<string, string> = {
   invalid_date_range: 'Event end time must be after the start time.',
   duplicate_slug: 'That slug is already used by another event.',
   missing_event: 'No active event to edit yet.',
+  schedule_outside_window:
+    'Some matches are scheduled outside the new start/end window. Reschedule (or clear) those matches first, then narrow the dates.',
+  discard_name_mismatch: 'The event name you typed did not match. Nothing was discarded.',
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -309,6 +313,32 @@ export default async function EventDetailsPage({ searchParams }: { searchParams?
           <SubmitButton>Save event details</SubmitButton>
         </div>
       </form>
+
+      <Card className="mt-6 flex flex-col gap-3 border-danger/40">
+        <div>
+          <CardTitle>Discard this event</CardTitle>
+          <p className="mt-1 text-sm text-ink-soft">
+            An event with no sports, categories, participants, or matches is deleted outright.
+            Anything further along is <strong>archived</strong> instead - hidden from the event
+            switcher and the public site, but recoverable. Either way you&apos;ll be switched to
+            another event. Type <strong>{event.name}</strong> to confirm.
+          </p>
+        </div>
+        <form id="discard-event-form" action={discardEventAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Field label="Confirm event name" className="sm:max-w-xs">
+            <Input name="confirmName" autoComplete="off" placeholder={event.name || ''} />
+          </Field>
+        </form>
+        <div>
+          <ConfirmSubmitButton
+            formId="discard-event-form"
+            variant="destructive"
+            confirmMessage={`Discard "${event.name}"? If it has any setup data it will be archived (recoverable); if it's empty it will be permanently deleted.`}
+          >
+            Discard event
+          </ConfirmSubmitButton>
+        </div>
+      </Card>
     </>
   )
 }

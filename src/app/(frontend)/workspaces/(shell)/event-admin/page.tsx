@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, CalendarClock, CheckCircle2, Circle, MapPinned, Trophy } from 'lucide-react'
 
+import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
 import { computeWizardProgress } from '@/lib/wizardProgress'
@@ -44,7 +45,11 @@ type NextMatchDoc = {
 // counts as "next up" for the score-update shortcut below.
 const MATCH_DAY_STATUSES = ['published', 'scheduled', 'check_in_open', 'ready_to_start', 'ongoing']
 
-export default async function EventAdminWorkspacePage() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+export default async function EventAdminWorkspacePage({ searchParams }: { searchParams?: SearchParams }) {
+  const params = searchParams ? await searchParams : {}
+  const discarded = Array.isArray(params.eventDiscarded) ? params.eventDiscarded[0] : params.eventDiscarded
   const access = await requireWorkspaceAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: '/workspaces/event-admin',
@@ -175,6 +180,14 @@ export default async function EventAdminWorkspacePage() {
           </>
         }
       />
+
+      {discarded === 'deleted' || discarded === 'archived' ? (
+        <AlertBanner tone="success" className="mb-4">
+          {discarded === 'deleted'
+            ? 'Event deleted. It had no setup data, so it was removed permanently.'
+            : 'Event archived. It is hidden from the switcher and the public site but can be restored from Payload admin.'}
+        </AlertBanner>
+      ) : null}
 
       {setupInProgress && event ? (
         <Card className="mb-6 flex flex-col gap-3 border-blue/30 bg-mist sm:flex-row sm:items-center sm:justify-between">

@@ -28,10 +28,14 @@ export const SeedOrderTable = ({
   eventId,
   categoryId,
   entries,
+  locked = false,
 }: {
   eventId: string
   categoryId: string
   entries: SeedOrderEntry[]
+  // Fixtures already exist for this category - saveSeedOrderAction would reject the submit, and a
+  // reordered bracket isn't reflowed anyway. Show the current seeding read-only.
+  locked?: boolean
 }) => {
   const [order, setOrder] = useState(() => entries.map((entry) => entry.id))
   const [seeds, setSeeds] = useState<Record<string, string>>(() =>
@@ -74,7 +78,14 @@ export const SeedOrderTable = ({
     <form action={saveSeedOrderAction} className="flex flex-col gap-3">
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="categoryId" value={categoryId} />
-      {hasDuplicates ? (
+      {locked ? (
+        <AlertBanner tone="warning">
+          Fixtures are already generated for this category, so seeding is locked - a reordered seed
+          list only affects a bracket generated afterwards. Use &ldquo;Clear &amp; rebuild&rdquo; on
+          the Generate step to re-seed.
+        </AlertBanner>
+      ) : null}
+      {hasDuplicates && !locked ? (
         <AlertBanner tone="error">
           Two or more entries share the same seed number. Fix the highlighted rows before saving.
         </AlertBanner>
@@ -107,7 +118,7 @@ export const SeedOrderTable = ({
                         variant="secondary"
                         size="sm"
                         aria-label={`Move ${entry.displayName} up`}
-                        disabled={index === 0}
+                        disabled={locked || index === 0}
                         onClick={() => move(index, -1)}
                       >
                         <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
@@ -116,7 +127,7 @@ export const SeedOrderTable = ({
                         variant="secondary"
                         size="sm"
                         aria-label={`Move ${entry.displayName} down`}
-                        disabled={index === order.length - 1}
+                        disabled={locked || index === order.length - 1}
                         onClick={() => move(index, 1)}
                       >
                         <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -134,6 +145,7 @@ export const SeedOrderTable = ({
                       name={`seed_${id}`}
                       type="number"
                       min="1"
+                      readOnly={locked}
                       aria-invalid={isDuplicate}
                       className={cn('w-20', isDuplicate && 'border-danger/40 bg-danger-surface text-danger')}
                       value={value}
@@ -146,9 +158,11 @@ export const SeedOrderTable = ({
           </TableBody>
         </Table>
       </div>
-      <div>
-        <SubmitButton disabled={hasDuplicates}>Save Order</SubmitButton>
-      </div>
+      {locked ? null : (
+        <div>
+          <SubmitButton disabled={hasDuplicates}>Save Order</SubmitButton>
+        </div>
+      )}
     </form>
   )
 }

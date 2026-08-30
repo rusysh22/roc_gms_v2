@@ -68,12 +68,18 @@ export const getActiveEvent = async (
     return null
   }
 
+  // An archived event is a retired/discarded one - never auto-select it as the fallback active
+  // event (a discard clears the cookie, so without this the workspace could land right back on it).
+  const notArchived = { status: { not_equals: 'archived' } }
   const fallback = await payload.find({
     collection: 'events',
     depth,
     limit: 1,
     sort: 'event_start_at',
-    where: accessibleEventIds === 'all' ? undefined : { id: { in: accessibleEventIds } },
+    where:
+      accessibleEventIds === 'all'
+        ? notArchived
+        : { and: [{ id: { in: accessibleEventIds } }, notArchived] },
   })
   return (fallback.docs[0] as ActiveEventDoc) || null
 }
@@ -86,12 +92,18 @@ export const listEventsForSwitcher = async (
   user: { id: string | number; roles?: UserRole[] | null },
 ): Promise<ActiveEventDoc[]> => {
   const accessibleEventIds = await getAccessibleEventIds(payload, user)
+  // Archived events are hidden from the switcher - a discarded/retired event should stop cluttering
+  // the picker. It's still reachable through Payload admin or a direct link if it needs restoring.
+  const notArchived = { status: { not_equals: 'archived' } }
   const result = await payload.find({
     collection: 'events',
     depth: 0,
     limit: 100,
     sort: '-event_start_at',
-    where: accessibleEventIds === 'all' ? undefined : { id: { in: accessibleEventIds } },
+    where:
+      accessibleEventIds === 'all'
+        ? notArchived
+        : { and: [{ id: { in: accessibleEventIds } }, notArchived] },
   })
   return result.docs as ActiveEventDoc[]
 }

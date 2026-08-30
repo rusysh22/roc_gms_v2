@@ -1571,3 +1571,172 @@ export async function deletePlayerAction(formData: FormData): Promise<void> {
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
 }
+
+// Item 7 (mirrors updateCategoryAction): a mistyped club name was a dead-end in the wizard - the
+// only fix was leaving for Advanced Data Administration. Rename + contact edits only; slug is left
+// alone so any existing public URL keeps working.
+export async function updateClubAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const clubId = text(formData, 'clubId')
+  const name = text(formData, 'name')
+  const email = text(formData, 'contactEmail')
+
+  const before = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 }).catch(() => null)
+  if (!before || String(before.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+  if (!name || !emailValid(email)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_club`)
+  }
+
+  const data = {
+    name,
+    contact_person: text(formData, 'contactPerson') || undefined,
+    contact_email: email || undefined,
+  }
+  await payload.update({ collection: 'clubs', id: clubId, data })
+  await recordAuditLog({
+    payload,
+    action: 'club.update',
+    entityType: 'clubs',
+    entityId: clubId,
+    before,
+    after: data,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
+
+// Mirrors deletePlayerAction's guard - a club with teams, players, or entries still hanging off it
+// is not safe to hard-delete (that data would be orphaned). Remove those first.
+export async function deleteClubAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const clubId = text(formData, 'clubId')
+
+  const club = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 }).catch(() => null)
+  if (!club || String(club.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+
+  const [teams, players, entries] = await Promise.all([
+    payload.count({ collection: 'teams', where: { club_id: { equals: clubId } } }),
+    payload.count({ collection: 'players', where: { club_id: { equals: clubId } } }),
+    payload.count({ collection: 'competition-entries', where: { club_id: { equals: clubId } } }),
+  ])
+  if (teams.totalDocs > 0 || players.totalDocs > 0 || entries.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=club_in_use`)
+  }
+
+  await payload.delete({ collection: 'clubs', id: clubId })
+  await recordAuditLog({
+    payload,
+    action: 'club.delete',
+    entityType: 'clubs',
+    entityId: clubId,
+    before: club,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
+
+// Teams (and pairs, which are teams under the hood) got the same rename affordance. Slug untouched.
+export async function updateTeamAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const teamId = text(formData, 'teamId')
+  const name = text(formData, 'name')
+  const email = text(formData, 'contactEmail')
+  const clubId = text(formData, 'clubId')
+
+  const before = await payload.findByID({ collection: 'teams', id: teamId, depth: 0 }).catch(() => null)
+  if (!before || String(before.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+  if (!name || !emailValid(email)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_team`)
+  }
+  if (clubId) {
+    const club = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 }).catch(() => null)
+    if (!club || String(club.event_id) !== String(eventId)) {
+      redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+    }
+  }
+
+  const data = {
+    name,
+    club_id: clubId ? Number(clubId) : null,
+    contact_email: email || undefined,
+  }
+  await payload.update({ collection: 'teams', id: teamId, data })
+  await recordAuditLog({
+    payload,
+    action: 'team.update',
+    entityType: 'teams',
+    entityId: teamId,
+    before,
+    after: data,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
+
+// A team/pair is safe to delete only while it has no competition entry. Its roster rows are just
+// membership bookkeeping (a pair's two players), so they cascade with it rather than blocking.
+export async function deleteTeamAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const teamId = text(formData, 'teamId')
+
+  const team = await payload.findByID({ collection: 'teams', id: teamId, depth: 0 }).catch(() => null)
+  if (!team || String(team.event_id) !== String(eventId)) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_relationship`)
+  }
+
+  const entries = await payload.count({
+    collection: 'competition-entries',
+    where: { team_id: { equals: teamId } },
+  })
+  if (entries.totalDocs > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=team_in_use`)
+  }
+
+  await payload.delete({ collection: 'rosters', where: { team_id: { equals: teamId } } }).catch(() => null)
+  await payload.delete({ collection: 'teams', id: teamId })
+  await recordAuditLog({
+    payload,
+    action: 'team.delete',
+    entityType: 'teams',
+    entityId: teamId,
+    before: team,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
+}
