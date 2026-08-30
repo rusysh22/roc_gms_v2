@@ -54,6 +54,7 @@ import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
 import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
+import { computeWizardProgress } from '@/lib/wizardProgress'
 import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
 import { SportCatalogPicker } from './SportCatalogPicker'
 import {
@@ -84,6 +85,7 @@ import { generateMatchesAction, setStageRulesetOverrideAction } from './generate
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
 import { WizardFormDraft } from './WizardFormDraft'
+import { WizardStepMemory } from './WizardStepMemory'
 import { SeedOrderTable } from './SeedOrderTable'
 
 export const dynamic = 'force-dynamic'
@@ -300,7 +302,7 @@ export default async function NewEventWizardPage({
   const payload = access.payload
   const params = searchParams ? await searchParams : {}
   const eventId = get(params, 'eventId')
-  const step = get(params, 'step') || (eventId ? 'sports' : 'setup')
+  const requestedStep = get(params, 'step')
   const wizardError = get(params, 'wizardError')
   const wizardUpdated = get(params, 'wizardUpdated')
 
@@ -321,108 +323,16 @@ export default async function NewEventWizardPage({
   const eventLogo =
     event?.logo && typeof event.logo === 'object' ? (event.logo as { url?: string; alt?: string }) : undefined
 
-  const completedSteps = new Set<string>()
-  if (event) {
-    completedSteps.add('event')
-    // History has no "done" criterion of its own - it's a passive viewer over data other steps
-    // already produced, not a task to complete. Counting it done once the event exists keeps 100%
-    // reachable once every real task step clears its own bar. Setup Assistant is the same shape:
-    // answered or skipped, it's definitionally behind you once an event exists.
-    completedSteps.add('history')
-    completedSteps.add('setup')
-    const [sportsCount, categoriesResult, clubsCount, teamsCount, playersCount, confirmedEntries, eventMatches] =
-      await Promise.all([
-        payload.count({ collection: 'sports', where: { event_id: { equals: eventId } } }),
-        payload.find({
-          collection: 'competition-categories',
-          depth: 0,
-          limit: 500,
-          where: { event_id: { equals: eventId } },
-        }),
-        payload.count({ collection: 'clubs', where: { event_id: { equals: eventId } } }),
-        payload.count({ collection: 'teams', where: { event_id: { equals: eventId } } }),
-        payload.count({ collection: 'players', where: { event_id: { equals: eventId } } }),
-        payload.find({
-          collection: 'competition-entries',
-          depth: 0,
-          limit: 5000,
-          where: { and: [{ event_id: { equals: eventId } }, { status: { equals: 'confirmed' } }] },
-        }),
-        payload.find({ collection: 'matches', depth: 0, limit: 5000, where: { event_id: { equals: eventId } } }),
-      ])
-    if (sportsCount.totalDocs > 0) completedSteps.add('sports')
-    if (categoriesResult.totalDocs > 0) completedSteps.add('categories')
-    if (clubsCount.totalDocs + teamsCount.totalDocs + playersCount.totalDocs > 0) {
-      completedSteps.add('participants')
-    }
+  // DR-2 (prd/redesign/import-data-and-draft-persistence.md): "which steps are done?" and "where
+  // does the organizer pick up?" are now answered in one place (src/lib/wizardProgress.ts) so the
+  // Event Admin landing's "Resume setup" button and this stepper can never drift apart.
+  const progress = event ? await computeWizardProgress(payload, eventId) : null
+  const completedSteps = progress?.completedSteps ?? new Set<string>()
 
-    // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 11: "entries"/"generate"/"bracket" used to flip to done
-    // the moment ANY category anywhere had an entry or match, so the top bar could read "100%
-    // complete" while most categories hadn't been touched. Each step is now only marked done once
-    // every non-draft category actually clears its own bar (draft categories aren't publishable
-    // yet, so they don't block progress; categories on a manual-scheduling-only format don't block
-    // the auto-generate step since the wizard can never generate their matches anyway).
-    const nonDraftCategories = categoriesResult.docs.filter((category) => category.status !== 'draft')
-    const confirmedCountByCategory = new Map<string, number>()
-    for (const entry of confirmedEntries.docs) {
-      const key = String(entry.category_id)
-      confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
-    }
-    const categoriesWithMatches = new Set(eventMatches.docs.map((match) => String(match.category_id)))
-
-    if (
-      nonDraftCategories.length > 0 &&
-      nonDraftCategories.every((category) => (confirmedCountByCategory.get(String(category.id)) || 0) >= 2)
-    ) {
-      // Registration and Draw share this criterion: every entry gets a seed_number the moment
-      // it's added (see addEntriesAction), so there's no separate "has this category actually been
-      // seeded" signal to check independently of "does it have entries" yet.
-      completedSteps.add('registration')
-      completedSteps.add('draw')
-    }
-
-    const autoGenerateCategories = nonDraftCategories.filter((category) =>
-      AUTO_GENERATE_FORMATS.has(String(category.format_type)),
-    )
-    // group_stage_to_knockout is deliberately excluded from AUTO_GENERATE_FORMATS (it's a
-    // multi-action pipeline, not a single "Generate Matches" click) - but it still needs its own
-    // "done" signal, or these categories would never contribute to 100% and would also never show
-    // as complete once actually promoted. "Done" here means matches exist on the knockout stage
-    // specifically (order 2, single_elimination) - not just any group-stage match, which would
-    // fire the moment group matches generate, long before promotion.
-    const groupKnockoutCategories = nonDraftCategories.filter(
-      (category) => category.format_type === 'group_stage_to_knockout',
-    )
-    const knockoutStagesResult = groupKnockoutCategories.length
-      ? await payload.find({
-          collection: 'stages',
-          depth: 0,
-          limit: 200,
-          where: {
-            and: [
-              { event_id: { equals: eventId } },
-              { order: { equals: 2 } },
-              { stage_type: { equals: 'single_elimination' } },
-            ],
-          },
-        })
-      : null
-    const knockoutStageIds = new Set((knockoutStagesResult?.docs ?? []).map((stage) => String(stage.id)))
-    const categoriesWithKnockoutMatches = new Set(
-      eventMatches.docs
-        .filter((match) => knockoutStageIds.has(String(match.stage_id)))
-        .map((match) => String(match.category_id)),
-    )
-    const generateReadyCategories = [...autoGenerateCategories, ...groupKnockoutCategories]
-    const isGenerateDone = (category: (typeof generateReadyCategories)[number]) =>
-      category.format_type === 'group_stage_to_knockout'
-        ? categoriesWithKnockoutMatches.has(String(category.id))
-        : categoriesWithMatches.has(String(category.id))
-    if (generateReadyCategories.length > 0 && generateReadyCategories.every(isGenerateDone)) {
-      completedSteps.add('generate')
-      completedSteps.add('bracket')
-    }
-  }
+  // With an event but no explicit ?step=, drop the organizer at the first step still outstanding
+  // rather than always at Sports - returning from a refresh three steps in should not send them
+  // back to the top.
+  const step = requestedStep || (event ? progress!.firstIncompleteStep : eventId ? 'sports' : 'setup')
 
   return (
     // Fixed viewport-height shell from `lg:` up (`h-svh overflow-hidden`) so header/stepper/summary
@@ -433,6 +343,7 @@ export default async function NewEventWizardPage({
     // normally) below `lg:` - two independently-scrolling panes stacked in one mobile column would
     // be fiddlier to use than a single normal scroll, not an improvement.
     <main className="flex min-h-svh flex-col lg:h-svh lg:overflow-hidden">
+      {event ? <WizardStepMemory eventId={eventId} step={step} /> : null}
       <FocusHeader
         backHref="/workspaces/event-admin"
         backLabel="Event Admin"

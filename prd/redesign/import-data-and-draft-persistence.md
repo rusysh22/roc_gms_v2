@@ -1,7 +1,21 @@
 # New Event Wizard — Unified Excel Import + Draft Persistence
 
 Owner: Rusydani
-Status: **DR — MVP shipped** · **IMP MVP + part of IMP-2 shipped** · dropdowns / Registrations sheet / CSV / IMP-3 not started
+Status: **DR — MVP shipped** · **DR-2 — MVP shipped** · **IMP MVP + part of IMP-2 shipped** · dropdowns / Registrations sheet / CSV / IMP-3 not started
+
+Shipped 2026-08-30 (DR-2 — resume discoverability):
+- `src/lib/wizardProgress.ts` — one shared `deriveWizardProgress` / `computeWizardProgress`
+  (extracted from the wizard page's inline step-completion logic, now unit-tested) that answers
+  both "which steps are done?" and "which step should a returning organizer resume at?".
+- New Event Wizard: with `?eventId=` but no `?step=`, the wizard now opens at the **first
+  incomplete step** instead of always `sports`. `WizardStepMemory` records the last-viewed step per
+  event in `localStorage`.
+- Event Admin landing (`workspaces/(shell)/event-admin`): a **"Setup in progress" card** + a
+  **"Resume Setup"** hero button appear whenever the active event's wizard is unfinished. The
+  button (`ResumeSetupLink`) targets the server-computed first-incomplete step, upgraded on mount
+  to the `localStorage` last-viewed step when present.
+- `EventSwitcher`: draft events are labelled `· draft` so an admin juggling several events can see
+  which still needs setup.
 
 Shipped 2026-08-29:
 - DR: `WizardFormDraft` (replaces `UnsavedChangesGuard`) autosaves the Event step to `localStorage`
@@ -132,6 +146,70 @@ The client draft covers the 95% case (same browser, same device). A fuller versi
 `createEventAction`, on *any* early failure, also stash the payload in a short-lived `event-drafts`
 cookie or collection so a different device can resume. **Out of scope for DR MVP** — noted so the
 client-only approach is a deliberate first step, not an oversight.
+
+---
+
+## 2b. Track DR-2 — Resume discoverability
+
+### 2b.1 The gap DR MVP left open
+
+DR MVP protects the **Event step** (before an event row exists). But the more common confusion
+happens *after* the event is created: the organizer gets three or four steps into the wizard, closes
+the tab, and comes back the next day with **no idea where to go**. Everything they did is safely in
+the database (`status=draft`), yet:
+
+- The Event Admin landing led with *"Create Another Event"* — nothing said "you have one half-built".
+- Opening the wizard again (`?eventId=…`, no `step`) always dumped them at `sports`, step 3, even if
+  they were on Draw & Seeding.
+- The `EventSwitcher` listed every event by name with no draft/finished distinction.
+
+So: yes, the event *can* be continued from the management page — but only if the organizer already
+knew to click into a specific setup-checklist row. DR-2 makes the way back **the first thing they
+see**.
+
+### 2b.2 Principle
+
+> A half-finished event must advertise itself, and "continue" must land on the step that actually
+> needs work — not the top of the flow.
+
+### 2b.3 Mechanism (shipped MVP)
+
+| Piece | What it does |
+|---|---|
+| `src/lib/wizardProgress.ts` | `deriveWizardProgress(counts)` (pure, tested) + `computeWizardProgress(payload, eventId)`. Single source of truth for step completion, extracted verbatim from the wizard page's former inline block. Also derives `firstIncompleteStep` (first of `sports → categories → participants → registration → draw → generate` not yet done; `bracket` once all done) and `completedTaskCount / totalTaskCount`. |
+| Wizard default step | `?eventId=` + no `?step=` → open at `firstIncompleteStep`. Explicit `?step=` always wins (deep links, the post-create redirect). |
+| `WizardStepMemory` (client) | Writes `roc:new-event:<eventId>:last-step` to `localStorage` on every step view. Renders nothing; storage wrapped in try/catch. |
+| Event Admin landing | "Setup in progress — N of M steps done" card + a "Resume Setup" hero button, shown whenever `computeWizardProgress(activeEvent).isComplete === false`. |
+| `ResumeSetupLink` (client) | Server-rendered href = `firstIncompleteStep`; on mount, upgraded to the `localStorage` last-viewed step if one is stored and valid. Progressive enhancement — no JS still resumes sensibly. |
+| `EventSwitcher` | Appends `· draft` to any event still at `status=draft`. |
+
+### 2b.4 Deliberately deferred
+
+- **Global resume dock** (a strip in the workspace shell chrome, visible on *every* page, not just
+  the Event Admin landing). Higher reach, but needs a spot in `WorkspaceShellChrome` and a
+  dismiss-per-session rule — a second increment once the landing-page version proves the copy.
+- **Multi-draft awareness.** If an admin has two unfinished events, only the *active* one surfaces
+  its progress. Listing all drafts belongs with the "Copy from a previous event" work in IMP-3,
+  which already needs an event picker.
+- **Instant-draft** (create the event row the moment a name is typed, collapsing DR into DR-2).
+  Attractive — it makes "refresh loses work" structurally impossible — but it can litter the events
+  table with abandoned rows and needs a cleanup job + "draft" filtering everywhere events are
+  listed. Revisit after DR-2 telemetry.
+
+### 2b.5 Where export/import fits
+
+The organizer's other "don't make me redo it" lever is the workbook (Track IMP). Two connections to
+DR-2, both **deferred, noted here so they aren't rediscovered later**:
+
+1. **Import step reachable from the landing.** The setup checklist should link participant/data
+   steps straight to the wizard's Import step (`…/new-event?eventId=…&step=participants&tab=import`),
+   and the prefilled "template for this event" download should be offered there too — not only
+   inside the wizard.
+2. **Export the event's real data as a re-importable workbook.** `buildEventDataTemplateWorkbook`
+   already emits a *prefilled* template. A true round-trip export (every sport/category/club/team/
+   player/entry as rows the importer's upsert can read back) turns the spreadsheet into a portable
+   backup and is the mechanism behind IMP-3's "Copy from a previous event". Same engine, new entry
+   point.
 
 ---
 

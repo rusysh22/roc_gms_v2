@@ -3,6 +3,8 @@ import { ArrowRight, CalendarClock, CheckCircle2, Circle, MapPinned, Trophy } fr
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
+import { computeWizardProgress } from '@/lib/wizardProgress'
+import { ResumeSetupLink } from './ResumeSetupLink'
 import { getActiveEvent } from '../../activeEvent'
 import { resolveEventTimezone } from '@/lib/timezone'
 import {
@@ -60,6 +62,11 @@ export default async function EventAdminWorkspacePage() {
   const payload = access.payload
   const event = (await getActiveEvent(payload)) as EventDoc | null
   const timezone = resolveEventTimezone(event?.timezone)
+  // DR-2 (prd/redesign/import-data-and-draft-persistence.md): give a returning organizer one
+  // unmistakable way back into a half-finished wizard, landing them on the first step still
+  // outstanding rather than at the top.
+  const wizardProgress = event ? await computeWizardProgress(payload, event.id) : null
+  const setupInProgress = Boolean(wizardProgress && !wizardProgress.isComplete)
   // A where clause guaranteed to match nothing when there's no active event yet - otherwise an
   // unscoped `where: undefined` below would silently count every event's data, not zero.
   const eventWhere = event ? { event_id: { equals: event.id } } : { event_id: { equals: -1 } }
@@ -147,11 +154,19 @@ export default async function EventAdminWorkspacePage() {
         }
         actions={
           <>
-            <Button asChild>
-              <Link href="/workspaces/event-admin/new-event">
-                {event ? 'Create Another Event' : 'Create New Event'}
-              </Link>
-            </Button>
+            {setupInProgress && event ? (
+              <ResumeSetupLink
+                eventId={event.id}
+                defaultStep={wizardProgress!.firstIncompleteStep}
+                label="Resume Setup"
+              />
+            ) : (
+              <Button asChild>
+                <Link href="/workspaces/event-admin/new-event">
+                  {event ? 'Create Another Event' : 'Create New Event'}
+                </Link>
+              </Button>
+            )}
             {event ? (
               <Button asChild variant="secondary">
                 <Link href="/workspaces/event-admin/details">Edit Event Details</Link>
@@ -160,6 +175,24 @@ export default async function EventAdminWorkspacePage() {
           </>
         }
       />
+
+      {setupInProgress && event ? (
+        <Card className="mb-6 flex flex-col gap-3 border-blue/30 bg-mist sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <CardTitle>Setup in progress</CardTitle>
+            <p className="text-sm text-ink-soft">
+              {wizardProgress!.completedTaskCount} of {wizardProgress!.totalTaskCount} setup steps done. Pick up where
+              you left off &mdash; nothing you have entered is lost.
+            </p>
+          </div>
+          <ResumeSetupLink
+            eventId={event.id}
+            defaultStep={wizardProgress!.firstIncompleteStep}
+            label="Resume Setup"
+            className="shrink-0"
+          />
+        </Card>
+      ) : null}
 
       <StatGrid>
         <StatBlock label="Setup readiness" value={`${completedCount}/${setupTasks.length}`} tone="good" />
