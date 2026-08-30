@@ -73,6 +73,7 @@ import {
   cancelParticipantsImportAction,
   confirmParticipantsImportAction,
   deletePlayerAction,
+  deleteTeamAction,
   previewParticipantsImportAction,
 } from './participantActions'
 import {
@@ -174,6 +175,7 @@ const errorMessages: Record<string, string> = {
   sport_has_started_match:
     'A match under this sport has already started or finished - it cannot be deleted.',
   player_in_use: 'This player already has entries or roster spots - remove those first.',
+  team_in_use: 'This team/pair is entered in a category - withdraw that entry before deleting.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -2268,10 +2270,30 @@ const ParticipantsStep = async ({
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
             {teams.docs.map((team) => {
               const clubLabel = getRelationshipLabel(team.club_id as RelationshipDoc, '')
+              const deleteTeamFormId = `delete-team-${team.id}`
               return (
-                <div key={team.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                  <strong className="block text-sm font-bold text-ink">{team.name}</strong>
-                  {clubLabel ? <span className="block text-xs text-ink-soft">{clubLabel}</span> : null}
+                <div
+                  key={team.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <strong className="block truncate text-sm font-bold text-ink">{team.name}</strong>
+                    {clubLabel ? <span className="block truncate text-xs text-ink-soft">{clubLabel}</span> : null}
+                  </div>
+                  <form id={deleteTeamFormId} action={deleteTeamAction}>
+                    <input type="hidden" name="eventId" value={eventId} />
+                    <input type="hidden" name="teamId" value={String(team.id)} />
+                  </form>
+                  <ConfirmSubmitButton
+                    formId={deleteTeamFormId}
+                    tone="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-danger"
+                    confirmMessage={`Delete "${team.name}"? Only allowed if it isn't entered in any category.`}
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
                 </div>
               )
             })}

@@ -1425,3 +1425,41 @@ export async function deletePlayerAction(formData: FormData): Promise<void> {
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
 }
+
+// Delete a team or a doubles pair (both are the `teams` collection). Its roster rows go with it;
+// blocked while the team is still entered in a category.
+export async function deleteTeamAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const teamId = text(formData, 'teamId')
+  const back = `${wizardPage}?eventId=${eventId}&step=participants&tab=teams`
+
+  const team = await payload.findByID({ collection: 'teams', id: teamId, depth: 0 }).catch(() => null)
+  if (!team || String(team.event_id) !== String(eventId)) {
+    redirect(`${back}&wizardError=invalid_relationship`)
+  }
+
+  const entries = await payload.count({ collection: 'competition-entries', where: { team_id: { equals: teamId } } })
+  if (entries.totalDocs > 0) {
+    redirect(`${back}&wizardError=team_in_use`)
+  }
+
+  await payload.delete({ collection: 'rosters', where: { team_id: { equals: teamId } } }).catch(() => null)
+  await payload.delete({ collection: 'teams', id: teamId })
+  await recordAuditLog({
+    payload,
+    action: 'team.delete',
+    entityType: 'teams',
+    entityId: teamId,
+    before: team,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${back}&wizardUpdated=1`)
+}
