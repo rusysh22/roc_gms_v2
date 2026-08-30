@@ -32,6 +32,10 @@ which contingent a person represents.
 This page also has **Copy participants from a previous event** — reuse the clubs/teams/players you
 already built for an earlier event instead of re-entering them.
 
+Clubs, teams, pairs, and players can be **deleted** from the wizard's Clubs / Teams / Players lists,
+as long as nothing still points at them (a team in a category, a player on a roster, an entry for a
+club). Detach or withdraw those first.
+
 ### Participants — `/workspaces/event-admin/participants`
 
 "Players, Teams, and Rosters." Here you:

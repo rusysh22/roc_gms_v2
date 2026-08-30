@@ -29,8 +29,10 @@ import {
   toOptions,
 } from '../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../workspaceAuth'
+import { ConfirmSubmitButton } from '../../matches/ConfirmSubmitButton'
 import { AddMatchDialog } from './AddMatchDialog'
 import { RescheduleMatchDialog } from './RescheduleMatchDialog'
+import { deleteScheduledMatchAction } from './schedulerActions'
 import { ConflictWarning, detectScheduleConflicts } from './conflicts'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +43,14 @@ export const dynamic = 'force-dynamic'
 // after live testing found it was the single most common status for an upcoming match, yet the
 // Reschedule button never appeared for it - see the matching comment in schedulerActions.ts.
 const RESCHEDULABLE_STATUSES = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'published', 'postponed'])
+const DELETABLE_MATCH_STATUSES = new Set([
+  'draft',
+  'ready_for_scheduling',
+  'scheduled',
+  'published',
+  'check_in_open',
+  'ready_to_start',
+])
 
 const scheduleErrorMessages: Record<string, string> = {
   invalid_match: 'Fill in every field with valid values before creating the match.',
@@ -48,6 +58,8 @@ const scheduleErrorMessages: Record<string, string> = {
   conflict: 'That time would create a venue or participant conflict.',
   invalid_reschedule: 'Fill in the new time, venue, court, and a reason.',
   reschedule_not_allowed: "This match's current status can no longer be rescheduled here.",
+  match_not_manual: 'Only manually-created fixtures can be deleted here. Use Clear & regenerate for a bracket match.',
+  match_already_started: 'This match has already started or finished - it cannot be deleted.',
 }
 
 type SchedulerSearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -246,9 +258,28 @@ export default async function SchedulerWorkspacePage({
                 <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
               </TableCell>
               <TableCell>
-                {RESCHEDULABLE_STATUSES.has(match.status) ? (
-                  <RescheduleMatchDialog match={match} venues={venueOptions} courts={courtOptions} />
-                ) : null}
+                <div className="flex items-center gap-1">
+                  {RESCHEDULABLE_STATUSES.has(match.status) ? (
+                    <RescheduleMatchDialog match={match} venues={venueOptions} courts={courtOptions} />
+                  ) : null}
+                  {match.generation_source === 'manual' && DELETABLE_MATCH_STATUSES.has(match.status) ? (
+                    <>
+                      <form id={`delete-match-${match.id}`} action={deleteScheduledMatchAction}>
+                        <input type="hidden" name="matchNumber" value={match.match_number} />
+                      </form>
+                      <ConfirmSubmitButton
+                        formId={`delete-match-${match.id}`}
+                        tone="destructive"
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger"
+                        confirmMessage={`Delete match ${match.match_number}? Only manually-created fixtures that haven't started can be deleted.`}
+                      >
+                        Delete
+                      </ConfirmSubmitButton>
+                    </>
+                  ) : null}
+                </div>
               </TableCell>
             </TableRow>
             )
@@ -309,6 +340,11 @@ export default async function SchedulerWorkspacePage({
       {scheduleRescheduled ? (
         <AlertBanner tone="success" className="mb-4">
           Match rescheduled.
+        </AlertBanner>
+      ) : null}
+      {getParam(params, 'scheduleDeleted') === '1' ? (
+        <AlertBanner tone="success" className="mb-4">
+          Match deleted.
         </AlertBanner>
       ) : null}
 

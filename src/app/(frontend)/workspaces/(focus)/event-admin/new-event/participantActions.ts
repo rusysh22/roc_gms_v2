@@ -1426,6 +1426,47 @@ export async function deletePlayerAction(formData: FormData): Promise<void> {
   redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardUpdated=1`)
 }
 
+// Delete a club/contingent. Blocked while any team, player, or entry still points at it - detach
+// those first (edit the team/player, or withdraw the club entry).
+export async function deleteClubAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const clubId = text(formData, 'clubId')
+  const back = `${wizardPage}?eventId=${eventId}&step=participants&tab=clubs`
+
+  const club = await payload.findByID({ collection: 'clubs', id: clubId, depth: 0 }).catch(() => null)
+  if (!club || String(club.event_id) !== String(eventId)) {
+    redirect(`${back}&wizardError=invalid_relationship`)
+  }
+
+  const [teams, players, entries] = await Promise.all([
+    payload.count({ collection: 'teams', where: { club_id: { equals: clubId } } }),
+    payload.count({ collection: 'players', where: { club_id: { equals: clubId } } }),
+    payload.count({ collection: 'competition-entries', where: { club_id: { equals: clubId } } }),
+  ])
+  if (teams.totalDocs > 0 || players.totalDocs > 0 || entries.totalDocs > 0) {
+    redirect(`${back}&wizardError=club_in_use`)
+  }
+
+  await payload.delete({ collection: 'clubs', id: clubId })
+  await recordAuditLog({
+    payload,
+    action: 'club.delete',
+    entityType: 'clubs',
+    entityId: clubId,
+    before: club,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${back}&wizardUpdated=1`)
+}
+
 // Delete a team or a doubles pair (both are the `teams` collection). Its roster rows go with it;
 // blocked while the team is still entered in a category.
 export async function deleteTeamAction(formData: FormData): Promise<void> {

@@ -39,6 +39,10 @@ the two participant entries, venue, court, and start/end time. On submit InTourn
 - there is **no venue, court, or participant conflict** at that time,
 - the match's lifecycle state allows the change.
 
+A manually-created fixture can also be **deleted** (Event Admin only) while it has not started.
+Bracket-generated matches are wired into an advancement graph, so those go through **Clear &
+regenerate** on the Generate step, not here.
+
 ### Rescheduling
 
 Matches in **draft**, **ready for scheduling**, **scheduled**, **published**, or **postponed** can

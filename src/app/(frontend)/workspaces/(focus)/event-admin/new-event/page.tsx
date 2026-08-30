@@ -72,6 +72,7 @@ import {
   addTeamAction,
   cancelParticipantsImportAction,
   confirmParticipantsImportAction,
+  deleteClubAction,
   deletePlayerAction,
   deleteTeamAction,
   previewParticipantsImportAction,
@@ -176,6 +177,7 @@ const errorMessages: Record<string, string> = {
     'A match under this sport has already started or finished - it cannot be deleted.',
   player_in_use: 'This player already has entries or roster spots - remove those first.',
   team_in_use: 'This team/pair is entered in a category - withdraw that entry before deleting.',
+  club_in_use: 'This club still has teams, players, or entries - detach or remove those first.',
 }
 
 // Wizard progress, redesigned as: a plain-language status line ("Step 3 of 10") that works on its
@@ -2238,11 +2240,31 @@ const ParticipantsStep = async ({
             <SubmitButton>Add club</SubmitButton>
           </form>
           <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {clubs.docs.map((club) => (
-              <div key={club.id} className="rounded-card border border-line bg-paper px-3 py-2">
-                <strong className="text-sm font-bold text-ink">{club.name}</strong>
-              </div>
-            ))}
+            {clubs.docs.map((club) => {
+              const deleteClubFormId = `delete-club-${club.id}`
+              return (
+                <div
+                  key={club.id}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2"
+                >
+                  <strong className="truncate text-sm font-bold text-ink">{club.name}</strong>
+                  <form id={deleteClubFormId} action={deleteClubAction}>
+                    <input type="hidden" name="eventId" value={eventId} />
+                    <input type="hidden" name="clubId" value={String(club.id)} />
+                  </form>
+                  <ConfirmSubmitButton
+                    formId={deleteClubFormId}
+                    tone="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-danger"
+                    confirmMessage={`Delete "${club.name}"? Only allowed if no team, player, or entry belongs to it.`}
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
+                </div>
+              )
+            })}
           </div>
         </Card>
       ) : null}
