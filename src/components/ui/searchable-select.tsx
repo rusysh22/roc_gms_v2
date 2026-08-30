@@ -54,9 +54,16 @@ export function SearchableSelect({
   const [query, setQuery] = React.useState(selected?.label ?? '')
   const [activeIndex, setActiveIndex] = React.useState(-1)
 
-  const filtered = query.trim()
-    ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
-    : options
+  // When the field just opened, `query` still holds the *selected* option's full label (it is the
+  // input's display value). Treat that as "nothing typed yet" and show the whole list - otherwise
+  // opening the dropdown filters it down to the one option already chosen, hiding every sibling
+  // until the user manually clears the box.
+  const showingSelectionLabel =
+    query.trim().length > 0 && query.trim().toLowerCase() === (selected?.label ?? '').trim().toLowerCase()
+  const filtered =
+    query.trim() && !showingSelectionLabel
+      ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
+      : options
 
   const commit = (option: SearchableSelectOption | undefined) => {
     setValue(option?.value ?? '')
@@ -159,7 +166,11 @@ export function SearchableSelect({
           autoComplete="off"
           value={query}
           placeholder={placeholder}
-          onFocus={() => setOpen(true)}
+          onFocus={(event) => {
+            setOpen(true)
+            // Select the shown label so the first keystroke replaces it instead of appending.
+            event.target.select()
+          }}
           onClick={() => setOpen(true)}
           onChange={(event) => {
             setQuery(event.target.value)
