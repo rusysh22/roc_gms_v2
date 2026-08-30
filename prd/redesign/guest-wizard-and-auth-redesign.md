@@ -4,11 +4,17 @@ Owner: Rusydani
 Status: **SPEC — not started**
 Created: 2026-08-30
 
-> ⚠️ The referenced design source `http://needmcp.com/docs` returns no readable content (client-
-> rendered SPA / empty body). This spec grounds the visual redesign in the app's **existing**
-> design system (the landing page's bracket-connector motif, the audited `ink / ink-soft / paper /
-> mist / green / blue / line` tokens, `Card` / `Button` / `Field` / `Input`). If needmcp.com has
-> real guidance, paste it and this section gets revised.
+> ℹ️ `needmcp.com` is a design-reference library (Inertia SPA — not readable by plain fetch; content
+> pulled from the embedded page JSON). `/docs` is only the tool's own usage docs. The useful parts
+> are `/wireframes/*` (layout specs) and `/styles/*` (named design systems). Relevant auth
+> wireframes: `split-auth-card`, `soft-brand-auth`, `signin-1..4`, `signup-1..4`, `form-auth`,
+> `dark-slanted-auth`, `cloudflare-auth-sign-in`.
+>
+> **Chosen direction:** `split-auth-card` layout (desktop split — brand/illustration panel left,
+> form panel right, inside one rounded card with a soft shadow; "Don't have an account? Sign up"
+> top-right) — it matches what the app already has and just tightens it. Rendered with the app's
+> **own** tokens + the bracket-connector motif (not needmcp's Doze/Pulse styles). Social buttons
+> from the wireframe are **dropped** (no OAuth configured — see §6 non-goals).
 
 ---
 
