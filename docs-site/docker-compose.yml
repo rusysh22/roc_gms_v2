@@ -1,0 +1,21 @@
+# Deploys the InTourney docs site (docs.intourney.id). The public reverse proxy in ~/berlanggan
+# proxies to this container over the shared `berlanggan_default` network - same pattern as the app.
+#
+#   docker compose up -d --build
+#
+services:
+  docs:
+    build:
+      context: .
+      network: host
+    image: intourney-docs
+    container_name: intourney-docs
+    expose:
+      - "80"
+    restart: unless-stopped
+    networks:
+      - berlanggan_default
+
+networks:
+  berlanggan_default:
+    external: true
