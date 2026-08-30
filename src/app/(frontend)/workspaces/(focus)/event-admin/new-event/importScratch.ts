@@ -23,9 +23,18 @@ export const scratchFilePath = (filename: string): string | null =>
 // "Something went wrong" page. They now live in a sidecar file keyed by the same id, and only the
 // id travels in the URL.
 export type ImportIssue = { sheet: string; name: string; reason: string }
+
+// Per-sheet "here is what each row in your file will do" preview, so the organizer can eyeball the
+// mapping (which row becomes a create, which an update, which is skipped and why) before confirming
+// - not just an aggregate count.
+export type PreviewRowStatus = 'create' | 'update' | 'skip'
+export type PreviewRow = { cells: string[]; status: PreviewRowStatus; notes: string[] }
+export type SheetPreview = { sheet: string; columns: string[]; rows: PreviewRow[]; total: number }
+
 export type ImportResultSidecar = {
   issues: ImportIssue[]
   moreIssues: number
+  sheets: SheetPreview[]
 }
 
 const MAX_STORED_ISSUES = 200
@@ -34,13 +43,17 @@ const sidecarPath = (id: string): string | null =>
   RESULT_ID_PATTERN.test(id) ? path.join(SCRATCH_DIR, `${id}.json`) : null
 
 // `id` is the bare UUID (no extension) shared with the .xlsx for a preview, or a fresh UUID for a
-// confirmed-import summary.
-export const writeImportSidecar = async (id: string, issues: ImportIssue[]): Promise<void> => {
+// confirmed-import summary. `sheets` is only populated for a preview.
+export const writeImportSidecar = async (
+  id: string,
+  { issues, sheets = [] }: { issues: ImportIssue[]; sheets?: SheetPreview[] },
+): Promise<void> => {
   const target = sidecarPath(id)
   if (!target) return
   const payload: ImportResultSidecar = {
     issues: issues.slice(0, MAX_STORED_ISSUES),
     moreIssues: issues.length > MAX_STORED_ISSUES ? issues.length - MAX_STORED_ISSUES : 0,
+    sheets,
   }
   await fs.mkdir(SCRATCH_DIR, { recursive: true })
   await fs.writeFile(target, JSON.stringify(payload))
@@ -53,7 +66,11 @@ export const readImportSidecar = async (id: string | undefined): Promise<ImportR
   try {
     const parsed = JSON.parse(await fs.readFile(target, 'utf8')) as ImportResultSidecar
     if (!Array.isArray(parsed.issues)) return null
-    return { issues: parsed.issues, moreIssues: Number(parsed.moreIssues) || 0 }
+    return {
+      issues: parsed.issues,
+      moreIssues: Number(parsed.moreIssues) || 0,
+      sheets: Array.isArray(parsed.sheets) ? parsed.sheets : [],
+    }
   } catch {
     return null
   }

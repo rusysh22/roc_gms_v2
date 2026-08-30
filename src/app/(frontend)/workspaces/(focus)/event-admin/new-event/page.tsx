@@ -1878,6 +1878,12 @@ const CategoriesStep = async ({
 
 type ImportIssue = { sheet: string; name: string; reason: string }
 
+const PREVIEW_STATUS_STYLE: Record<'create' | 'update' | 'skip', { label: string; className: string }> = {
+  create: { label: 'create', className: 'bg-green/15 text-green' },
+  update: { label: 'update', className: 'bg-blue/15 text-blue' },
+  skip: { label: 'skip', className: 'bg-danger/15 text-danger' },
+}
+
 const PARTICIPANT_TABS = [
   { key: 'clubs', label: 'Clubs' },
   { key: 'teams', label: 'Teams' },
@@ -1946,6 +1952,7 @@ const ParticipantsStep = async ({
   const issuesMoreIssues = resultSidecar?.moreIssues ?? 0
   const previewIssues: ImportIssue[] = previewSidecar?.issues ?? []
   const previewMoreIssues = previewSidecar?.moreIssues ?? 0
+  const previewSheets = previewSidecar?.sheets ?? []
   const [clubs, teams, players, categories] = await Promise.all([
     payload.find({ collection: 'clubs', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'teams', depth: 1, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -2118,7 +2125,85 @@ const ParticipantsStep = async ({
               </div>
             ))}
           </dl>
-          {previewIssues.length > 0 ? (
+          {previewSheets.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-ink-soft">
+                Row-by-row mapping per sheet.{' '}
+                <span className="font-semibold text-green">create</span> = new row,{' '}
+                <span className="font-semibold text-blue">update</span> = matches an existing row by
+                name/slug,{' '}
+                <span className="font-semibold text-danger">skip</span> = not imported (see the note).
+                {importPreviewSkipped ? ` ${importPreviewSkipped} row(s) will be skipped in total.` : ''}
+              </p>
+              {previewSheets.map((sheet) => {
+                const counts = sheet.rows.reduce(
+                  (acc, row) => ({ ...acc, [row.status]: (acc[row.status] ?? 0) + 1 }),
+                  {} as Record<string, number>,
+                )
+                const hasProblem = sheet.rows.some((row) => row.status === 'skip' || row.notes.length > 0)
+                return (
+                  <details key={sheet.sheet} open={hasProblem}>
+                    <summary className="cursor-pointer text-xs font-bold select-none">
+                      {sheet.sheet}{' '}
+                      <span className="font-semibold text-ink-soft">
+                        — {sheet.total} row{sheet.total === 1 ? '' : 's'}
+                        {counts.create ? ` · ${counts.create} create` : ''}
+                        {counts.update ? ` · ${counts.update} update` : ''}
+                        {counts.skip ? ` · ${counts.skip} skip` : ''}
+                      </span>
+                    </summary>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full min-w-[32rem] border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-line text-left text-ink-soft">
+                            <th className="py-1 pr-2 font-semibold">#</th>
+                            <th className="py-1 pr-2 font-semibold">status</th>
+                            {sheet.columns.map((col) => (
+                              <th key={col} className="py-1 pr-2 font-semibold">
+                                {col}
+                              </th>
+                            ))}
+                            <th className="py-1 font-semibold">notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sheet.rows.map((row, index) => {
+                            const style = PREVIEW_STATUS_STYLE[row.status]
+                            return (
+                              <tr key={index} className="border-b border-line/60 align-top">
+                                <td className="py-1 pr-2 text-ink-soft">{index + 1}</td>
+                                <td className="py-1 pr-2">
+                                  <span
+                                    className={cn(
+                                      'inline-block rounded px-1.5 py-0.5 text-[0.65rem] font-bold uppercase',
+                                      style.className,
+                                    )}
+                                  >
+                                    {style.label}
+                                  </span>
+                                </td>
+                                {row.cells.map((cell, cellIndex) => (
+                                  <td key={cellIndex} className="py-1 pr-2">
+                                    {cell || <span className="text-ink-soft/50">—</span>}
+                                  </td>
+                                ))}
+                                <td className="py-1 text-ink-soft">{row.notes.join('; ')}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      {sheet.total > sheet.rows.length ? (
+                        <p className="mt-1 text-[0.7rem] font-semibold text-ink-soft">
+                          + {sheet.total - sheet.rows.length} more row(s) not shown here.
+                        </p>
+                      ) : null}
+                    </div>
+                  </details>
+                )
+              })}
+            </div>
+          ) : previewIssues.length > 0 ? (
             <details>
               <summary className="cursor-pointer text-xs font-bold text-ink-soft select-none">
                 {importPreviewSkipped ? `${importPreviewSkipped} row(s) will be skipped. ` : ''}

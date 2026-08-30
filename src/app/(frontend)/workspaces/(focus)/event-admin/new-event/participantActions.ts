@@ -15,6 +15,9 @@ import {
   deleteImportSidecar,
   scratchFilePath,
   writeImportSidecar,
+  type ImportIssue,
+  type PreviewRowStatus,
+  type SheetPreview,
 } from './importScratch'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
@@ -378,179 +381,268 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   let pairsToCreate = 0
   let entriesToRegister = 0
   let skippedCount = 0
-  const issues: { sheet: string; name: string; reason: string }[] = []
-  const skip = (sheet: string, name: string, reason: string) => {
-    skippedCount += 1
-    issues.push({ sheet, name: name || '(blank)', reason })
-  }
+  const issues: ImportIssue[] = []
   const warn = (sheet: string, name: string, reason: string) => {
     issues.push({ sheet, name: name || '(blank)', reason })
   }
-  const checkCategory = (sheet: string, name: string, categoryNames: string[] | undefined, expectedMode: string) => {
-    if (!categoryNames) return
+
+  // Per-sheet "what each row will do" preview. Each sheet loop below records one PreviewRow per
+  // input row - the same create/update/skip decision and the same warnings the confirm pass will
+  // reach - so the wizard can show the mapping, not just totals. Capped per sheet to keep the
+  // sidecar small; `total` still reflects the real count.
+  const MAX_PREVIEW_ROWS = 50
+  const sheetPreviews = new Map<string, SheetPreview>()
+  const recordRow = (
+    sheet: string,
+    columns: string[],
+    cells: string[],
+    status: PreviewRowStatus,
+    notes: string[],
+  ) => {
+    let bucket = sheetPreviews.get(sheet)
+    if (!bucket) {
+      bucket = { sheet, columns, rows: [], total: 0 }
+      sheetPreviews.set(sheet, bucket)
+    }
+    bucket.total += 1
+    if (bucket.rows.length < MAX_PREVIEW_ROWS) bucket.rows.push({ cells, status, notes })
+  }
+  // A skip is terminal for the row - record it and report it in one call.
+  const skipRow = (
+    sheet: string,
+    columns: string[],
+    cells: string[],
+    name: string,
+    reason: string,
+  ) => {
+    skippedCount += 1
+    issues.push({ sheet, name: name || '(blank)', reason })
+    recordRow(sheet, columns, cells, 'skip', [reason])
+  }
+  // Resolve every category_name on a row: bump the entry counter for each valid one, collect a note
+  // for each that cannot be used. Returns the notes so the caller can attach them to the row.
+  const checkCategory = (
+    sheet: string,
+    name: string,
+    categoryNames: string[] | undefined,
+    expectedMode: string,
+  ): string[] => {
+    const notes: string[] = []
+    if (!categoryNames) return notes
     for (const categoryName of categoryNames) {
       const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
       if (!result) continue
       if ('warning' in result) {
         warn(sheet, name, result.warning)
+        notes.push(result.warning)
       } else {
         entriesToRegister += 1
       }
     }
+    return notes
   }
 
+  const SPORTS_COLS = ['name', 'type']
   for (const row of parsed.sports) {
+    const cells = [row.name || '', row.sportType || '']
     const slug = slugify(row.name)
     if (!slug) {
-      skip('Sports', row.name, 'Missing or invalid name')
+      skipRow('Sports', SPORTS_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
+    const notes: string[] = []
     if (row.sportType && !validSportTypes.has(row.sportType)) {
       warn('Sports', row.name, `Sport type "${row.sportType}" is not valid - will be saved as "court"`)
+      notes.push(`type "${row.sportType}" invalid -> "court"`)
     }
     if (knownSportSlugs.has(slug)) {
       sportsToUpdate += 1
+      recordRow('Sports', SPORTS_COLS, cells, 'update', notes)
     } else {
       sportsToCreate += 1
       knownSportSlugs.add(slug)
       knownSportNames.add(row.name.trim().toLowerCase())
+      recordRow('Sports', SPORTS_COLS, cells, 'create', notes)
     }
   }
 
+  const RULESETS_COLS = ['name', 'sport', 'score_type']
   for (const row of parsed.rulesets) {
+    const cells = [row.name || '', row.sportName || '', row.scoreType || '']
     const slug = slugify(row.name)
     if (!slug) {
-      skip('Rulesets', row.name, 'Missing or invalid name')
+      skipRow('Rulesets', RULESETS_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
     if (!row.sportName) {
-      skip('Rulesets', row.name, 'Missing sport_name')
+      skipRow('Rulesets', RULESETS_COLS, cells, row.name, 'Missing sport_name')
       continue
     }
     if (!knownSportNames.has(row.sportName.trim().toLowerCase()) && !knownSportSlugs.has(slugify(row.sportName))) {
-      skip('Rulesets', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      skipRow('Rulesets', RULESETS_COLS, cells, row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
       continue
     }
+    const notes: string[] = []
     if (row.scoreType && !validScoreTypes.has(row.scoreType)) {
       warn('Rulesets', row.name, `score_type "${row.scoreType}" is not valid - will use "points"`)
+      notes.push(`score_type "${row.scoreType}" invalid -> "points"`)
     }
     if (knownRulesetSlugs.has(slug)) {
       rulesetsToUpdate += 1
+      recordRow('Rulesets', RULESETS_COLS, cells, 'update', notes)
     } else {
       rulesetsToCreate += 1
       knownRulesetSlugs.add(slug)
       knownRulesetNames.add(row.name.trim().toLowerCase())
+      recordRow('Rulesets', RULESETS_COLS, cells, 'create', notes)
     }
   }
 
+  const CATEGORIES_COLS = ['name', 'sport', 'mode', 'format']
   for (const row of parsed.categories) {
+    const cells = [row.name || '', row.sportName || '', row.participantMode || '', row.formatType || '']
     const slug = slugify(row.name)
     if (!slug) {
-      skip('Categories', row.name, 'Missing or invalid name')
+      skipRow('Categories', CATEGORIES_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
     if (!row.sportName) {
-      skip('Categories', row.name, 'Missing sport_name')
+      skipRow('Categories', CATEGORIES_COLS, cells, row.name, 'Missing sport_name')
       continue
     }
     if (!knownSportNames.has(row.sportName.trim().toLowerCase()) && !knownSportSlugs.has(slugify(row.sportName))) {
-      skip('Categories', row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
+      skipRow('Categories', CATEGORIES_COLS, cells, row.name, `Sport "${row.sportName}" not found on the Sports sheet or in this event`)
       continue
     }
+    const notes: string[] = []
     if (row.rulesetName && !knownRulesetNames.has(row.rulesetName.trim().toLowerCase())) {
       warn('Categories', row.name, `Ruleset "${row.rulesetName}" not found - will be saved without a ruleset`)
+      notes.push(`ruleset "${row.rulesetName}" not found -> none`)
     }
     if (row.participantMode && !validParticipantModes.has(row.participantMode)) {
       warn('Categories', row.name, `participant_mode "${row.participantMode}" is not valid - will use "open"`)
+      notes.push(`mode "${row.participantMode}" invalid -> "open"`)
     }
     if (row.formatType && !validFormatTypes.has(row.formatType)) {
       warn('Categories', row.name, `format_type "${row.formatType}" is not valid - will use "single_elimination"`)
+      notes.push(`format "${row.formatType}" invalid -> "single_elimination"`)
     }
     if (row.status && !validCategoryStatuses.has(row.status)) {
       warn('Categories', row.name, `status "${row.status}" is not valid - will use "draft"`)
+      notes.push(`status "${row.status}" invalid -> "draft"`)
     }
     if (row.thirdPlacePolicy && !validThirdPlacePolicies.has(row.thirdPlacePolicy)) {
       warn('Categories', row.name, `third_place_policy "${row.thirdPlacePolicy}" is not valid - will use "none"`)
+      notes.push(`third_place_policy "${row.thirdPlacePolicy}" invalid -> "none"`)
     }
     if (knownSportCategorySlugs.has(slug)) {
       categoriesToUpdate += 1
+      recordRow('Categories', CATEGORIES_COLS, cells, 'update', notes)
     } else {
       categoriesToCreate += 1
       knownSportCategorySlugs.add(slug)
+      recordRow('Categories', CATEGORIES_COLS, cells, 'create', notes)
     }
   }
 
+  const CLUBS_COLS = ['name', 'contact', 'category_name']
   for (const row of parsed.clubs) {
+    const cells = [row.name || '', row.contactPerson || row.contactEmail || '', (row.categoryNames || []).join(', ')]
     const slug = slugify(row.name)
     const key = row.name.trim().toLowerCase()
     if (!slug) {
-      skip('Clubs', row.name, 'Missing or invalid name')
+      skipRow('Clubs', CLUBS_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
+    const notes = checkCategory('Clubs', row.name, row.categoryNames, 'club')
     if (knownClubNames.has(key)) {
       clubsToUpdate += 1
+      recordRow('Clubs', CLUBS_COLS, cells, 'update', notes)
     } else {
       knownClubNames.add(key)
       clubsToCreate += 1
+      recordRow('Clubs', CLUBS_COLS, cells, 'create', notes)
     }
-    checkCategory('Clubs', row.name, row.categoryNames, 'club')
   }
 
+  const TEAMS_COLS = ['name', 'club', 'category_name']
   for (const row of parsed.teams) {
+    const cells = [row.name || '', row.clubName || '', (row.categoryNames || []).join(', ')]
     const slug = slugify(row.name)
     if (!slug) {
-      skip('Teams', row.name, 'Missing or invalid name')
+      skipRow('Teams', TEAMS_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
+    const notes: string[] = []
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Teams', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
+      notes.push(`club "${row.clubName}" not found -> none`)
     }
+    notes.push(...checkCategory('Teams', row.name, row.categoryNames, 'team'))
     if (knownTeamSlugs.has(slug)) {
       teamsToUpdate += 1
+      recordRow('Teams', TEAMS_COLS, cells, 'update', notes)
     } else {
       knownTeamSlugs.add(slug)
       teamsToCreate += 1
+      recordRow('Teams', TEAMS_COLS, cells, 'create', notes)
     }
-    checkCategory('Teams', row.name, row.categoryNames, 'team')
   }
 
+  const PLAYERS_COLS = ['name', 'club', 'gender', 'id', 'category_name']
   for (const row of parsed.players) {
+    const cells = [
+      row.name || '',
+      row.clubName || '',
+      row.gender || '',
+      row.identificationNumber || '',
+      (row.categoryNames || []).join(', '),
+    ]
     const identificationNumberKey = row.identificationNumber ? row.identificationNumber.trim().toLowerCase() : ''
     if (identificationNumberKey && knownIdentificationNumbers.has(identificationNumberKey)) {
-      skip('Players', row.name, `Identification number "${row.identificationNumber}" is already used in this event`)
+      skipRow('Players', PLAYERS_COLS, cells, row.name, `Identification number "${row.identificationNumber}" is already used in this event`)
       continue
     }
     if (identificationNumberKey) {
       knownIdentificationNumbers.add(identificationNumberKey)
     }
+    const notes: string[] = []
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Players', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
+      notes.push(`club "${row.clubName}" not found -> none`)
     }
     if (row.gender && !validGenders.has(row.gender)) {
       warn('Players', row.name, `Gender "${row.gender}" is not valid - will be saved without a gender`)
+      notes.push(`gender "${row.gender}" invalid -> none`)
     }
+    notes.push(...checkCategory('Players', row.name, row.categoryNames, 'individual'))
     playersToCreate += 1
     knownPlayerNames.add(row.name.trim().toLowerCase())
-    checkCategory('Players', row.name, row.categoryNames, 'individual')
+    recordRow('Players', PLAYERS_COLS, cells, 'create', notes)
   }
 
+  const PAIRS_COLS = ['player 1', 'player 2', 'club', 'category_name']
   for (const row of parsed.pairs) {
     const label = row.teamName || `${row.player1Name} / ${row.player2Name}`
+    const cells = [row.player1Name || '', row.player2Name || '', row.clubName || '', (row.categoryNames || []).join(', ')]
     const p1Key = row.player1Name.trim().toLowerCase()
     const p2Key = row.player2Name.trim().toLowerCase()
     if (p1Key === p2Key) {
-      skip('Pairs', label, 'Player 1 and Player 2 must be different players')
+      skipRow('Pairs', PAIRS_COLS, cells, label, 'Player 1 and Player 2 must be different players')
       continue
     }
     if (!knownPlayerNames.has(p1Key) || !knownPlayerNames.has(p2Key)) {
-      skip('Pairs', label, 'One or both players were not found on the Players sheet or in this event')
+      skipRow('Pairs', PAIRS_COLS, cells, label, 'One or both players were not found on the Players sheet or in this event')
       continue
     }
+    const notes: string[] = []
     if (row.clubName && !knownClubNames.has(row.clubName.trim().toLowerCase())) {
       warn('Pairs', label, `Club "${row.clubName}" not found - will be saved without a club`)
+      notes.push(`club "${row.clubName}" not found -> none`)
     }
+    notes.push(...checkCategory('Pairs', label, row.categoryNames, 'pair'))
     pairsToCreate += 1
-    checkCategory('Pairs', label, row.categoryNames, 'pair')
+    recordRow('Pairs', PAIRS_COLS, cells, 'create', notes)
   }
 
   return {
@@ -569,6 +661,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     entriesToRegister,
     skippedCount,
     issues,
+    sheets: [...sheetPreviews.values()],
   }
 }
 
@@ -615,9 +708,13 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
     // redirect/second form submission; a plain filesystem write makes re-reading it back cheap.
     await fs.mkdir(SCRATCH_DIR, { recursive: true })
     await fs.writeFile(path.join(SCRATCH_DIR, scratchFilename), buffer)
-    // Row-level notes go in a sidecar file keyed by the same id, NOT the redirect URL - dozens of
-    // skipped/warned rows used to push the URL past what some reverse proxies accept.
-    await writeImportSidecar(scratchFilename.replace(/\.xlsx$/, ''), plan.issues)
+    // Row-level notes and the per-sheet mapping preview go in a sidecar file keyed by the same id,
+    // NOT the redirect URL - dozens of rows used to push the URL past what some reverse proxies
+    // accept.
+    await writeImportSidecar(scratchFilename.replace(/\.xlsx$/, ''), {
+      issues: plan.issues,
+      sheets: plan.sheets,
+    })
   } catch (error) {
     if (isNextControlFlowError(error)) throw error
     // A malformed workbook that still parsed but breaks the dry run (bad cell types, an
@@ -1339,7 +1436,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   await deleteImportSidecar(scratchFile.replace(/\.xlsx$/, ''))
 
   const resultId = randomUUID()
-  await writeImportSidecar(resultId, issues)
+  await writeImportSidecar(resultId, { issues })
 
   revalidatePath(wizardPage)
   redirect(
