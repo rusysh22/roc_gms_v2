@@ -14,8 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatRulesetSummary } from '@/lib/rulesetSummary'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { saveRulesetAction } from './rulesetActions'
+import { deleteRulesetAction, saveRulesetAction } from './rulesetActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,7 @@ const rulesetErrorMessages: Record<string, string> = {
   invalid_input: 'Fill in a valid ruleset name, sport, and score type.',
   invalid_relationship: 'The selected sport does not belong to this event.',
   duplicate_slug: 'A ruleset with that name already exists.',
+  ruleset_in_use: 'This ruleset is attached to a category or stage - detach it there before deleting.',
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -202,12 +204,31 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
                   {(categoryCountByRuleset.get(String(ruleset.id)) || 0) === 1 ? 'y' : 'ies'}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={`${basePage}?edit=${ruleset.id}`}>
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                      Edit
-                    </Link>
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={`${basePage}?edit=${ruleset.id}`}>
+                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                        Edit
+                      </Link>
+                    </Button>
+                    {(categoryCountByRuleset.get(String(ruleset.id)) || 0) === 0 ? (
+                      <>
+                        <form id={`delete-ruleset-${ruleset.id}`} action={deleteRulesetAction}>
+                          <input type="hidden" name="id" value={String(ruleset.id)} />
+                        </form>
+                        <ConfirmSubmitButton
+                          formId={`delete-ruleset-${ruleset.id}`}
+                          tone="destructive"
+                          variant="ghost"
+                          size="sm"
+                          className="text-danger"
+                          confirmMessage={`Delete "${ruleset.name}"?`}
+                        >
+                          Delete
+                        </ConfirmSubmitButton>
+                      </>
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

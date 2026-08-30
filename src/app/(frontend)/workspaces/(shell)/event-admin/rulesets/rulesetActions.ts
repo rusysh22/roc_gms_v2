@@ -136,3 +136,42 @@ export async function saveRulesetAction(formData: FormData): Promise<void> {
   revalidatePath(page)
   redirect(`${page}?rulesetUpdated=1`)
 }
+
+export async function deleteRulesetAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: page,
+  })
+  const event = await getActiveEvent(payload)
+  const id = text(formData, 'id')
+  if (!event || !id) {
+    redirect(`${page}?rulesetError=invalid_input`)
+  }
+
+  const ruleset = await payload.findByID({ collection: 'rulesets', id, depth: 0 }).catch(() => null)
+  if (!ruleset || String(ruleset.event_id) !== String(event!.id)) {
+    redirect(`${page}?rulesetError=invalid_relationship`)
+  }
+
+  const [categories, stages] = await Promise.all([
+    payload.count({ collection: 'competition-categories', where: { ruleset_id: { equals: id } } }),
+    payload.count({ collection: 'stages', where: { ruleset_id: { equals: id } } }),
+  ])
+  if (categories.totalDocs > 0 || stages.totalDocs > 0) {
+    redirect(`${page}?rulesetError=ruleset_in_use`)
+  }
+
+  await payload.delete({ collection: 'rulesets', id })
+  await recordAuditLog({
+    payload,
+    action: 'ruleset.delete',
+    entityType: 'rulesets',
+    entityId: id,
+    before: ruleset,
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(page)
+  redirect(`${page}?rulesetUpdated=1`)
+}

@@ -14,8 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero, toOptions } from '../../../workspaceComponents'
+import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { saveCourtAction, saveVenueAction } from './facilityActions'
+import { deleteCourtAction, deleteVenueAction, saveCourtAction, saveVenueAction } from './facilityActions'
 
 export const dynamic = 'force-dynamic'
 const basePage = '/workspaces/event-admin/facilities'
@@ -23,6 +24,8 @@ const facilityErrorMessages: Record<string, string> = {
   invalid_venue: 'Fill in a valid venue name.',
   invalid_court: 'Fill in a valid court name, venue, and capacity.',
   invalid_relationship: 'The selected venue/sport does not belong to the active event.',
+  venue_in_use: 'This venue still has courts or scheduled matches - remove those first.',
+  court_in_use: 'This court still has matches assigned - reschedule or remove them first.',
 }
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 const param = (params: Record<string, string | string[] | undefined>, key: string) =>
@@ -211,12 +214,27 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
                   <TableCell className="text-ink-soft">{item.address || '—'}</TableCell>
                   <TableCell className="text-ink-soft">{item.is_virtual ? 'Virtual' : 'Physical'}</TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?venue=${item.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href={`${basePage}?venue=${item.id}`}>
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          Edit
+                        </Link>
+                      </Button>
+                      <form id={`delete-venue-${item.id}`} action={deleteVenueAction}>
+                        <input type="hidden" name="id" value={String(item.id)} />
+                      </form>
+                      <ConfirmSubmitButton
+                        formId={`delete-venue-${item.id}`}
+                        tone="destructive"
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger"
+                        confirmMessage={`Delete "${item.name}"? Only allowed if it has no courts or matches.`}
+                      >
+                        Delete
+                      </ConfirmSubmitButton>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -268,12 +286,27 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
                     </StatusBadge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?court=${item.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href={`${basePage}?court=${item.id}`}>
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          Edit
+                        </Link>
+                      </Button>
+                      <form id={`delete-court-${item.id}`} action={deleteCourtAction}>
+                        <input type="hidden" name="id" value={String(item.id)} />
+                      </form>
+                      <ConfirmSubmitButton
+                        formId={`delete-court-${item.id}`}
+                        tone="destructive"
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger"
+                        confirmMessage={`Delete "${item.name}"? Only allowed if no matches are assigned to it.`}
+                      >
+                        Delete
+                      </ConfirmSubmitButton>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

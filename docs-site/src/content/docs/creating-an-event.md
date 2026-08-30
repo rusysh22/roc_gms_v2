@@ -131,8 +131,11 @@ For each category you set:
 - Optional: **ruleset**, **status** (draft / open / locked / published / archived), roster size
   limits, group qualify count, third-place policy, result unit, and medal settings.
 
-Categories can be edited, duplicated, and deleted from this step. A **draft** category does not block
-wizard progress and is not publishable yet.
+Categories can be edited and duplicated. To delete one, use **Delete** (for an empty category) or
+**Delete + all data** — which also removes its entries, groups, matches, and cached bracket /
+standings. Deleting is blocked once any match in the category has started. The same applies to a
+**Sport** (**Delete + all data** removes its categories and rulesets; its courts are detached, not
+deleted). A **draft** category does not block wizard progress and is not publishable yet.
 
 > **Example** — a company sports day with three sports:
 >

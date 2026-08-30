@@ -167,8 +167,12 @@ const errorMessages: Record<string, string> = {
   invalid_catalog_sport: 'Choose a sport from the catalog and a valid format.',
   empty_catalog_selection: 'Tick at least one event before adding.',
   category_in_use:
-    'This category already has entries, stages, or matches - archive it instead of deleting.',
-  sport_in_use: 'This sport already has categories, courts, or matches - remove those first.',
+    'This category already has entries, stages, or matches - use "Delete + all data" to remove it and everything under it.',
+  category_has_started_match:
+    'A match in this category has already started or finished - it cannot be deleted. Handle the match through the match lifecycle first.',
+  sport_in_use: 'This sport still has categories, courts, or matches - use "Delete + all data", or clear those first.',
+  sport_has_started_match:
+    'A match under this sport has already started or finished - it cannot be deleted.',
   player_in_use: 'This player already has entries or roster spots - remove those first.',
 }
 
@@ -1243,10 +1247,31 @@ const getRulesetPreset = (sportType: string) =>
   RULESET_PRESET_BY_SPORT_TYPE[sportType] ?? RULESET_PRESET_BY_SPORT_TYPE.other
 
 const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
-  const [sports, rulesets] = await Promise.all([
+  const [sports, rulesets, sportCategories, sportCourts, sportMatches] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
     payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'competition-categories', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'courts', depth: 0, limit: 500, where: { event_id: { equals: eventId } } }),
+    payload.find({ collection: 'matches', depth: 0, limit: 5000, where: { event_id: { equals: eventId } } }),
   ])
+  const sportUsage = new Map<string, { categories: number; courts: number; matches: number; started: number }>()
+  const bump = (id: unknown, key: 'categories' | 'courts' | 'matches' | 'started') => {
+    const k = String(id)
+    const info = sportUsage.get(k) || { categories: 0, courts: 0, matches: 0, started: 0 }
+    info[key] += 1
+    sportUsage.set(k, info)
+  }
+  for (const category of sportCategories.docs) bump(category.sport_id, 'categories')
+  for (const court of sportCourts.docs) if (court.sport_id) bump(court.sport_id, 'courts')
+  for (const match of sportMatches.docs) {
+    bump(match.sport_id, 'matches')
+    if (
+      !['draft', 'ready_for_scheduling', 'scheduled', 'published', 'check_in_open', 'ready_to_start'].includes(
+        String(match.status),
+      )
+    )
+      bump(match.sport_id, 'started')
+  }
 
   return (
     <>
@@ -1312,18 +1337,38 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
                     : {rulesets.docs.filter((r) => String(r.sport_id) === String(sport.id)).length}
                   </p>
                 </div>
-                <form id={`delete-sport-${sport.id}`} action={deleteSportAction}>
-                  <input type="hidden" name="eventId" value={eventId} />
-                  <input type="hidden" name="sportId" value={sport.id} />
-                </form>
-                <ConfirmSubmitButton
-                  formId={`delete-sport-${sport.id}`}
-                  size="sm"
-                  variant="ghost"
-                  confirmMessage={`Delete "${sport.name}"? Only allowed if it has no categories, courts, or matches yet.`}
-                >
-                  Delete
-                </ConfirmSubmitButton>
+                {(() => {
+                  const usage = sportUsage.get(String(sport.id)) || {
+                    categories: 0,
+                    courts: 0,
+                    matches: 0,
+                    started: 0,
+                  }
+                  const hasData = usage.categories > 0 || usage.courts > 0 || usage.matches > 0
+                  return (
+                    <>
+                      <form id={`delete-sport-${sport.id}`} action={deleteSportAction}>
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="sportId" value={sport.id} />
+                        {hasData ? <input type="hidden" name="cascade" value="1" /> : null}
+                      </form>
+                      <ConfirmSubmitButton
+                        formId={`delete-sport-${sport.id}`}
+                        size="sm"
+                        variant="ghost"
+                        tone={hasData ? 'destructive' : 'default'}
+                        className={hasData ? 'text-danger' : undefined}
+                        confirmMessage={
+                          hasData
+                            ? `Delete "${sport.name}" AND everything under it — ${usage.categories} categor${usage.categories === 1 ? 'y' : 'ies'}, ${usage.matches} match${usage.matches === 1 ? '' : 'es'}, and its rulesets? Its courts are detached, not deleted. This cannot be undone.${usage.started > 0 ? ' (Blocked: a match has already started.)' : ''}`
+                            : `Delete "${sport.name}"?`
+                        }
+                      >
+                        {hasData ? 'Delete + all data' : 'Delete'}
+                      </ConfirmSubmitButton>
+                    </>
+                  )
+                })()}
               </div>
               <form action={addRulesetAction} className="grid gap-4 sm:grid-cols-2">
                 <input type="hidden" name="eventId" value={eventId} />
@@ -1470,6 +1515,35 @@ const CategoriesStep = async ({
     }),
     payload.find({ collection: 'rulesets', depth: 0, limit: 200, where: { event_id: { equals: eventId } }, sort: 'name' }),
   ])
+
+  const categoryIdList = categories.docs.map((category) => category.id)
+  const [catEntries, catMatches] = categoryIdList.length
+    ? await Promise.all([
+        payload.find({
+          collection: 'competition-entries',
+          depth: 0,
+          limit: 5000,
+          where: { category_id: { in: categoryIdList } },
+        }),
+        payload.find({ collection: 'matches', depth: 0, limit: 5000, where: { category_id: { in: categoryIdList } } }),
+      ])
+    : [{ docs: [] as { category_id?: unknown }[] }, { docs: [] as { category_id?: unknown; status?: unknown }[] }]
+  const categoryDataCount = new Map<string, { entries: number; matches: number; started: number }>()
+  for (const entry of catEntries.docs) {
+    const key = String(entry.category_id)
+    const info = categoryDataCount.get(key) || { entries: 0, matches: 0, started: 0 }
+    info.entries += 1
+    categoryDataCount.set(key, info)
+  }
+  const STARTED_MATCH = (status: string) =>
+    !['draft', 'ready_for_scheduling', 'scheduled', 'published', 'check_in_open', 'ready_to_start'].includes(status)
+  for (const match of catMatches.docs) {
+    const key = String(match.category_id)
+    const info = categoryDataCount.get(key) || { entries: 0, matches: 0, started: 0 }
+    info.matches += 1
+    if (STARTED_MATCH(String(match.status))) info.started += 1
+    categoryDataCount.set(key, info)
+  }
 
   return (
     <>
@@ -1771,18 +1845,33 @@ const CategoriesStep = async ({
                       </SubmitButton>
                     </form>
 
-                    <form id={deleteFormId} action={deleteCategoryAction}>
-                      <input type="hidden" name="eventId" value={eventId} />
-                      <input type="hidden" name="categoryId" value={String(category.id)} />
-                    </form>
-                    <ConfirmSubmitButton
-                      formId={deleteFormId}
-                      size="sm"
-                      variant="ghost"
-                      confirmMessage={`Delete "${category.name}"? Only allowed if it has no entries, stages, or matches yet.`}
-                    >
-                      Delete
-                    </ConfirmSubmitButton>
+                    {(() => {
+                      const data = categoryDataCount.get(String(category.id)) || { entries: 0, matches: 0, started: 0 }
+                      const hasData = data.entries > 0 || data.matches > 0
+                      return (
+                        <>
+                          <form id={deleteFormId} action={deleteCategoryAction}>
+                            <input type="hidden" name="eventId" value={eventId} />
+                            <input type="hidden" name="categoryId" value={String(category.id)} />
+                            {hasData ? <input type="hidden" name="cascade" value="1" /> : null}
+                          </form>
+                          <ConfirmSubmitButton
+                            formId={deleteFormId}
+                            size="sm"
+                            variant="ghost"
+                            tone={hasData ? 'destructive' : 'default'}
+                            className={hasData ? 'text-danger' : undefined}
+                            confirmMessage={
+                              hasData
+                                ? `Delete "${category.name}" AND everything under it — ${data.entries} entr${data.entries === 1 ? 'y' : 'ies'}, ${data.matches} match${data.matches === 1 ? '' : 'es'}, plus its groups, bracket and standings? This cannot be undone.${data.started > 0 ? ' (Blocked: a match has already started.)' : ''}`
+                                : `Delete "${category.name}"?`
+                            }
+                          >
+                            {hasData ? 'Delete + all data' : 'Delete'}
+                          </ConfirmSubmitButton>
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
               )

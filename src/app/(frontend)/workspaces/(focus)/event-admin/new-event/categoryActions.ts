@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { categoryHasStartedMatch, deleteCategoryCascade } from '@/lib/cascadeDelete'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
@@ -323,22 +324,33 @@ export async function deleteCategoryAction(formData: FormData): Promise<void> {
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=invalid_relationship`)
   }
 
+  // `cascade=1` (behind an extra confirm in the UI) removes the category and everything under it:
+  // entries, stages, groups, matches + sets, rosters, medals, pending registrations, the cached
+  // bracket/standings. Still refuses once any match has started - a real result is not bulk-deletable.
+  const cascade = text(formData, 'cascade') === '1'
+
   const [entries, stages, matches] = await Promise.all([
     payload.count({ collection: 'competition-entries', where: { category_id: { equals: categoryId } } }),
     payload.count({ collection: 'stages', where: { category_id: { equals: categoryId } } }),
     payload.count({ collection: 'matches', where: { category_id: { equals: categoryId } } }),
   ])
-  if (entries.totalDocs > 0 || stages.totalDocs > 0 || matches.totalDocs > 0) {
+  const hasData = entries.totalDocs > 0 || stages.totalDocs > 0 || matches.totalDocs > 0
+
+  if (hasData && !cascade) {
     redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=category_in_use`)
   }
 
-  await payload.delete({ collection: 'competition-categories', id: categoryId })
+  if (cascade && (await categoryHasStartedMatch(payload, categoryId))) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=categories&wizardError=category_has_started_match`)
+  }
+
+  await deleteCategoryCascade(payload, categoryId)
   await recordAuditLog({
     payload,
-    action: 'competition_category.delete',
+    action: cascade ? 'competition_category.delete_cascade' : 'competition_category.delete',
     entityType: 'competition-categories',
     entityId: categoryId,
-    before: category,
+    before: { ...category, entryCount: entries.totalDocs, matchCount: matches.totalDocs },
     after: null,
     actorUserId: user.id,
   })

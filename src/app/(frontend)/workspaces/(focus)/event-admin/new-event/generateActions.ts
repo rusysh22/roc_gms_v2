@@ -18,7 +18,7 @@ import {
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
-import { UNSTARTED_TARGET_STATUSES } from '@/lib/winnerAdvancement'
+import { categoryHasStartedMatch, clearCategoryGeneratedData } from '@/lib/cascadeDelete'
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
@@ -316,64 +316,29 @@ export async function clearGeneratedMatchesAction(formData: FormData): Promise<v
     redirect(`${backTo}&wizardError=invalid_relationship`)
   }
 
-  const matches = await payload.find({
+  const matchCount = await payload.count({
     collection: 'matches',
-    depth: 0,
-    limit: 2000,
     where: { category_id: { equals: categoryId } },
   })
-  if (matches.totalDocs === 0) {
+  if (matchCount.totalDocs === 0) {
     redirect(`${backTo}&wizardError=nothing_to_clear`)
   }
-
-  const started = matches.docs.filter((match) => !UNSTARTED_TARGET_STATUSES.has(String(match.status)))
-  if (started.length > 0) {
+  if (await categoryHasStartedMatch(payload, categoryId)) {
     redirect(`${backTo}&wizardError=matches_already_started`)
   }
 
-  const stages = await payload.find({
-    collection: 'stages',
-    depth: 0,
-    limit: 20,
-    where: { category_id: { equals: categoryId } },
-  })
-  const stageIds = stages.docs.map((stage) => stage.id)
-  const matchIds = matches.docs.map((match) => match.id)
-
-  // Children first (FK order): sets -> matches -> bracket/standings/groups -> entry.group_id -> stages.
-  for (const match of matches.docs) {
-    await payload.delete({ collection: 'match-sets', where: { match_id: { equals: match.id } } }).catch(() => null)
-  }
-  await payload.delete({ collection: 'matches', where: { id: { in: matchIds } } })
-
-  if (stageIds.length > 0) {
-    await payload.delete({ collection: 'brackets', where: { stage_id: { in: stageIds } } }).catch(() => null)
-    await payload.delete({ collection: 'standings', where: { stage_id: { in: stageIds } } }).catch(() => null)
-
-    const groupedEntries = await payload.find({
-      collection: 'competition-entries',
-      depth: 0,
-      limit: 2000,
-      where: { and: [{ category_id: { equals: categoryId } }, { group_id: { exists: true } }] },
-    })
-    for (const entry of groupedEntries.docs) {
-      await payload.update({ collection: 'competition-entries', id: entry.id, data: { group_id: null } })
-    }
-
-    await payload.delete({ collection: 'groups', where: { stage_id: { in: stageIds } } }).catch(() => null)
-    await payload.delete({ collection: 'stages', where: { id: { in: stageIds } } })
-  }
+  const { matchCount: cleared, stageCount } = await clearCategoryGeneratedData(payload, categoryId)
 
   await recordAuditLog({
     payload,
     action: 'competition_category.clear_generated_matches',
     entityType: 'competition-categories',
     entityId: categoryId,
-    before: { matchCount: matches.totalDocs, stageCount: stages.totalDocs },
+    before: { matchCount: cleared, stageCount },
     after: null,
     actorUserId: user.id,
   })
 
   revalidatePath(wizardPage)
-  redirect(`${backTo}&wizardCleared=${matches.totalDocs}`)
+  redirect(`${backTo}&wizardCleared=${cleared}`)
 }
