@@ -6,11 +6,16 @@ import { Card, CardTitle } from '@/components/ui/card'
 import { FileUpload } from '@/components/ui/file-upload'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { readScratchJson } from '@/lib/importScratch'
+import type { ScheduleImportPreview, ScheduleImportRowOutcome } from '@/lib/scheduleImport'
 import { getActiveEvent } from '../../../activeEvent'
-import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
+import { NoActiveEventNotice, PageHero, StatBlock, StatGrid } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import type { ScheduleImportRowOutcome } from '@/lib/scheduleImport'
-import { applyScheduleImportAction } from '../schedulerActions'
+import {
+  applyScheduleImportAction,
+  cancelScheduleImportAction,
+  previewScheduleImportAction,
+} from '../schedulerActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +37,44 @@ const getParam = (params: Record<string, string | string[] | undefined>, key: st
   const value = params[key]
   return Array.isArray(value) ? value[0] : value || ''
 }
+
+const ResultsTable = ({ rows }: { rows: ScheduleImportRowOutcome[] }) => (
+  <div className="overflow-x-auto">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Match</TableHead>
+          <TableHead>Outcome</TableHead>
+          <TableHead>Detail</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((result, index) => (
+          <TableRow key={`${result.matchNumber}-${index}`}>
+            <TableCell className="font-bold">
+              <Link
+                href={`/workspaces/matches/${result.matchNumber}`}
+                className="text-blue no-underline hover:underline"
+              >
+                {result.matchNumber}
+              </Link>
+            </TableCell>
+            <TableCell>
+              <span
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-[0.7rem] font-bold uppercase tracking-wide ${outcomeStyles[result.outcome]}`}
+              >
+                {result.outcome === 'updated' ? 'will change' : result.outcome}
+              </span>
+            </TableCell>
+            <TableCell className="text-sm text-ink-soft">
+              {result.changePreview || result.message}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  </div>
+)
 
 export default async function ScheduleImportPage({
   searchParams,
@@ -60,18 +103,24 @@ export default async function ScheduleImportPage({
   let results: ScheduleImportRowOutcome[] = []
   if (resultsRaw) {
     try {
-      results = JSON.parse(decodeURIComponent(resultsRaw)) as ScheduleImportRowOutcome[]
+      const parsed = JSON.parse(decodeURIComponent(resultsRaw)) as ScheduleImportRowOutcome[]
+      if (Array.isArray(parsed)) results = parsed
     } catch {
       results = []
     }
   }
+
+  const previewFile = getParam(params, 'previewFile')
+  const preview = previewFile
+    ? await readScratchJson<ScheduleImportPreview>(previewFile.replace(/\.xlsx$/, ''))
+    : null
 
   return (
     <>
       <PageHero
         eyebrow="Scheduler Workspace"
         title="Bulk Schedule Import"
-        summary="Export the current schedule, fill in the New Start/End/Venue/Court/Status columns for whichever matches you need to change, then upload it here. Every row goes through the same reschedule and status-transition validation as the single-match forms - conflicts, invalid states, and missing winners are rejected per row, not silently applied."
+        summary="Export the current schedule, fill in the New Start/End/Venue/Court/Status columns for the matches you need to change, then upload it back. You see a preview of exactly what will change before anything is written; each row goes through the same validation as the single-match forms."
         actions={
           <Button asChild variant="secondary">
             <Link href="/workspaces/scheduler">Back to Scheduler</Link>
@@ -96,64 +145,124 @@ export default async function ScheduleImportPage({
             </AlertBanner>
           ) : null}
 
-          <Card className="mb-6 flex flex-col gap-3">
-            <div>
-              <CardTitle>1. Export the template</CardTitle>
-              <p className="mt-1 text-sm text-ink-soft">
-                Downloads every match in this event as one sheet. The first columns (Match # through
-                Public) are read-only context; the "New ..." columns are what this import reads.
-              </p>
-            </div>
-            <Button asChild variant="secondary" size="sm" className="self-start">
-              <a href="/workspaces/scheduler/export" download>
-                Download current schedule (.xlsx)
-              </a>
-            </Button>
-          </Card>
+          {preview ? (
+            <Card className="mb-6 flex flex-col gap-4 border-gold">
+              <div>
+                <CardTitle>Review before applying</CardTitle>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Nothing has been written yet. This is what the upload would do:
+                </p>
+              </div>
+              <StatGrid>
+                <StatBlock label="Rows that will change" value={preview.updated} tone="good" />
+                <StatBlock
+                  label="Skipped (nothing filled in)"
+                  value={preview.skipped}
+                  tone="default"
+                />
+                <StatBlock
+                  label="Rows with errors"
+                  value={preview.errors}
+                  tone={preview.errors > 0 ? 'warn' : 'default'}
+                />
+              </StatGrid>
 
-          <Card className="mb-6 flex flex-col gap-3">
-            <div>
-              <CardTitle>2. Fill in changes</CardTitle>
-              <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
-                <li>
-                  To reschedule a match, fill in <strong>all four</strong> of New Start, New End, New
-                  Venue, and New Court together (start/end as <code>YYYY-MM-DD HH:mm</code>, venue/court
-                  matched by name).
-                </li>
-                <li>
-                  To change status, fill in <strong>New Status</strong> with one of{' '}
-                  <code>scheduled</code>, <code>postponed</code>, <code>cancelled</code>, or{' '}
-                  <code>walkover</code>. Walkover also needs <strong>Winner (A/B)</strong>.
-                </li>
-                <li>Leave a row&apos;s "New ..." columns blank to leave that match untouched.</li>
-                <li>Reason is optional and recorded on the audit log for every changed row.</li>
-              </ul>
-            </div>
-          </Card>
+              {preview.rows.filter((row) => row.outcome !== 'skipped').length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">
+                    Row by row {preview.moreRows ? `(first ${preview.rows.length} of ${preview.total})` : ''}
+                  </p>
+                  <ResultsTable rows={preview.rows.filter((row) => row.outcome !== 'skipped')} />
+                  {preview.moreRows ? (
+                    <p className="text-xs font-semibold text-ink-soft">
+                      + {preview.moreRows} more row(s) not shown.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <AlertBanner tone="info">
+                  No row has a New Start/End/Venue/Court/Status filled in - nothing to apply.
+                </AlertBanner>
+              )}
 
-          <Card className="mb-6 flex flex-col gap-3">
-            <div>
-              <CardTitle>3. Upload it back</CardTitle>
-              <p className="mt-1 text-sm text-ink-soft">
-                Applies immediately, row by row - there is no separate preview/confirm step, since
-                every row is validated (and rejected on its own if invalid) the same way the
-                Scheduler and Match Officer forms already validate a single change.
-              </p>
-            </div>
-            <form action={applyScheduleImportAction} className="flex flex-col items-start gap-3 sm:max-w-sm">
-              <FileUpload
-                id="schedule-import-upload"
-                name="file"
-                variant="file"
-                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                required
-                triggerLabel="Choose Excel file"
-                helpText=".xlsx or .xls"
-                className="w-full"
-              />
-              <SubmitButton pendingLabel="Applying...">Apply import</SubmitButton>
-            </form>
-          </Card>
+              <div className="flex flex-wrap gap-3">
+                <form action={applyScheduleImportAction}>
+                  <input type="hidden" name="scratchFile" value={previewFile} />
+                  <SubmitButton pendingLabel="Applying..." disabled={preview.updated === 0}>
+                    Apply {preview.updated} change{preview.updated === 1 ? '' : 's'}
+                  </SubmitButton>
+                </form>
+                <form action={cancelScheduleImportAction}>
+                  <input type="hidden" name="scratchFile" value={previewFile} />
+                  <SubmitButton variant="secondary">Cancel</SubmitButton>
+                </form>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <Card className="mb-6 flex flex-col gap-3">
+                <div>
+                  <CardTitle>1. Export the current schedule</CardTitle>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    Downloads every match in this event as one sheet. The first columns (Match #
+                    through Public, including Club A / Club B) are read-only context; the
+                    &ldquo;New ...&rdquo; columns are what this import reads.
+                  </p>
+                </div>
+                <Button asChild variant="secondary" size="sm" className="self-start">
+                  <a href="/workspaces/scheduler/export" download>
+                    Download current schedule (.xlsx)
+                  </a>
+                </Button>
+              </Card>
+
+              <Card className="mb-6 flex flex-col gap-3">
+                <div>
+                  <CardTitle>2. Fill in changes</CardTitle>
+                  <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
+                    <li>
+                      To reschedule a match, fill in <strong>all four</strong> of New Start, New End,
+                      New Venue, and New Court together (start/end as <code>YYYY-MM-DD HH:mm</code>,
+                      venue/court matched by name).
+                    </li>
+                    <li>
+                      To change status, fill in <strong>New Status</strong> with one of{' '}
+                      <code>scheduled</code>, <code>postponed</code>, <code>cancelled</code>, or{' '}
+                      <code>walkover</code>. Walkover also needs <strong>Winner (A/B)</strong>.
+                    </li>
+                    <li>Leave a row&apos;s &ldquo;New ...&rdquo; columns blank to leave that match untouched.</li>
+                    <li>Reason is optional and recorded on the audit log for every changed row.</li>
+                  </ul>
+                </div>
+              </Card>
+
+              <Card className="mb-6 flex flex-col gap-3">
+                <div>
+                  <CardTitle>3. Upload it for a preview</CardTitle>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    You&apos;ll see how many rows will change and exactly what each one does before
+                    confirming. Nothing is written until you click Apply on the next screen.
+                  </p>
+                </div>
+                <form
+                  action={previewScheduleImportAction}
+                  className="flex flex-col items-start gap-3 sm:max-w-sm"
+                >
+                  <FileUpload
+                    id="schedule-import-upload"
+                    name="file"
+                    variant="file"
+                    accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    required
+                    triggerLabel="Choose Excel file"
+                    helpText=".xlsx or .xls"
+                    className="w-full"
+                  />
+                  <SubmitButton pendingLabel="Reading...">Preview import</SubmitButton>
+                </form>
+              </Card>
+            </>
+          )}
 
           {results.length > 0 ? (
             <Card className="flex flex-col gap-3">
@@ -166,37 +275,7 @@ export default async function ScheduleImportPage({
                   </p>
                 ) : null}
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Match</TableHead>
-                    <TableHead>Outcome</TableHead>
-                    <TableHead>Detail</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((result, index) => (
-                    <TableRow key={`${result.matchNumber}-${index}`}>
-                      <TableCell className="font-bold">
-                        <Link
-                          href={`/workspaces/matches/${result.matchNumber}`}
-                          className="text-blue no-underline hover:underline"
-                        >
-                          {result.matchNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-3 py-1 text-[0.7rem] font-bold uppercase tracking-wide ${outcomeStyles[result.outcome]}`}
-                        >
-                          {result.outcome}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-sm text-ink-soft">{result.message}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ResultsTable rows={results} />
             </Card>
           ) : null}
         </>

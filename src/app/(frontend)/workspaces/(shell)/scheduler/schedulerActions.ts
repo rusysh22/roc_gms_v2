@@ -3,11 +3,21 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { randomUUID } from 'node:crypto'
+
 import { recordAuditLog } from '@/lib/audit'
+import {
+  deleteScratch,
+  readScratchJson,
+  readScratchXlsx,
+  writeScratchJson,
+  writeScratchXlsx,
+} from '@/lib/importScratch'
 import { postMatchAnnouncement } from '@/lib/matchNotifications'
 import {
   parseScheduleDateTime,
   parseScheduleImportWorkbook,
+  type ScheduleImportPlan,
   type ScheduleImportRow,
   type ScheduleImportRowOutcome,
 } from '@/lib/scheduleImport'
@@ -167,22 +177,18 @@ type ImportMatch = WorkspaceMatch & {
 // isValidTransition + requiresWinnerSelection, recalculateResultCachesBestEffort,
 // postMatchAnnouncement) instead of a parallel bulk-only code path, so a spreadsheet edit can never
 // do something the single-match UI wouldn't also validate.
-export async function applyScheduleImportAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: importReturn })
-  const event = await getActiveEvent(payload)
-  if (!event) redirect(`${importReturn}?importError=missing_event`)
-
-  const file = formData.get('file')
-  if (!(file instanceof File) || file.size === 0) redirect(`${importReturn}?importError=invalid_file`)
-
-  let rows: ScheduleImportRow[]
-  try {
-    rows = parseScheduleImportWorkbook(await file.arrayBuffer())
-  } catch {
-    redirect(`${importReturn}?importError=invalid_file`)
-  }
-  if (rows.length === 0) redirect(`${importReturn}?importError=empty_import`)
-
+// Runs every row of a parsed schedule sheet through the exact same validation the single-match
+// reschedule / status-transition actions use. `dryRun: true` produces the preview (no writes, no
+// announcements, no cache recalcs) but still threads each accepted change into `workingMatches` so
+// a later row's conflict check sees the earlier row's proposed move - what you preview is what will
+// apply, assuming the underlying data hasn't changed in between (it is re-run fresh on confirm).
+type ScheduleImportActor = Awaited<ReturnType<typeof assertWorkspaceActionAccess>>
+const runScheduleImport = async (
+  { payload, user }: Pick<ScheduleImportActor, 'payload' | 'user'>,
+  event: { id: string | number; timezone?: string | null },
+  rows: ScheduleImportRow[],
+  { dryRun }: { dryRun: boolean },
+): Promise<ScheduleImportPlan> => {
   const timezone = resolveEventTimezone(event.timezone)
 
   const [matchesResult, venuesResult, courtsResult] = await Promise.all([
@@ -223,6 +229,7 @@ export async function applyScheduleImportAction(formData: FormData): Promise<voi
     }
 
     const actions: string[] = []
+    const changeParts: string[] = []
 
     if (wantsReschedule) {
       if (!reschedulableFromStates.has(match.status)) {
@@ -287,23 +294,25 @@ export async function applyScheduleImportAction(formData: FormData): Promise<voi
         rescheduleData.status = 'scheduled'
       }
 
-      await payload.update({ collection: 'matches', id: match.id, data: rescheduleData, user })
-      await recordAuditLog({
-        payload,
-        action: 'schedule.match_reschedule',
-        entityType: 'matches',
-        entityId: match.id,
-        before,
-        after: {
-          status: isRecoveringFromPostponed ? 'scheduled' : match.status,
-          scheduled_start_at: start,
-          scheduled_end_at: end,
-          venue_id: venue.id,
-          court_id: court.id,
-          reason: row.reason || 'Bulk Excel import',
-        },
-        actorUserId: user.id,
-      })
+      if (!dryRun) {
+        await payload.update({ collection: 'matches', id: match.id, data: rescheduleData, user })
+        await recordAuditLog({
+          payload,
+          action: 'schedule.match_reschedule',
+          entityType: 'matches',
+          entityId: match.id,
+          before,
+          after: {
+            status: isRecoveringFromPostponed ? 'scheduled' : match.status,
+            scheduled_start_at: start,
+            scheduled_end_at: end,
+            venue_id: venue.id,
+            court_id: court.id,
+            reason: row.reason || 'Bulk Excel import',
+          },
+          actorUserId: user.id,
+        })
+      }
 
       match.status = isRecoveringFromPostponed ? 'scheduled' : match.status
       match.scheduled_start_at = start
@@ -312,16 +321,21 @@ export async function applyScheduleImportAction(formData: FormData): Promise<voi
       match.court_id = court.id
       workingMatches.set(String(match.id), { ...match })
 
-      await postMatchAnnouncement({
-        payload,
-        eventId: event.id,
-        categoryId: getRelationshipId(match.category_id),
-        matchId: match.id,
-        matchNumber: row.matchNumber,
-        title: `Schedule change: ${row.matchNumber}`,
-        summary: `${row.matchNumber} has a new time: ${formatDateTime(start, timezone)}–${formatDateTime(end, timezone)}. Reason: ${row.reason || 'Bulk Excel import'}`,
-        urgency: 'schedule_change',
-      })
+      if (!dryRun) {
+        await postMatchAnnouncement({
+          payload,
+          eventId: event.id,
+          categoryId: getRelationshipId(match.category_id),
+          matchId: match.id,
+          matchNumber: row.matchNumber,
+          title: `Schedule change: ${row.matchNumber}`,
+          summary: `${row.matchNumber} has a new time: ${formatDateTime(start, timezone)}–${formatDateTime(end, timezone)}. Reason: ${row.reason || 'Bulk Excel import'}`,
+          urgency: 'schedule_change',
+        })
+      }
+      changeParts.push(
+        `${formatDateTime(start, timezone)}–${formatDateTime(end, timezone)} @ ${venue.name} / ${court.name}`,
+      )
       actions.push('rescheduled')
     }
 
@@ -369,58 +383,66 @@ export async function applyScheduleImportAction(formData: FormData): Promise<voi
         winner_entry_id: getRelationshipId((match as ImportMatch).winner_entry_id) || null,
       }
 
-      await payload.update({ collection: 'matches', id: match.id, data: updateData, user })
-      await recordAuditLog({
-        payload,
-        action: 'match.status_transition',
-        entityType: 'matches',
-        entityId: match.id,
-        before: beforeSnapshot,
-        after: { ...beforeSnapshot, ...updateData, reason: row.reason || 'Bulk Excel import' },
-        actorUserId: user.id,
-      })
-
-      await recalculateResultCachesBestEffort({
-        payload,
-        match: {
-          id: match.id,
-          event_id: getRelationshipId(match.event_id) || undefined,
-          category_id: getRelationshipId(match.category_id) || undefined,
-          stage_id: getRelationshipId((match as ImportMatch).stage_id) || undefined,
-          group_id: getRelationshipId((match as ImportMatch).group_id) || undefined,
-          status: targetStatus,
-          participant_a_entry_id: getRelationshipId(match.participant_a_entry_id) || undefined,
-          participant_b_entry_id: getRelationshipId(match.participant_b_entry_id) || undefined,
-          winner_entry_id: updateData.winner_entry_id
-            ? String(updateData.winner_entry_id)
-            : getRelationshipId((match as ImportMatch).winner_entry_id) || undefined,
-        },
-        matchNumber: row.matchNumber,
-        action: 'match.status_transition',
-        actorUserId: user.id,
-      })
-
-      const notice = PUBLIC_STATUS_NOTICES[targetStatus]
-      if (notice) {
-        await postMatchAnnouncement({
+      if (!dryRun) {
+        await payload.update({ collection: 'matches', id: match.id, data: updateData, user })
+        await recordAuditLog({
           payload,
-          eventId: event.id,
-          categoryId: getRelationshipId(match.category_id),
-          matchId: match.id,
-          matchNumber: row.matchNumber,
-          title: `${row.matchNumber} ${notice.label}`,
-          summary: `${row.matchNumber} was ${notice.label}.`,
-          urgency: notice.urgency,
-          displayMode: notice.displayMode,
+          action: 'match.status_transition',
+          entityType: 'matches',
+          entityId: match.id,
+          before: beforeSnapshot,
+          after: { ...beforeSnapshot, ...updateData, reason: row.reason || 'Bulk Excel import' },
+          actorUserId: user.id,
         })
+
+        await recalculateResultCachesBestEffort({
+          payload,
+          match: {
+            id: match.id,
+            event_id: getRelationshipId(match.event_id) || undefined,
+            category_id: getRelationshipId(match.category_id) || undefined,
+            stage_id: getRelationshipId((match as ImportMatch).stage_id) || undefined,
+            group_id: getRelationshipId((match as ImportMatch).group_id) || undefined,
+            status: targetStatus,
+            participant_a_entry_id: getRelationshipId(match.participant_a_entry_id) || undefined,
+            participant_b_entry_id: getRelationshipId(match.participant_b_entry_id) || undefined,
+            winner_entry_id: updateData.winner_entry_id
+              ? String(updateData.winner_entry_id)
+              : getRelationshipId((match as ImportMatch).winner_entry_id) || undefined,
+          },
+          matchNumber: row.matchNumber,
+          action: 'match.status_transition',
+          actorUserId: user.id,
+        })
+
+        const notice = PUBLIC_STATUS_NOTICES[targetStatus]
+        if (notice) {
+          await postMatchAnnouncement({
+            payload,
+            eventId: event.id,
+            categoryId: getRelationshipId(match.category_id),
+            matchId: match.id,
+            matchNumber: row.matchNumber,
+            title: `${row.matchNumber} ${notice.label}`,
+            summary: `${row.matchNumber} was ${notice.label}.`,
+            urgency: notice.urgency,
+            displayMode: notice.displayMode,
+          })
+        }
       }
 
       match.status = targetStatus
       workingMatches.set(String(match.id), { ...match })
+      changeParts.push(`status → ${targetStatus}`)
       actions.push(`status set to ${targetStatus}`)
     }
 
-    return { matchNumber: row.matchNumber, outcome: 'updated', message: actions.join('; ') }
+    return {
+      matchNumber: row.matchNumber,
+      outcome: 'updated',
+      message: actions.join('; '),
+      changePreview: changeParts.join(' · ') || undefined,
+    }
   }
 
   const results: ScheduleImportRowOutcome[] = []
@@ -428,13 +450,82 @@ export async function applyScheduleImportAction(formData: FormData): Promise<voi
     results.push(await processRow(row))
   }
 
+  return {
+    results,
+    updated: results.filter((result) => result.outcome === 'updated').length,
+    skipped: results.filter((result) => result.outcome === 'skipped').length,
+    errors: results.filter((result) => result.outcome === 'error').length,
+  }
+}
+
+const parseUploadedScheduleSheet = async (
+  file: FormDataEntryValue | null,
+): Promise<ScheduleImportRow[] | null> => {
+  if (!(file instanceof File) || file.size === 0) return null
+  try {
+    const rows = parseScheduleImportWorkbook(await file.arrayBuffer())
+    return rows.length > 0 ? rows : null
+  } catch {
+    return null
+  }
+}
+
+// Step 1: dry-run the uploaded sheet and stash it (plus the plan) so the import page can show a
+// preview - "N rows will change, here's what" - before anything is written.
+export async function previewScheduleImportAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: importReturn })
+  const event = await getActiveEvent(payload)
+  if (!event) redirect(`${importReturn}?importError=missing_event`)
+
+  const file = formData.get('file')
+  const buffer = file instanceof File && file.size > 0 ? Buffer.from(await file.arrayBuffer()) : null
+  const rows = await parseUploadedScheduleSheet(file)
+  if (!buffer || !rows) redirect(`${importReturn}?importError=${file instanceof File && file.size > 0 ? 'empty_import' : 'invalid_file'}`)
+
+  const plan = await runScheduleImport({ payload, user }, event!, rows!, { dryRun: true })
+
+  const scratchId = randomUUID()
+  await writeScratchXlsx(scratchId, buffer!)
+  // Cap the stored per-row list - the summary counts stay exact, the table shows the useful rows.
+  const prioritized = [...plan.results].sort((a, b) => OUTCOME_PRIORITY[a.outcome] - OUTCOME_PRIORITY[b.outcome])
+  await writeScratchJson(scratchId, {
+    updated: plan.updated,
+    skipped: plan.skipped,
+    errors: plan.errors,
+    total: plan.results.length,
+    rows: prioritized.slice(0, 200),
+    moreRows: prioritized.length > 200 ? prioritized.length - 200 : 0,
+  })
+
+  redirect(`${importReturn}?previewFile=${scratchId}.xlsx`)
+}
+
+// Step 2: re-parse the stashed sheet and apply it for real (validation re-runs from scratch in case
+// the underlying schedule changed since the preview), then clean up the scratch files.
+export async function applyScheduleImportAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: importReturn })
+  const event = await getActiveEvent(payload)
+  if (!event) redirect(`${importReturn}?importError=missing_event`)
+
+  const scratchFile = text(formData, 'scratchFile')
+  const buffer = await readScratchXlsx(scratchFile)
+  const rows = buffer ? parseScheduleImportWorkbook(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer) : []
+  if (!buffer || rows.length === 0) redirect(`${importReturn}?importError=invalid_file`)
+
+  const plan = await runScheduleImport({ payload, user }, event!, rows, { dryRun: false })
+  await deleteScratch(scratchFile)
+
   refreshSchedule()
-  const updatedCount = results.filter((result) => result.outcome === 'updated').length
-  const errorCount = results.filter((result) => result.outcome === 'error').length
-  const { resultsParam, moreResults } = encodeImportResults(results)
+  const { resultsParam, moreResults } = encodeImportResults(plan.results)
   redirect(
-    `${importReturn}?importDone=1&importUpdated=${updatedCount}&importErrors=${errorCount}` +
+    `${importReturn}?importDone=1&importUpdated=${plan.updated}&importErrors=${plan.errors}` +
       (resultsParam ? `&importResults=${resultsParam}` : '') +
       (moreResults ? `&importMoreResults=${moreResults}` : ''),
   )
+}
+
+export async function cancelScheduleImportAction(formData: FormData): Promise<void> {
+  await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: importReturn })
+  await deleteScratch(text(formData, 'scratchFile'))
+  redirect(importReturn)
 }

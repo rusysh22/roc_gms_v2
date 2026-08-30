@@ -10,6 +10,27 @@ export type ScheduleImportRowOutcome = {
   matchNumber: string
   outcome: 'updated' | 'skipped' | 'error'
   message: string
+  // Only set on a dry run (preview): a human-readable "before → after" for the row, e.g.
+  // "Sat 2 Aug 08:00–10:00 @ Main Hall / Court 1" or "status → postponed".
+  changePreview?: string
+}
+
+export type ScheduleImportPlan = {
+  results: ScheduleImportRowOutcome[]
+  updated: number
+  skipped: number
+  errors: number
+}
+
+// What `previewScheduleImportAction` stashes for the import page to render before anything is
+// applied. `rows` is capped (error/updated first); `total` and the counts are exact.
+export type ScheduleImportPreview = {
+  updated: number
+  skipped: number
+  errors: number
+  total: number
+  rows: ScheduleImportRowOutcome[]
+  moreRows: number
 }
 
 export type ScheduleImportRow = {
