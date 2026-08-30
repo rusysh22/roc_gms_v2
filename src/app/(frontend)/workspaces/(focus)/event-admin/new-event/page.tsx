@@ -78,10 +78,15 @@ import {
 import {
   addBulkCategoryAssignmentsAction,
   addEntriesAction,
+  reinstateEntryAction,
   shuffleSeedsAction,
   withdrawEntryAction,
 } from './entriesSeedActions'
-import { generateMatchesAction, setStageRulesetOverrideAction } from './generateActions'
+import {
+  clearGeneratedMatchesAction,
+  generateMatchesAction,
+  setStageRulesetOverrideAction,
+} from './generateActions'
 import { getNextPowerOfTwo } from '@/lib/matchGeneration'
 import { GroupKnockoutPanel } from './GroupKnockoutPanel'
 import { WizardFormDraft } from './WizardFormDraft'
@@ -147,6 +152,8 @@ const errorMessages: Record<string, string> = {
   groups_not_finished: 'Every group match needs a published result before finalizing the group stage.',
   group_stage_not_finalized: 'Finalize the group stage before promoting to knockout.',
   already_promoted: 'This group stage has already been promoted to knockout. Undo Phase first if you need to redo it.',
+  nothing_to_clear: 'This category has no generated matches to clear.',
+  matches_already_started: 'Some matches have already started or finished. Clearing is only possible before any match begins.',
   not_promoted: 'This group stage has not been promoted to knockout yet.',
   knockout_already_started: 'Knockout matches have already started - this phase can no longer be undone.',
   no_qualifiers: 'No qualified entries were found for this group stage.',
@@ -385,6 +392,12 @@ export default async function NewEventWizardPage({
             <AlertBanner tone="success">
               Phase undone. The knockout matches were removed and the group stage is unlocked for
               revision.
+            </AlertBanner>
+          ) : null}
+          {get(params, 'wizardCleared') ? (
+            <AlertBanner tone="success">
+              Cleared {get(params, 'wizardCleared')} generated match(es), plus any groups and cached
+              brackets/standings. You can generate this category&apos;s draw again from scratch.
             </AlertBanner>
           ) : null}
           {get(params, 'wizardPromoteWarning') ? (
@@ -2394,7 +2407,7 @@ const RegistrationStep = async ({
   }
   // depth: 1 on sourceDocs populates each team/player's own club_id. depth: 2 on entries reaches
   // one level further (entry -> team/player -> club) so both lists can show a club caption.
-  const [sourceDocs, entries, clubOptionsResult] = await Promise.all([
+  const [sourceDocs, entries, withdrawnEntries, clubOptionsResult] = await Promise.all([
     payload.find({ collection, depth: 1, limit: 300, where: { and: sourceWhere }, sort: 'name' }),
     payload.find({
       collection: 'competition-entries',
@@ -2407,6 +2420,15 @@ const RegistrationStep = async ({
         and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'confirmed' } }],
       },
       sort: 'seed_number',
+    }),
+    payload.find({
+      collection: 'competition-entries',
+      depth: 2,
+      limit: 300,
+      where: {
+        and: [{ category_id: { equals: selectedCategoryId } }, { status: { equals: 'withdrawn' } }],
+      },
+      sort: 'display_name',
     }),
     collection === 'clubs'
       ? Promise.resolve(null)
@@ -2879,11 +2901,11 @@ const RegistrationStep = async ({
                   </div>
                   <ConfirmSubmitButton
                     formId={formId}
-                    confirmMessage={`Remove ${entry.display_name} from this category? They can be re-added later.`}
+                    confirmMessage={`Withdraw ${entry.display_name} from this category? You can reinstate them below afterwards.`}
                     variant="secondary"
                     size="sm"
                   >
-                    Remove
+                    Withdraw
                   </ConfirmSubmitButton>
                 </form>
               )
@@ -2891,6 +2913,37 @@ const RegistrationStep = async ({
           </div>
         )}
       </Card>
+
+      {withdrawnEntries.docs.length > 0 ? (
+        <Card className="flex flex-col gap-3">
+          <CardTitle>Withdrawn ({withdrawnEntries.totalDocs})</CardTitle>
+          <p className="text-xs text-ink-soft">
+            Kept on record with their seed number. Reinstating puts them back into the draw where
+            they were &mdash; if a bracket was already generated, check that match for a walkover to
+            undo.
+          </p>
+          <div className="flex flex-col gap-2">
+            {withdrawnEntries.docs.map((entry) => {
+              const reinstateFormId = `reinstate-entry-${entry.id}`
+              return (
+                <form
+                  key={entry.id}
+                  id={reinstateFormId}
+                  action={reinstateEntryAction.bind(null, String(entry.id))}
+                  className="flex items-center justify-between gap-3 rounded-card border border-line bg-mist px-4 py-2.5"
+                >
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="categoryId" value={selectedCategoryId} />
+                  <strong className="truncate text-sm font-bold text-ink-soft">{entry.display_name}</strong>
+                  <SubmitButton variant="secondary" size="sm">
+                    Reinstate
+                  </SubmitButton>
+                </form>
+              )
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       <StepActions sticky>
         <Button asChild>
@@ -3181,6 +3234,34 @@ const GenerateStep = async ({
     confirmedCountByCategory.set(key, (confirmedCountByCategory.get(key) || 0) + 1)
   }
 
+  // Which categories already have generated matches, and whether any has started - drives the
+  // "Clear & regenerate" affordance (clearGeneratedMatchesAction refuses once a match begins).
+  const UNSTARTED_MATCH_STATUSES = new Set([
+    'draft',
+    'ready_for_scheduling',
+    'scheduled',
+    'published',
+    'check_in_open',
+    'ready_to_start',
+  ])
+  const generatedMatches =
+    categoryIds.length > 0
+      ? await payload.find({
+          collection: 'matches',
+          depth: 0,
+          limit: 5000,
+          where: { category_id: { in: categoryIds } },
+        })
+      : { docs: [] as { category_id?: unknown; status?: unknown }[] }
+  const matchInfoByCategory = new Map<string, { total: number; started: number }>()
+  for (const match of generatedMatches.docs) {
+    const key = String(match.category_id)
+    const info = matchInfoByCategory.get(key) || { total: 0, started: 0 }
+    info.total += 1
+    if (!UNSTARTED_MATCH_STATUSES.has(String(match.status))) info.started += 1
+    matchInfoByCategory.set(key, info)
+  }
+
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md P1 item 6: "Venue availability sebelum generation" - matches
   // used to generate with zero signal about whether there's anywhere to actually play them, so the
   // gap only surfaced later in the Scheduler workspace. A court with no sport_id set is usable by
@@ -3248,6 +3329,7 @@ const GenerateStep = async ({
     courtCount:
       (anyCourtIsSportAgnostic ? courts.docs.filter((court) => !court.sport_id).length : 0) +
       (courtCountBySport.get(String(category.sport_id)) || 0),
+    matchInfo: matchInfoByCategory.get(String(category.id)) || { total: 0, started: 0 },
   }))
 
   const selectedCategory = categoryId
@@ -3278,7 +3360,7 @@ const GenerateStep = async ({
           </AlertBanner>
         ) : null}
         <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt, courtCount }) => {
+          {categoriesWithCounts.map(({ category, confirmedCount, hasCourt, courtCount, matchInfo }) => {
             const isGroupStageToKnockout = category.format_type === 'group_stage_to_knockout'
             const estimate = getGenerationEstimate(String(category.format_type), confirmedCount)
             return (
@@ -3291,6 +3373,12 @@ const GenerateStep = async ({
                   <span className="text-xs font-semibold text-ink-soft">
                     {String(category.format_type).replaceAll('_', ' ')} &middot; {confirmedCount} confirmed entries
                   </span>
+                  {matchInfo.total > 0 ? (
+                    <span className="block text-xs font-semibold text-green">
+                      {matchInfo.total} match{matchInfo.total === 1 ? '' : 'es'} generated
+                      {matchInfo.started > 0 ? ` · ${matchInfo.started} started` : ''}
+                    </span>
+                  ) : null}
                   {estimate ? (
                     <span className="block text-xs text-ink-soft">
                       Will generate: {estimate} &middot; {courtCount} court{courtCount === 1 ? '' : 's'} available
@@ -3303,26 +3391,46 @@ const GenerateStep = async ({
                     </span>
                   ) : null}
                 </div>
-                {isGroupStageToKnockout ? (
-                  <Button asChild size="sm" variant={String(category.id) === categoryId ? 'primary' : 'secondary'}>
-                    <Link
-                      href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${category.id}`}
-                    >
-                      Manage Groups
-                    </Link>
-                  </Button>
-                ) : (
-                  <form action={generateMatchesAction}>
-                    <input type="hidden" name="eventId" value={eventId} />
-                    <input type="hidden" name="categoryId" value={category.id} />
-                    <SubmitButton
-                      size="sm"
-                      disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
-                    >
-                      Generate Matches
-                    </SubmitButton>
-                  </form>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  {isGroupStageToKnockout ? (
+                    <Button asChild size="sm" variant={String(category.id) === categoryId ? 'primary' : 'secondary'}>
+                      <Link
+                        href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=generate&categoryId=${category.id}`}
+                      >
+                        Manage Groups
+                      </Link>
+                    </Button>
+                  ) : (
+                    <form action={generateMatchesAction}>
+                      <input type="hidden" name="eventId" value={eventId} />
+                      <input type="hidden" name="categoryId" value={category.id} />
+                      <SubmitButton
+                        size="sm"
+                        disabled={confirmedCount < 2 || !AUTO_GENERATE_FORMATS.has(String(category.format_type))}
+                      >
+                        {matchInfo.total > 0 ? 'Fill missing matches' : 'Generate Matches'}
+                      </SubmitButton>
+                    </form>
+                  )}
+                  {matchInfo.total > 0 && matchInfo.started === 0 ? (
+                    <>
+                      <form id={`clear-generated-${category.id}`} action={clearGeneratedMatchesAction}>
+                        <input type="hidden" name="eventId" value={eventId} />
+                        <input type="hidden" name="categoryId" value={category.id} />
+                      </form>
+                      <ConfirmSubmitButton
+                        formId={`clear-generated-${category.id}`}
+                        tone="destructive"
+                        variant="ghost"
+                        size="sm"
+                        className="text-danger"
+                        confirmMessage={`Clear all ${matchInfo.total} generated match(es) for "${category.name}"? Groups and cached brackets/standings go too. Nothing is lost that you can't regenerate.`}
+                      >
+                        Clear & regenerate
+                      </ConfirmSubmitButton>
+                    </>
+                  ) : null}
+                </div>
               </div>
             )
           })}

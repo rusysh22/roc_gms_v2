@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Flag, Maximize, Minimize, Pause, Play, Plus, Trophy } from 'lucide-react'
+import { Flag, Maximize, Minimize, Pause, Play, Plus, Trash2, Trophy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
@@ -19,10 +19,13 @@ import {
   getRelationshipId,
   getRelationshipLabel,
 } from '../../../../workspaceComponents'
+import { loadRulesetForMatch } from '@/lib/ruleValidation'
+import { deriveMatchOutcome, type OutcomeSet } from '@/lib/matchResult'
 import { ConfirmSubmitButton } from '../../../../matches/ConfirmSubmitButton'
 import { addMatchCommentAction } from '../../../../matches/commentActions'
 import {
   addMatchSetAction,
+  deleteMatchSetAction,
   transitionMatchStatusAction,
 } from '../../../../matches/matchActions'
 import {
@@ -126,8 +129,8 @@ export default async function LiveScorePage({
         })
       : null
   const allowedTransitions = getAllowedTransitions(match.status)
-  const quickTransitions = allowedTransitions.filter((transition) =>
-    ['ongoing', 'paused', 'finished'].includes(transition.to),
+  const quickTransitions = allowedTransitions.filter(
+    (transition) => !transition.reverse && ['ongoing', 'paused', 'finished'].includes(transition.to),
   )
   const publishTransition = allowedTransitions.find((transition) => transition.to === 'result_published')
   const stageType =
@@ -136,6 +139,36 @@ export default async function LiveScorePage({
       : undefined
   const participantAName = getRelationshipLabel(match.participant_a_entry_id)
   const participantBName = getRelationshipLabel(match.participant_b_entry_id)
+
+  // Ruleset-derived result: who won each set, and is the match decided. The set-score UI never
+  // asks the officer to pick - it follows the score. Uses the stage override if one is set.
+  const outcomeRuleset = await loadRulesetForMatch(access.payload, {
+    categoryId,
+    stageId: getRelationshipId(match.stage_id),
+  })
+  const entryAId = getRelationshipId(match.participant_a_entry_id)
+  const entryBId = getRelationshipId(match.participant_b_entry_id)
+  const outcomeSets: OutcomeSet[] = matchSets.map((set) => {
+    const winnerId = getRelationshipId(set.winner_entry_id)
+    return {
+      participant_a_score: set.participant_a_score,
+      participant_b_score: set.participant_b_score,
+      winner_side:
+        winnerId == null
+          ? null
+          : String(winnerId) === String(entryAId)
+            ? 'a'
+            : String(winnerId) === String(entryBId)
+              ? 'b'
+              : null,
+    }
+  })
+  const matchOutcome = deriveMatchOutcome(outcomeRuleset, outcomeSets)
+  const lastSetNumber = matchSets.reduce((max, set) => Math.max(max, set.set_number), 0)
+  const canDeleteSets = !['finished', 'result_published', 'walkover', 'disputed'].includes(match.status)
+  const canPublishResult = (access.user.roles ?? []).some(
+    (role) => role === 'super_admin' || role === 'event_admin',
+  )
 
   const banners = (
     <>
@@ -163,6 +196,14 @@ export default async function LiveScorePage({
       participantBScore={currentSet.participant_b_score ?? 0}
       scoreable={isScoreableStatus(match.status)}
       matchStatusLabel={formatStatus(match.status)}
+      matchOutcome={{
+        decided: matchOutcome.decided,
+        winnerSide: matchOutcome.winnerSide,
+        setsWonA: matchOutcome.setsWonA,
+        setsWonB: matchOutcome.setsWonB,
+      }}
+      canPublish={canPublishResult}
+      returnTo={returnTo}
     />
   ) : (
     <div className="grid flex-1 place-items-center text-center">
@@ -208,6 +249,13 @@ export default async function LiveScorePage({
     </section>
   )
 
+  const derivedWinnerName =
+    matchOutcome.winnerSide === 'a'
+      ? participantAName
+      : matchOutcome.winnerSide === 'b'
+        ? participantBName
+        : null
+
   const publishSection = (
     <section className="rounded-panel border border-line bg-paper p-4">
       <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Finish result</p>
@@ -215,18 +263,33 @@ export default async function LiveScorePage({
         <form id="publish-result-form" action={transitionMatchStatusAction} className="mt-3 grid gap-3">
           <input type="hidden" name="matchNumber" value={match.match_number} />
           <input type="hidden" name="targetStatus" value={publishTransition.to} />
-          <label className="grid gap-1 text-sm font-bold text-ink">
-            Winner
-            <select
-              name="winnerSide"
-              defaultValue=""
-              className="h-11 rounded-[10px] border border-line bg-paper px-3 text-sm font-semibold"
-            >
-              <option value="">No winner / draw</option>
-              <option value="a">{participantAName}</option>
-              <option value="b">{participantBName}</option>
-            </select>
-          </label>
+          <input type="hidden" name="returnTo" value={returnTo} />
+          {derivedWinnerName ? (
+            <p className="text-sm font-bold text-ink">
+              Winner: {derivedWinnerName}{' '}
+              <span className="font-semibold text-ink-soft">(from the score)</span>
+            </p>
+          ) : (
+            <p className="rounded-card border border-gold/40 bg-mist px-3 py-2 text-sm font-semibold text-ink-soft">
+              The score doesn&apos;t show a winner yet. Enter the deciding set, or set it under
+              &ldquo;Correct manually&rdquo;.
+            </p>
+          )}
+          <details className="text-sm">
+            <summary className="cursor-pointer font-bold text-ink-soft select-none">Correct manually</summary>
+            <label className="mt-2 grid gap-1 font-bold text-ink">
+              Winner
+              <select
+                name="winnerSide"
+                defaultValue=""
+                className="h-11 rounded-[10px] border border-line bg-paper px-3 text-sm font-semibold"
+              >
+                <option value="">Use the score</option>
+                <option value="a">{participantAName}</option>
+                <option value="b">{participantBName}</option>
+              </select>
+            </label>
+          </details>
           <ConfirmSubmitButton
             formId="publish-result-form"
             tone="default"
@@ -312,11 +375,9 @@ export default async function LiveScorePage({
 
           <section className="rounded-panel border border-line bg-paper p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Sets</p>
-            {/* Server-rendered as of last page load - LiveScoreControls now applies taps via a
-                client-side queue (see useOfflineScoreSync.ts) instead of a full-page redirect per
-                tap, so this list's current-set row can lag behind the big score display above
-                until the next reload/add-set/publish. Deliberate tradeoff for offline resilience;
-                the big display is the live source of truth while scoring. */}
+            {/* The client score queue (useOfflineScoreSync.ts) refreshes this list once a burst of
+                taps has fully synced, so it tracks the big display within a few seconds rather than
+                only on a manual reload. */}
             <div className="mt-3 grid gap-2">
               {matchSets.map((set) => (
                 <div
@@ -339,6 +400,28 @@ export default async function LiveScorePage({
                   Add Set {matchSets.length + 1}
                 </SubmitButton>
               </form>
+              {matchSets.length > 0 && canDeleteSets ? (
+                <form id="delete-last-set-form" action={deleteMatchSetAction}>
+                  <input type="hidden" name="matchNumber" value={match.match_number} />
+                  <input
+                    type="hidden"
+                    name="matchSetId"
+                    value={String(matchSets[matchSets.length - 1].id)}
+                  />
+                  <input type="hidden" name="returnTo" value={returnTo} />
+                  <ConfirmSubmitButton
+                    formId="delete-last-set-form"
+                    tone="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-danger"
+                    confirmMessage={`Delete Set ${lastSetNumber}? Its scores will be removed.`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Delete Set {lastSetNumber}
+                  </ConfirmSubmitButton>
+                </form>
+              ) : null}
             </div>
           </section>
 

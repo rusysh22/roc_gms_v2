@@ -132,6 +132,16 @@ cause is tapping before the match is started — open the **Match flow** panel a
 Match**, then score. It also appears if the match was already *finished* / *result published*
 (possibly on another device), or if you are on a stale Live Score tab whose set no longer exists.
 
+**Live Score won't let me publish — "The rules don't show a winner yet".**
+The set scores don't yet add up to a decided match under the ruleset (e.g. best-of-3 still at 1–1,
+or a game stuck at 20–20). Finish the deciding game, or use **Correct manually** in the *Finish
+result* panel for a retirement / disqualification.
+
+**The set or match winner looks wrong.**
+It is derived from the score plus the category's ruleset. If the ruleset is missing or wrong (no
+target score, wrong best-of), fix it under **Event Setup → Rulesets** and re-save the set. For a
+genuine exception, use **Correct manually** on the set (Match Details) with a reason.
+
 **A published result is wrong.**
 Only **Event Admin** and **Super Admin** can revise a published result. Open the Match Details page
 and use the Match Actions there.

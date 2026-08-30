@@ -61,20 +61,35 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
     limit: 500,
     where: { category_id: { equals: categoryId } },
   })
-  const enteredSourceIds = new Set(
-    existing.docs.map((entry) => {
-      const linkedId =
-        collection === 'teams' ? entry.team_id
-        : collection === 'clubs' ? entry.club_id
-        : entry.player_id
-      return String(linkedId)
-    }),
-  )
+  const linkedIdOf = (entry: (typeof existing.docs)[number]) =>
+    String(collection === 'teams' ? entry.team_id : collection === 'clubs' ? entry.club_id : entry.player_id)
+  const enteredSourceIds = new Set(existing.docs.map(linkedIdOf))
+  // A previously withdrawn entry for the same source is reactivated rather than skipped - "add"
+  // then "withdraw" then "add again" now round-trips (previously the second add did nothing).
+  const withdrawnBySource = new Map<string, (typeof existing.docs)[number]>()
+  for (const entry of existing.docs) {
+    if (entry.status === 'withdrawn') withdrawnBySource.set(linkedIdOf(entry), entry)
+  }
   let nextSeed =
     existing.docs.reduce((max, entry) => Math.max(max, Number(entry.seed_number) || 0), 0) + 1
 
   let addedCount = 0
   for (const sourceId of sourceIds) {
+    const withdrawn = withdrawnBySource.get(sourceId)
+    if (withdrawn) {
+      await payload.update({ collection: 'competition-entries', id: withdrawn.id, data: { status: 'confirmed' } })
+      await recordAuditLog({
+        payload,
+        action: 'competition_entry.reinstate',
+        entityType: 'competition-entries',
+        entityId: withdrawn.id,
+        before: withdrawn,
+        after: { ...withdrawn, status: 'confirmed' },
+        actorUserId: user.id,
+      })
+      addedCount += 1
+      continue
+    }
     // Silently skip already-entered/invalid sources instead of failing the whole batch - the
     // checklist can't fully prevent a stale checkbox (another admin adding the same person in a
     // race, or a duplicate row before the page refreshed) from being submitted alongside valid ones.
@@ -315,6 +330,46 @@ export async function withdrawEntryAction(entryId: string, formData: FormData): 
 
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}&wizardUpdated=1`)
+}
+
+// The reverse of withdrawEntryAction: put a withdrawn entry back to `confirmed`. Its seed number
+// is kept; if a bracket was already generated the entry re-appears where it was (a walkover it was
+// given while withdrawn stays a walkover - officers correct that through the match lifecycle).
+export async function reinstateEntryAction(entryId: string, formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const back = `${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}`
+  if (!entryId) {
+    redirect(`${back}&wizardError=invalid_entry`)
+  }
+
+  const before = await payload.findByID({ collection: 'competition-entries', id: entryId, depth: 0 }).catch(() => null)
+  if (!before || String(before.event_id) !== String(eventId)) {
+    redirect(`${back}&wizardError=invalid_relationship`)
+  }
+  if (before.status !== 'withdrawn') {
+    redirect(`${back}&wizardError=entry_not_withdrawn`)
+  }
+
+  const data = { status: 'confirmed' as const }
+  await payload.update({ collection: 'competition-entries', id: entryId, data })
+  await recordAuditLog({
+    payload,
+    action: 'competition_entry.reinstate',
+    entityType: 'competition-entries',
+    entityId: entryId,
+    before,
+    after: { ...before, ...data },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${back}&wizardUpdated=1`)
 }
 
 export async function saveSeedOrderAction(formData: FormData): Promise<void> {

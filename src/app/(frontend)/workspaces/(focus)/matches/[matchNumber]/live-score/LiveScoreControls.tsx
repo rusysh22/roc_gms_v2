@@ -1,13 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { CloudOff, Loader2, Minus, Plus, RotateCcw, X } from 'lucide-react'
+import { CheckCircle2, CloudOff, Loader2, Minus, Plus, RotateCcw, Trophy, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { ConfirmSubmitButton } from '../../../../matches/ConfirmSubmitButton'
+import { finishAndPublishMatchAction } from '../../../../matches/matchActions'
 import { useOfflineScoreSync } from './useOfflineScoreSync'
 
 type ParticipantSide = 'a' | 'b'
+
+export type LiveMatchOutcome = {
+  decided: boolean
+  winnerSide: ParticipantSide | null
+  setsWonA: number
+  setsWonB: number
+}
 
 type LiveScoreControlsProps = {
   matchNumber: string
@@ -22,18 +31,23 @@ type LiveScoreControlsProps = {
   // "match/set state changed".
   scoreable: boolean
   matchStatusLabel: string
+  // Ruleset-derived match state, computed server-side on load; the sync hook refreshes it live as
+  // points come in so the "match complete" prompt appears without waiting for a page refresh.
+  matchOutcome: LiveMatchOutcome
+  // Only event_admin/super_admin can publish a result; a match officer's tap finishes the match
+  // with the winner recorded and leaves publishing to an admin.
+  canPublish: boolean
+  returnTo: string
 }
 
 const participantButtonClass =
   'grid min-h-40 flex-1 content-between rounded-panel border p-5 text-left transition-all active:scale-[0.99]'
 
-// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.2 "autosave dan offline/retry state": every tap is applied
-// to local state immediately (optimistic) and queued in IndexedDB before the network request even
-// starts, so scoring never blocks on connectivity. AUDIT_E2E MAT-03's delta-based server update
-// (this form used to submit +1/-1, never an absolute score) is what makes that safe to replay
-// later - see useOfflineScoreSync.ts. The server's max_score cap isn't mirrored here, so the
-// optimistic count can briefly overshoot the cap if someone taps past it while offline; it
-// corrects to the server's clamped value as soon as that tap syncs.
+// NOVICE_ADMIN_FLOW_UX_REDESIGN.md 15.2 "autosave dan offline/retry state": every tap is applied to
+// local state immediately (optimistic) and queued in IndexedDB before the network request even
+// starts, so scoring never blocks on connectivity. The server returns the authoritative score with
+// every OK response - `confirmedScoreForSet` holds the latest so the big number stays correct after
+// a tap syncs (it used to snap back to the stale server prop until a manual refresh).
 export function LiveScoreControls({
   matchNumber,
   matchSetId,
@@ -44,30 +58,86 @@ export function LiveScoreControls({
   participantBScore,
   scoreable,
   matchStatusLabel,
+  matchOutcome,
+  canPublish,
+  returnTo,
 }: LiveScoreControlsProps) {
   const [selectedSide, setSelectedSide] = useState<ParticipantSide>('a')
   const selectedName = selectedSide === 'a' ? participantAName : participantBName
   const setIdKey = String(matchSetId)
 
-  const { isOnline, syncing, pendingCount, failedCount, addPoint, pendingDeltaForSet, dismissFailed } =
-    useOfflineScoreSync(matchNumber)
+  const {
+    isOnline,
+    syncing,
+    pendingCount,
+    failedCount,
+    addPoint,
+    pendingDeltaForSet,
+    confirmedScoreForSet,
+    lastSyncOutcome,
+    dismissFailed,
+  } = useOfflineScoreSync(matchNumber)
 
-  const displayScoreA = participantAScore + pendingDeltaForSet(setIdKey, 'a')
-  const displayScoreB = participantBScore + pendingDeltaForSet(setIdKey, 'b')
+  const baseA = confirmedScoreForSet(setIdKey, 'a') ?? participantAScore
+  const baseB = confirmedScoreForSet(setIdKey, 'b') ?? participantBScore
+  const displayScoreA = baseA + pendingDeltaForSet(setIdKey, 'a')
+  const displayScoreB = baseB + pendingDeltaForSet(setIdKey, 'b')
+
+  const outcome: LiveMatchOutcome = lastSyncOutcome
+    ? {
+        decided: lastSyncOutcome.decided,
+        winnerSide: lastSyncOutcome.winner_side,
+        setsWonA: lastSyncOutcome.sets_won_a,
+        setsWonB: lastSyncOutcome.sets_won_b,
+      }
+    : matchOutcome
 
   const tapPoint = (delta: 1 | -1) => {
     if (!scoreable) return
     void addPoint(setIdKey, selectedSide, delta)
   }
 
+  const matchCompleteBanner =
+    outcome.decided && outcome.winnerSide ? (
+      <form
+        id="finish-and-publish-form"
+        action={finishAndPublishMatchAction}
+        className="flex flex-col gap-2 rounded-card border border-green/40 bg-paper px-4 py-3"
+      >
+        <input type="hidden" name="matchNumber" value={matchNumber} />
+        <input type="hidden" name="returnTo" value={returnTo} />
+        <p className="flex items-center gap-2 text-sm font-extrabold text-green">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Match complete &mdash;{' '}
+          {outcome.winnerSide === 'a' ? participantAName : participantBName} wins {Math.max(
+            outcome.setsWonA,
+            outcome.setsWonB,
+          )}
+          &ndash;{Math.min(outcome.setsWonA, outcome.setsWonB)}
+        </p>
+        <p className="text-xs text-ink-soft">
+          {canPublish
+            ? 'The winner is taken from the score and the ruleset — no need to pick it.'
+            : 'This records the winner and finishes the match. An event admin publishes the final result.'}
+        </p>
+        <ConfirmSubmitButton
+          formId="finish-and-publish-form"
+          tone="default"
+          className="mt-1 w-full justify-center"
+          confirmMessage={
+            canPublish
+              ? 'Publish this result? It becomes the final public result and advances the bracket.'
+              : 'Finish this match and record the winner? An event admin will publish it.'
+          }
+        >
+          <Trophy className="h-4 w-4" aria-hidden="true" />
+          {canPublish ? 'Finish & publish result' : 'Finish match'}
+        </ConfirmSubmitButton>
+      </form>
+    ) : null
+
   return (
-    <section
-      className={cn(
-        'grid flex-1 gap-4',
-        scoreable ? 'grid-rows-[auto_auto_1fr_auto]' : 'grid-rows-[auto_auto_auto_1fr_auto]',
-      )}
-      aria-label="Live score controls"
-    >
+    <section className="flex flex-1 flex-col gap-4" aria-label="Live score controls">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Current set</p>
@@ -123,7 +193,9 @@ export function LiveScoreControls({
         </div>
       ) : null}
 
-      <div className="grid min-h-0 grid-cols-1 gap-4 md:grid-cols-2">
+      {scoreable ? matchCompleteBanner : null}
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2">
         <button
           type="button"
           onClick={() => setSelectedSide('a')}
@@ -137,9 +209,7 @@ export function LiveScoreControls({
         >
           <span className="text-sm font-bold uppercase tracking-wide">Participant A</span>
           <span className="break-words text-2xl font-extrabold leading-tight">{participantAName}</span>
-          <span className="text-7xl font-extrabold tabular-nums md:text-8xl">
-            {displayScoreA}
-          </span>
+          <span className="text-7xl font-extrabold tabular-nums md:text-8xl">{displayScoreA}</span>
         </button>
 
         <button
@@ -155,9 +225,7 @@ export function LiveScoreControls({
         >
           <span className="text-sm font-bold uppercase tracking-wide">Participant B</span>
           <span className="break-words text-2xl font-extrabold leading-tight">{participantBName}</span>
-          <span className="text-7xl font-extrabold tabular-nums md:text-8xl">
-            {displayScoreB}
-          </span>
+          <span className="text-7xl font-extrabold tabular-nums md:text-8xl">{displayScoreB}</span>
         </button>
       </div>
 

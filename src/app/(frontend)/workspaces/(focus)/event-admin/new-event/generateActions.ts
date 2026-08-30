@@ -18,6 +18,8 @@ import {
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
+import { UNSTARTED_TARGET_STATUSES } from '@/lib/winnerAdvancement'
+import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
@@ -290,4 +292,88 @@ export async function setStageRulesetOverrideAction(formData: FormData): Promise
 
   revalidatePath(wizardPage)
   redirect(`${wizardPage}?eventId=${eventId}&step=bracket&categoryId=${categoryId}&wizardUpdated=1`)
+}
+
+// The backward step for "Generate matches" / the Groups panel: wipe every generated artefact for
+// one category (matches, sets, stages, groups, bracket + standings caches, and each entry's group
+// assignment) so the draw can be built again from scratch - e.g. after fixing seeds or a late
+// entry. Refuses once any match has started; a decided result must go through the match lifecycle,
+// not a bulk delete. Mirrors undoPromoteToKnockoutAction (groupActions.ts).
+export async function clearGeneratedMatchesAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const backTo = `${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}`
+
+  const category = await payload
+    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .catch(() => null)
+  if (!category || String(category.event_id) !== String(eventId)) {
+    redirect(`${backTo}&wizardError=invalid_relationship`)
+  }
+
+  const matches = await payload.find({
+    collection: 'matches',
+    depth: 0,
+    limit: 2000,
+    where: { category_id: { equals: categoryId } },
+  })
+  if (matches.totalDocs === 0) {
+    redirect(`${backTo}&wizardError=nothing_to_clear`)
+  }
+
+  const started = matches.docs.filter((match) => !UNSTARTED_TARGET_STATUSES.has(String(match.status)))
+  if (started.length > 0) {
+    redirect(`${backTo}&wizardError=matches_already_started`)
+  }
+
+  const stages = await payload.find({
+    collection: 'stages',
+    depth: 0,
+    limit: 20,
+    where: { category_id: { equals: categoryId } },
+  })
+  const stageIds = stages.docs.map((stage) => stage.id)
+  const matchIds = matches.docs.map((match) => match.id)
+
+  // Children first (FK order): sets -> matches -> bracket/standings/groups -> entry.group_id -> stages.
+  for (const match of matches.docs) {
+    await payload.delete({ collection: 'match-sets', where: { match_id: { equals: match.id } } }).catch(() => null)
+  }
+  await payload.delete({ collection: 'matches', where: { id: { in: matchIds } } })
+
+  if (stageIds.length > 0) {
+    await payload.delete({ collection: 'brackets', where: { stage_id: { in: stageIds } } }).catch(() => null)
+    await payload.delete({ collection: 'standings', where: { stage_id: { in: stageIds } } }).catch(() => null)
+
+    const groupedEntries = await payload.find({
+      collection: 'competition-entries',
+      depth: 0,
+      limit: 2000,
+      where: { and: [{ category_id: { equals: categoryId } }, { group_id: { exists: true } }] },
+    })
+    for (const entry of groupedEntries.docs) {
+      await payload.update({ collection: 'competition-entries', id: entry.id, data: { group_id: null } })
+    }
+
+    await payload.delete({ collection: 'groups', where: { stage_id: { in: stageIds } } }).catch(() => null)
+    await payload.delete({ collection: 'stages', where: { id: { in: stageIds } } })
+  }
+
+  await recordAuditLog({
+    payload,
+    action: 'competition_category.clear_generated_matches',
+    entityType: 'competition-categories',
+    entityId: categoryId,
+    before: { matchCount: matches.totalDocs, stageCount: stages.totalDocs },
+    after: null,
+    actorUserId: user.id,
+  })
+
+  revalidatePath(wizardPage)
+  redirect(`${backTo}&wizardCleared=${matches.totalDocs}`)
 }

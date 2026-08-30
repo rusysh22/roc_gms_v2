@@ -91,8 +91,15 @@ Opened from Match Officer or Match Details. Designed for a phone or tablet at th
   / *under review*). If the match is still *scheduled*, the point buttons are disabled and a note
   points you to **Start Match** in the *Match flow* panel. Tapping points on a match that is not
   ongoing is what produces the message *"N points could not be applied (match/set state changed)"*.
-- Big **Add point** and **Undo** buttons for the selected side.
-- Switch the side you are scoring; move between sets.
+- Big **Add point** and **Undo** buttons for the selected side. The score updates as you tap and
+  stays put — no refresh needed.
+- Switch the side you are scoring. Use **Add Set** for the next game, or **Delete Set N** to remove
+  the most recent set if it was added by mistake (only while the match isn't finished/published).
+- **You never pick the winner.** The set winner and the match winner are worked out from the score
+  and the category's ruleset (for badminton: first to 21, win by 2, cap at 30, best of 3). When the
+  deciding set finishes, a **"Match complete — X wins 2–0"** banner appears with a single
+  **Finish & publish result** button. (A collapsible **Correct manually** option is there for
+  retirements, disqualifications, or a score the rules can't resolve.)
 - **Works offline** — points are queued and sync automatically when the connection returns. It tells
   you how many points are pending, syncing, or failed (a failure means the match or set state
   changed under you — e.g. the match was finished on another device).
@@ -119,9 +126,9 @@ scheduled / published
 |---|---|---|
 | **Start Match** | scheduled / published → ongoing | Records the actual start time. **Do this first** — point entry in Live Score is disabled until the match is *ongoing*. |
 | **Pause Match** / **Resume Match** | ongoing ⇄ paused | |
-| **Finish Match** | ongoing → finished | Result is still **provisional** |
+| **Finish Match** / **Finish & publish result** | ongoing → finished (→ result published) | The winner is recorded automatically from the score. Result is **provisional** until published. |
 | **Send for Review** | finished → under review | Optional check before publishing |
-| **Confirm and Publish Result** | finished / under review → result published | Requires selecting the **winner**. This is the final, public result — it advances the bracket. |
+| **Confirm and Publish Result** | finished / under review → result published | The winner is pre-filled from the score; publishing is the final, public result and advances the bracket. Only an **Event Admin** / **Super Admin** can publish (a Match Officer's tap finishes the match with the winner recorded, ready for an admin to publish in one click). |
 
 ### Side branches
 
@@ -133,14 +140,26 @@ scheduled / published
 | **Cancel Match** | scheduled / published → cancelled | |
 | **Mark Walkover** | scheduled / published / ready to start → walkover | Requires selecting the winner; counts as a real result |
 
+### Undo steps
+
+Available on the **Match Details** page (Match Actions), for the common "oops":
+
+| Action | From → To | Notes |
+|---|---|---|
+| **Undo Start** | ongoing / paused → scheduled | Clears the recorded start time. Set scores stay. Any Match Officer. |
+| **Reopen Match** | finished / under review → ongoing | Reopens for more play; clears the end time and derived winner. **Event Admin only.** |
+| **Restore Match** | cancelled → scheduled | **Event Admin only.** |
+
+A **published** result or a **walkover** has no undo — correct a published result through the
+revision flow (Event Admin, with a reason), or mark the match **Disputed**.
+
 > **Example — one badminton match, start to finish**
 >
 > | Time | Officer action | Status | What else happens |
 > |---|---|---|---|
 > | 09:00 | **Start Match** | Ongoing | Actual start time recorded |
-> | 09:00–09:35 | Tap **Add point** in Live Score; one mis-tap fixed with **Undo**; Wi-Fi drops, points queue offline and sync on reconnect | Ongoing | Live score visible on the public match page and the venue display board |
-> | 09:35 | **Finish Match** (games 21–15, 19–21, 21–17) | Finished | Public page shows the score as **Provisional** |
-> | 09:37 | **Confirm and Publish Result**, winner = Andi Pratama | Result Published | Bracket advances Andi to the quarter-final; "result published" posts to the public Match Updates feed |
+> | 09:00–09:35 | Tap **Add point** in Live Score (games go 21–15, 19–21, 21–17); one mis-tap fixed with **Undo**; Wi-Fi drops, points queue offline and sync on reconnect | Ongoing | Each game's winner is recorded automatically as it is decided; live score shows on the public match page and the venue display board |
+> | 09:35 | Third game reaches 21–17 → **"Match complete — Andi Pratama wins 2–1"** banner → tap **Finish & publish result** | Result Published | Winner taken from the score — no dropdown. Bracket advances Andi to the quarter-final; "result published" posts to the public Match Updates feed |
 >
 > If a line call is contested at 09:36, the officer taps **Mark Disputed** instead — it appears on
 > the Command Center as urgent, an Event Admin reviews it, then uses **Resume Review → Confirm and

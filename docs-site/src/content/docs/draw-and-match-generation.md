@@ -45,6 +45,16 @@ for that sport before you commit.
 > bracket where the top 2 seeds get a first-round bye. Chess Open (6 players, round robin) produces
 > 15 matches.
 
+### Fixing a draw — Clear & regenerate
+
+Generation is **additive** — running it again only fills in matches that failed the first time. To
+rebuild a draw properly (you fixed seeds, a late entry came in, you changed the format), use
+**Clear & regenerate** on the category row. It deletes every generated match, group, and cached
+bracket/standings for that category so you can generate fresh.
+
+It refuses once **any match in the category has started** — a match with a real result must go
+through the [match lifecycle](/running-match-day/#the-match-lifecycle), not a bulk delete.
+
 ### Group Stage to Knockout
 
 This format has its own **Groups & qualifiers** panel:
