@@ -380,6 +380,127 @@ export async function generateGroupMatchesAction(formData: FormData): Promise<vo
   redirectToGenerate(eventId, categoryId, `&wizardGenerated=${createdCount}${failedParam}`)
 }
 
+// Quick final-score entry for a group match, straight from the wizard. The full match lifecycle
+// (schedule -> ready_to_start -> ongoing -> finished -> result_published, with per-set live scoring)
+// lives in the Matches / live-score workspace and is the right tool once an event is running. But a
+// group-stage-to-knockout category can't be finalized or promoted until every group match has an
+// official result, and a small event's organizer scoring everything themselves shouldn't have to
+// walk each fixture through five status changes just to type "3-1". This collapses that to one form
+// for group-stage matches that never entered the live-scoring flow (still ready_for_scheduling /
+// scheduled / ready_to_start), writing a single decisive set and publishing the result.
+export async function recordGroupMatchResultAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+
+  const eventId = text(formData, 'eventId')
+  const categoryId = text(formData, 'categoryId')
+  const matchId = text(formData, 'matchId')
+  const scoreARaw = text(formData, 'scoreA')
+  const scoreBRaw = text(formData, 'scoreB')
+  const winnerOverride = text(formData, 'winner') // 'A' | 'B' | '' - only used to break a drawn score
+  const scoreA = Number(scoreARaw)
+  const scoreB = Number(scoreBRaw)
+
+  if (
+    !matchId ||
+    scoreARaw === '' ||
+    scoreBRaw === '' ||
+    !Number.isInteger(scoreA) ||
+    !Number.isInteger(scoreB) ||
+    scoreA < 0 ||
+    scoreB < 0
+  ) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=invalid_result')
+  }
+
+  const match = await payload
+    .findByID({ collection: 'matches', id: matchId, depth: 0 })
+    .catch(() => null)
+  if (
+    !match ||
+    String(match.event_id) !== String(eventId) ||
+    String(match.category_id) !== String(categoryId)
+  ) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=invalid_relationship')
+  }
+
+  const groupStage = await findGroupStage(payload, categoryId)
+  if (!groupStage || String(match!.stage_id) !== String(groupStage.id)) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=invalid_relationship')
+  }
+  // Anything already through the real result flow stays there - correcting a published/disputed
+  // score has its own revision-reason path in the Matches workspace.
+  if (['result_published', 'walkover', 'finished', 'under_review', 'disputed'].includes(String(match!.status))) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=result_locked')
+  }
+
+  const entryAId = Number(match!.participant_a_entry_id)
+  const entryBId = Number(match!.participant_b_entry_id)
+  if (!entryAId || !entryBId) {
+    redirectToGenerate(eventId, categoryId, '&wizardError=invalid_relationship')
+  }
+
+  let winnerEntryId: number
+  if (scoreA > scoreB) winnerEntryId = entryAId
+  else if (scoreB > scoreA) winnerEntryId = entryBId
+  else if (winnerOverride === 'A') winnerEntryId = entryAId
+  else if (winnerOverride === 'B') winnerEntryId = entryBId
+  else redirectToGenerate(eventId, categoryId, '&wizardError=result_tie_needs_winner')
+
+  // Replace any prior set(s) so re-submitting a corrected score doesn't stack rows.
+  const existingSets = await payload.find({
+    collection: 'match-sets',
+    depth: 0,
+    limit: 50,
+    where: { match_id: { equals: matchId } },
+  })
+  for (const set of existingSets.docs) {
+    await payload.delete({ collection: 'match-sets', id: set.id })
+  }
+
+  await payload.create({
+    collection: 'match-sets',
+    data: {
+      event_id: Number(eventId),
+      match_id: Number(matchId),
+      set_number: 1,
+      participant_a_score: scoreA,
+      participant_b_score: scoreB,
+      winner_entry_id: winnerEntryId!,
+    },
+    user,
+  })
+
+  const before = { status: match!.status, winner_entry_id: match!.winner_entry_id ?? null }
+  await payload.update({
+    collection: 'matches',
+    id: matchId,
+    data: { status: 'result_published', winner_entry_id: winnerEntryId! },
+    user,
+  })
+  await recordAuditLog({
+    payload,
+    action: 'group_match.quick_result',
+    entityType: 'matches',
+    entityId: matchId,
+    before,
+    after: { status: 'result_published', winner_entry_id: winnerEntryId!, participant_a_score: scoreA, participant_b_score: scoreB },
+    actorUserId: user.id,
+  })
+
+  await recalculateStandingsForScope(payload, {
+    eventId,
+    categoryId,
+    stageId: groupStage!.id,
+    groupId: match!.group_id ? Number(match!.group_id) : undefined,
+  })
+
+  revalidatePath(wizardPage)
+  redirectToGenerate(eventId, categoryId, '&wizardUpdated=1')
+}
+
 export async function finalizeGroupStandingsAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,

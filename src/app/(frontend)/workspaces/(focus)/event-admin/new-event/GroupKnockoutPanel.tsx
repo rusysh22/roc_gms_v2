@@ -26,6 +26,7 @@ import {
   createGroupsAction,
   finalizeGroupStandingsAction,
   generateGroupMatchesAction,
+  recordGroupMatchResultAction,
   saveGroupAssignmentsAction,
   setGroupQualifyCountAction,
   undoPromoteToKnockoutAction,
@@ -95,6 +96,22 @@ export const GroupKnockoutPanel = async ({
   ])
   const groups = groupsResult.docs
   const entries = entriesResult.docs
+  const entryLabelById = new Map(entries.map((entry) => [String(entry.id), String(entry.display_name)]))
+  const groupMatches = groupMatchesResult.docs as Array<{
+    id: string | number
+    group_id?: unknown
+    round_name?: string | null
+    match_number?: string | null
+    status: string
+    participant_a_entry_id?: unknown
+    participant_b_entry_id?: unknown
+    winner_entry_id?: unknown
+  }>
+  const matchesByGroupId = new Map<string, typeof groupMatches>()
+  for (const match of groupMatches) {
+    const key = String(match.group_id)
+    matchesByGroupId.set(key, [...(matchesByGroupId.get(key) ?? []), match])
+  }
 
   const entryCountByGroup = new Map<string, number>()
   for (const entry of entries) {
@@ -254,11 +271,101 @@ export const GroupKnockoutPanel = async ({
               ))}
             </TableBody>
           </Table>
-          <form action={generateGroupMatchesAction}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="categoryId" value={categoryId} />
-            <SubmitButton>Generate round-robin matches</SubmitButton>
-          </form>
+          {groupMatches.length === 0 ? (
+            <form action={generateGroupMatchesAction}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="categoryId" value={categoryId} />
+              <SubmitButton>Generate round-robin matches</SubmitButton>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div>
+                <p className="text-xs text-ink-soft">
+                  Enter each match&apos;s final score below to record its result. Full lifecycle
+                  scoring (live points, per-set, referees) lives in the{' '}
+                  <Link href="/workspaces/matches" className="font-semibold underline">
+                    Matches workspace
+                  </Link>{' '}
+                  - this shortcut is for an organizer scoring a small group stage themselves. Every
+                  group match needs a result before you can finalize and promote to the knockout.
+                </p>
+              </div>
+              {groups.map((group) => {
+                const groupFixtures = matchesByGroupId.get(String(group.id)) ?? []
+                if (groupFixtures.length === 0) return null
+                return (
+                  <div key={group.id} className="flex flex-col gap-2">
+                    <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">{group.name}</p>
+                    {groupFixtures.map((match) => {
+                      const labelA = entryLabelById.get(String(match.participant_a_entry_id)) || 'TBD'
+                      const labelB = entryLabelById.get(String(match.participant_b_entry_id)) || 'TBD'
+                      const decided = RESULT_STATUSES.has(String(match.status))
+                      const winnerId = String(match.winner_entry_id ?? '')
+                      return (
+                        <div
+                          key={match.id}
+                          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-paper px-3 py-2 text-sm"
+                        >
+                          <span className="min-w-0 flex-1 font-semibold text-ink">
+                            {labelA} <span className="text-ink-soft">vs</span> {labelB}
+                          </span>
+                          {decided ? (
+                            <StatusBadge tone="green">
+                              Result in
+                              {winnerId
+                                ? ` · ${entryLabelById.get(winnerId) || 'winner'} won`
+                                : ''}
+                            </StatusBadge>
+                          ) : (
+                            <form
+                              action={recordGroupMatchResultAction}
+                              className="flex flex-wrap items-center gap-2"
+                            >
+                              <input type="hidden" name="eventId" value={eventId} />
+                              <input type="hidden" name="categoryId" value={categoryId} />
+                              <input type="hidden" name="matchId" value={String(match.id)} />
+                              <Input
+                                name="scoreA"
+                                type="number"
+                                min="0"
+                                required
+                                aria-label={`${labelA} score`}
+                                className="h-9 w-16"
+                              />
+                              <span className="text-ink-soft">-</span>
+                              <Input
+                                name="scoreB"
+                                type="number"
+                                min="0"
+                                required
+                                aria-label={`${labelB} score`}
+                                className="h-9 w-16"
+                              />
+                              <Select name="winner" defaultValue="" className="h-9 w-32 text-xs">
+                                <option value="">Winner if drawn…</option>
+                                <option value="A">{labelA}</option>
+                                <option value="B">{labelB}</option>
+                              </Select>
+                              <SubmitButton size="sm" variant="secondary">
+                                Save score
+                              </SubmitButton>
+                            </form>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+              <form action={generateGroupMatchesAction}>
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="categoryId" value={categoryId} />
+                <SubmitButton variant="ghost" size="sm">
+                  Re-generate any missing fixtures
+                </SubmitButton>
+              </form>
+            </div>
+          )}
         </>
       )}
     </Card>
