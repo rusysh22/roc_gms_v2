@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
+import { advanceCategoriesStatus } from '@/lib/categoryLifecycle'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
@@ -214,6 +215,24 @@ export async function publishEventAction(formData: FormData): Promise<void> {
     after: { ...before, ...data },
     actorUserId: user.id,
   })
+
+  // Taking the event public publishes every category that has completed its draw (locked ->
+  // published) so its bracket/standings actually show on the public site. Categories still in
+  // draft/open (setup not finished) and any manually archived one are left as-is.
+  if (data.visibility === 'published') {
+    const lockedCategories = await payload.find({
+      collection: 'competition-categories',
+      depth: 0,
+      limit: 500,
+      where: { and: [{ event_id: { equals: eventId } }, { status: { equals: 'locked' } }] },
+    })
+    await advanceCategoriesStatus(
+      payload,
+      lockedCategories.docs.map((category) => category.id),
+      'published',
+      user.id,
+    )
+  }
 
   revalidatePath(wizardPage)
   revalidatePath('/workspaces/event-admin')

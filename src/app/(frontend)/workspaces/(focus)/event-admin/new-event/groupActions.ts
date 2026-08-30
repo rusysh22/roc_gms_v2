@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import {
   createSingleEliminationBracketMatches,
@@ -367,6 +368,11 @@ export async function generateGroupMatchesAction(formData: FormData): Promise<vo
       stageId: stage!.id,
       groupId: group.id,
     })
+  }
+
+  if (createdCount > 0) {
+    // Group fixtures exist - the group stage's draw is settled, lock the category (open -> locked).
+    await advanceCategoryStatus(payload, categoryId, 'locked')
   }
 
   revalidatePath(wizardPage)

@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation'
 import type { Payload } from 'payload'
 
 import { recordAuditLog } from '@/lib/audit'
+import { advanceCategoriesStatus } from '@/lib/categoryLifecycle'
 import { parseParticipantsWorkbook, type ParsedParticipantsWorkbook } from '@/lib/participantsImport'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import {
@@ -1408,6 +1409,16 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       enteredKeys.add(key)
       nextSeedByCategory.set(catKey, seed + 1)
       registered += 1
+    }
+
+    // Importing entries into a category opens it (draft -> open), same as the Registration step.
+    if (registered > 0) {
+      await advanceCategoriesStatus(
+        payload,
+        registrations.map((registration) => registration.categoryId),
+        'open',
+        user.id,
+      )
     }
   }
 

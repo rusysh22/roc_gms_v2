@@ -56,6 +56,7 @@ import { createEventAction, publishEventAction } from './eventActions'
 import { AUTO_GENERATE_FORMATS } from './wizardShared'
 import { readImportSidecar } from './importScratch'
 import { addRulesetAction, addSportAction, deleteSportAction } from './sportActions'
+import { addCourtAction, addVenueAction, deleteCourtAction, deleteVenueAction } from './venueActions'
 import { SportCatalogPicker } from './SportCatalogPicker'
 import {
   addCategoryAction,
@@ -101,6 +102,7 @@ const STEPS = [
   { key: 'setup', label: 'Setup Assistant' },
   { key: 'event', label: 'Event' },
   { key: 'sports', label: 'Sports & Rulesets' },
+  { key: 'venues', label: 'Venues & Courts' },
   { key: 'categories', label: 'Categories' },
   { key: 'participants', label: 'Clubs / Teams / Players' },
   { key: 'registration', label: 'Registration' },
@@ -135,6 +137,10 @@ const errorMessages: Record<string, string> = {
   invalid_player: 'Fill in a valid player name.',
   invalid_entry: 'Choose a category and a participant to add.',
   duplicate_entry: 'That participant is already entered in this category.',
+  invalid_venue: 'Give the venue a name.',
+  invalid_court: 'A court needs a name and a venue. Capacity, if set, must be a whole number.',
+  venue_in_use: 'That venue has courts with matches already assigned - remove those first.',
+  court_in_use: 'That court already has matches assigned - remove those first.',
   invalid_import_file: 'Upload a valid .xlsx file exported from the template.',
   empty_import: 'That file has no rows in any of its Sports, Categories, Clubs, Teams, Players, or Pairs sheets.',
   import_failed:
@@ -333,6 +339,10 @@ export default async function NewEventWizardPage({
     // answered or skipped, it's definitionally behind you once an event exists.
     completedSteps.add('history')
     completedSteps.add('setup')
+    // Venues & Courts is optional (matches still generate without a court; scheduling to a specific
+    // court is a later, separate concern) - answered or skipped, it doesn't block progress. The
+    // Generate step carries its own "no courts yet" warning for anyone who skipped it.
+    completedSteps.add('venues')
     const [sportsCount, categoriesResult, clubsCount, teamsCount, playersCount, confirmedEntries, eventMatches] =
       await Promise.all([
         payload.count({ collection: 'sports', where: { event_id: { equals: eventId } } }),
@@ -504,6 +514,7 @@ export default async function NewEventWizardPage({
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
+          {step === 'venues' && event ? <VenuesStep payload={payload} eventId={eventId} /> : null}
           {step === 'categories' && event ? (
             <CategoriesStep
               payload={payload}
@@ -1459,6 +1470,176 @@ const SportsStep = async ({ payload, eventId }: { payload: Payload; eventId: str
       </div>
 
       <StepActions sticky>
+        <Button asChild>
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=venues`}>
+            Continue to Venues &amp; Courts
+          </Link>
+        </Button>
+      </StepActions>
+    </>
+  )
+}
+
+// Optional step: venues hold courts, courts are where matches get scheduled. Matches still generate
+// without any court (see GenerateStep's warning), so this whole step is skippable - the wizard just
+// makes it a first-class part of setup instead of a thing you discover is missing at step 8.
+const VenuesStep = async ({ payload, eventId }: { payload: Payload; eventId: string }) => {
+  const [venues, courts, sports] = await Promise.all([
+    payload.find({ collection: 'venues', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'courts', depth: 0, limit: 300, where: { event_id: { equals: eventId } }, sort: 'name' }),
+    payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
+  ])
+  const venueNameById = new Map(venues.docs.map((venue) => [String(venue.id), String(venue.name)]))
+  const sportNameById = new Map(sports.docs.map((sport) => [String(sport.id), String(sport.name)]))
+  const courtsByVenue = new Map<string, typeof courts.docs>()
+  for (const court of courts.docs) {
+    const key = String(court.venue_id)
+    courtsByVenue.set(key, [...(courtsByVenue.get(key) ?? []), court])
+  }
+
+  return (
+    <>
+      <Card className="flex flex-col gap-2">
+        <CardTitle>{stepNumber('venues')}. Venues &amp; courts</CardTitle>
+        <p className="text-sm text-ink-soft">
+          A <strong>venue</strong> is a place (a sports hall, a school, a park); a <strong>court</strong> is
+          one playable surface inside it (Court 1, Table A, Field 2). Matches can still be generated
+          without any of this - you only need courts once you want the Scheduler to put matches
+          somewhere. <strong>You can skip this step and add these later</strong> here or in the
+          Facilities workspace.
+        </p>
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <CardTitle>Add a venue</CardTitle>
+        <form action={addVenueAction} className="grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="eventId" value={eventId} />
+          <Field label="Venue name">
+            <Input name="name" required placeholder="Main Sports Hall" />
+          </Field>
+          <Field label="Address (optional)">
+            <Input name="address" placeholder="Jl. Contoh No. 1" />
+          </Field>
+          <Field label="Map link (optional)" className="sm:col-span-2">
+            <Input name="mapUrl" placeholder="https://maps.google.com/..." />
+          </Field>
+          <label className="flex items-center gap-2 text-sm font-semibold text-ink-soft sm:col-span-2">
+            <input type="checkbox" name="isVirtual" className="h-4 w-4" />
+            This is an online / virtual venue
+          </label>
+          <Field label="Virtual URL (optional)" className="sm:col-span-2">
+            <Input name="virtualUrl" placeholder="https://... (for esports / online events)" />
+          </Field>
+          <div className="sm:col-span-2">
+            <SubmitButton>Add venue</SubmitButton>
+          </div>
+        </form>
+      </Card>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-sm font-extrabold text-ink">
+          Venues in this event ({venues.totalDocs}) &middot; {courts.totalDocs} court
+          {courts.totalDocs === 1 ? '' : 's'}
+        </h2>
+        {venues.docs.length === 0 ? (
+          <EmptyState>No venues yet. Add one above, or skip this step.</EmptyState>
+        ) : null}
+        <div className="flex max-h-[36rem] flex-col gap-3 overflow-y-auto pr-1">
+          {venues.docs.map((venue) => {
+            const venueCourts = courtsByVenue.get(String(venue.id)) ?? []
+            return (
+              <Card key={venue.id} className="flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-extrabold text-ink">{venue.name}</p>
+                    <p className="text-xs font-semibold text-ink-soft">
+                      {venue.is_virtual ? 'Virtual venue' : venue.address || 'No address set'} &middot;{' '}
+                      {venueCourts.length} court{venueCourts.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <form id={`delete-venue-${venue.id}`} action={deleteVenueAction}>
+                    <input type="hidden" name="eventId" value={eventId} />
+                    <input type="hidden" name="venueId" value={String(venue.id)} />
+                  </form>
+                  <ConfirmSubmitButton
+                    formId={`delete-venue-${venue.id}`}
+                    size="sm"
+                    variant="ghost"
+                    confirmMessage={`Delete "${venue.name}" and its courts? Only allowed if none of its courts have matches assigned.`}
+                  >
+                    Delete
+                  </ConfirmSubmitButton>
+                </div>
+
+                {venueCourts.length > 0 ? (
+                  <ul className="flex flex-col gap-1.5">
+                    {venueCourts.map((court) => (
+                      <li
+                        key={court.id}
+                        className="flex items-center justify-between gap-3 rounded-card border border-line bg-paper px-3 py-2 text-sm"
+                      >
+                        <span className="min-w-0 truncate font-semibold text-ink">
+                          {court.name}
+                          <span className="ml-2 text-xs font-normal text-ink-soft">
+                            {court.sport_id
+                              ? sportNameById.get(String(court.sport_id)) || 'unknown sport'
+                              : 'any sport'}
+                            {court.capacity ? ` · seats ${court.capacity}` : ''}
+                          </span>
+                        </span>
+                        <form action={deleteCourtAction}>
+                          <input type="hidden" name="eventId" value={eventId} />
+                          <input type="hidden" name="courtId" value={String(court.id)} />
+                          <SubmitButton size="sm" variant="ghost">
+                            Remove
+                          </SubmitButton>
+                        </form>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                <form action={addCourtAction} className="grid gap-3 sm:grid-cols-2">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="venueId" value={String(venue.id)} />
+                  <Field label="Court name">
+                    <Input name="name" required placeholder="Court 1" />
+                  </Field>
+                  <Field label="Sport (optional)">
+                    <Select name="sportId" defaultValue="">
+                      <option value="">Any sport (shared court)</option>
+                      {sports.docs.map((sport) => (
+                        <option key={sport.id} value={String(sport.id)}>
+                          {sport.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Spectator capacity (optional)">
+                    <Input name="capacity" type="number" min="0" placeholder="e.g. 200" />
+                  </Field>
+                  <div className="flex items-end">
+                    <SubmitButton variant="secondary">Add court to {venue.name}</SubmitButton>
+                  </div>
+                </form>
+              </Card>
+            )
+          })}
+        </div>
+        {venueNameById.size === 0 ? null : (
+          <p className="text-xs text-ink-soft">
+            Tip: a court with no sport is a shared/multi-purpose surface any sport can be scheduled
+            onto; set a sport to reserve it for that sport only.
+          </p>
+        )}
+      </div>
+
+      <StepActions sticky>
+        <Button asChild variant="secondary">
+          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=categories`}>
+            Skip for now
+          </Link>
+        </Button>
         <Button asChild>
           <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=categories`}>
             Continue to Categories
@@ -3431,8 +3612,11 @@ const GenerateStep = async ({
           <AlertBanner tone="warning">
             No venues or courts are set up for this event yet. Matches can still generate, but
             nothing will have anywhere to be scheduled until you{' '}
-            <Link href="/workspaces/event-admin/facilities" className="font-bold underline">
-              add at least one court
+            <Link
+              href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=venues`}
+              className="font-bold underline"
+            >
+              add at least one court (step {stepNumber('venues')})
             </Link>
             .
           </AlertBanner>

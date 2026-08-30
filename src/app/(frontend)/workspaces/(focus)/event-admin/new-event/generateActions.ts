@@ -17,6 +17,7 @@ import {
   getSchedulableEntries,
   type MatchGenerationEntry,
 } from '@/lib/matchGeneration'
+import { advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
@@ -244,6 +245,12 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
       categoryId,
       stageId: stage.id,
     })
+  }
+
+  if (createdCount > 0) {
+    // Fixtures exist now - the category's registration and draw are settled, so lock it
+    // (open -> locked). Publishing still happens at the final step.
+    await advanceCategoryStatus(payload, categoryId, 'locked')
   }
 
   revalidatePath(wizardPage)

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { advanceCategoriesStatus, advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
 
@@ -112,6 +113,11 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
     addedCount += 1
   }
 
+  if (addedCount > 0) {
+    // First registration opens the category (draft -> open) so it stops reading as "not started".
+    await advanceCategoryStatus(payload, categoryId, 'open', user.id)
+  }
+
   revalidatePath(wizardPage)
   const suffix = addedCount === 0 ? '&wizardError=duplicate_entry' : `&wizardUpdated=1&wizardBulkAdded=${addedCount}`
   redirect(`${wizardPage}?eventId=${eventId}&step=registration&categoryId=${categoryId}${suffix}`)
@@ -184,6 +190,7 @@ export async function addBulkCategoryAssignmentsAction(formData: FormData): Prom
   }
 
   let addedCount = 0
+  const registeredCategoryIds = new Set<string>()
   for (const { collection, sourceId, categoryId } of parsed) {
     const category = categoryById.get(categoryId)
     if (!category) continue
@@ -222,8 +229,11 @@ export async function addBulkCategoryAssignmentsAction(formData: FormData): Prom
     })
     enteredKeys.add(key)
     nextSeedByCategory.set(categoryId, seed + 1)
+    registeredCategoryIds.add(categoryId)
     addedCount += 1
   }
+
+  await advanceCategoriesStatus(payload, registeredCategoryIds, 'open', user.id)
 
   revalidatePath(wizardPage)
   const suffix = addedCount === 0 ? '&wizardError=duplicate_entry' : `&wizardUpdated=1&wizardBulkAdded=${addedCount}`
