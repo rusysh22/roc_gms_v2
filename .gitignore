@@ -15,3 +15,4 @@ feedback
 /playwright-report
 /blob-report
 /playwright/.cache
+.env.production

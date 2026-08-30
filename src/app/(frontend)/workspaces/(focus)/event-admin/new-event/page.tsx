@@ -136,6 +136,8 @@ const errorMessages: Record<string, string> = {
   duplicate_entry: 'That participant is already entered in this category.',
   invalid_import_file: 'Upload a valid .xlsx file exported from the template.',
   empty_import: 'That file has no rows in any of its Sports, Categories, Clubs, Teams, Players, or Pairs sheets.',
+  import_failed:
+    'The import could not be completed - the file may have an unexpected cell value or format. Re-download the template for this event, re-enter your rows, and try again. If it keeps failing, the team has been notified.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
   duplicate_seed: 'Two entries had the same seed number. Give each entry a unique seed and save again.',
   invalid_group_count: 'Choose between 2 and 12 groups.',

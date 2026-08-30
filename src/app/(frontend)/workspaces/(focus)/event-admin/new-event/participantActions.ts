@@ -14,6 +14,14 @@ import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
 
 const emailValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
+// `redirect()` / `notFound()` work by throwing a control-flow error Next.js re-catches upstream -
+// a `try/catch` around import processing must let those through untouched and only swallow real
+// failures. See https://nextjs.org/docs/app/api-reference/functions/redirect#behavior.
+const isNextControlFlowError = (error: unknown): boolean =>
+  typeof (error as { digest?: unknown })?.digest === 'string' &&
+  ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
+    (error as { digest: string }).digest === 'NEXT_NOT_FOUND')
+
 export async function addClubAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
@@ -613,13 +621,27 @@ export async function previewParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=empty_import`)
   }
 
-  const plan = await planParticipantsImport(payload, eventId, parsed)
-  // Scratch storage only - not a real event asset, deleted by confirm/cancel. Re-uploading (not
-  // trying to preserve the original File object) is the only option since a File can't survive a
-  // redirect/second form submission; a plain filesystem write makes re-reading it back cheap.
+  let plan: Awaited<ReturnType<typeof planParticipantsImport>>
   const scratchFilename = `${randomUUID()}.xlsx`
-  await fs.mkdir(SCRATCH_DIR, { recursive: true })
-  await fs.writeFile(path.join(SCRATCH_DIR, scratchFilename), buffer)
+  try {
+    plan = await planParticipantsImport(payload, eventId, parsed)
+    // Scratch storage only - not a real event asset, deleted by confirm/cancel. Re-uploading (not
+    // trying to preserve the original File object) is the only option since a File can't survive a
+    // redirect/second form submission; a plain filesystem write makes re-reading it back cheap.
+    await fs.mkdir(SCRATCH_DIR, { recursive: true })
+    await fs.writeFile(path.join(SCRATCH_DIR, scratchFilename), buffer)
+  } catch (error) {
+    if (isNextControlFlowError(error)) throw error
+    // A malformed workbook that still parsed but breaks the dry run (bad cell types, an
+    // unexpected shape) used to fall straight through to the framework's white error page. Log
+    // the real cause for the team and send the organizer back to a readable error instead.
+    payload.logger.error(
+      `previewParticipantsImportAction failed for event ${eventId}: ${
+        error instanceof Error ? error.stack : String(error)
+      }`,
+    )
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=import_failed`)
+  }
 
   const { issuesParam, moreIssues } = encodeIssues(plan.issues)
   redirect(
@@ -679,6 +701,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=invalid_import_file`)
   }
 
+  try {
   const [existingSports, existingRulesets, existingClubs, existingPlayers, existingCategories] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
     payload.find({ collection: 'rulesets', depth: 0, limit: 1000, where: { event_id: { equals: eventId } } }),
@@ -1276,7 +1299,16 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         team_id: registration.collection === 'teams' ? registration.sourceId : undefined,
         club_id: registration.collection === 'clubs' ? registration.sourceId : undefined,
       }
-      const createdEntry = await payload.create({ collection: 'competition-entries', data: entryData })
+      let createdEntry
+      try {
+        createdEntry = await payload.create({ collection: 'competition-entries', data: entryData })
+      } catch {
+        // One bad registration (an unexpected validation failure) must not abort the whole batch
+        // and roll the organizer onto an error page - skip it with a row-level note, same as the
+        // per-source create loops above.
+        skip(registration.collection === 'teams' ? 'Pairs' : registration.collection === 'clubs' ? 'Clubs' : 'Players', registration.sourceName, 'Could not register into its category (unexpected error)')
+        continue
+      }
       await recordAuditLog({
         payload,
         action: 'competition_entry.create',
@@ -1329,6 +1361,20 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       (issuesParam ? `&wizardImportIssues=${issuesParam}` : '') +
       (moreIssues ? `&wizardImportMoreIssues=${moreIssues}` : ''),
   )
+  } catch (error) {
+    if (isNextControlFlowError(error)) throw error
+    // Anything the per-row `skip`/`warn` guards above did not already contain (an unexpected
+    // Payload validation failure in the batch registration pass, a DB hiccup) landed the organizer
+    // on the framework's white error page with a half-applied import and no way to tell what broke.
+    // Log the real cause for the team and return a readable error; the scratch file is kept so a
+    // retry is still possible.
+    payload.logger.error(
+      `confirmParticipantsImportAction failed for event ${eventId}: ${
+        error instanceof Error ? error.stack : String(error)
+      }`,
+    )
+    redirect(`${wizardPage}?eventId=${eventId}&step=participants&wizardError=import_failed`)
+  }
 }
 
 export async function addPlayerAction(formData: FormData): Promise<void> {
