@@ -10,10 +10,26 @@ export const metadata: Metadata = {
   title: 'Create account',
 }
 
-export default async function RegisterPage() {
+// Only ever redirect within the app - an unvalidated `redirect` param is an open-redirect vector
+// (mirrors login/page.tsx's sanitizeRedirect).
+const sanitizeRedirect = (value: string | undefined) => {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return '/workspaces'
+  }
+  return value
+}
+
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect?: string }>
+}) {
+  const { redirect: redirectParam } = await searchParams
+  const redirectTo = sanitizeRedirect(redirectParam)
+
   const user = await getCurrentPublicUser()
   if (user) {
-    redirect('/workspaces')
+    redirect(redirectTo)
   }
 
   return (
@@ -21,7 +37,7 @@ export default async function RegisterPage() {
       <div className="mx-auto flex w-full max-w-md flex-col items-center">
         <div className="mb-8 w-full">
           <Link
-            href="/login"
+            href={redirectTo === '/workspaces' ? '/login' : `/login?redirect=${encodeURIComponent(redirectTo)}`}
             className="flex items-center gap-1.5 text-xs font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
@@ -37,12 +53,15 @@ export default async function RegisterPage() {
         </div>
 
         <div className="mt-8 w-full">
-          <RegisterForm />
+          <RegisterForm redirectTo={redirectTo} />
         </div>
 
         <p className="mt-8 text-center text-xs text-ink-soft">
           Already have an account?{' '}
-          <Link href="/login" className="font-bold text-blue hover:underline">
+          <Link
+            href={redirectTo === '/workspaces' ? '/login' : `/login?redirect=${encodeURIComponent(redirectTo)}`}
+            className="font-bold text-blue hover:underline"
+          >
             Sign in
           </Link>
         </p>

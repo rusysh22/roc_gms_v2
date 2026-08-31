@@ -120,7 +120,10 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
 
       <p className="mt-8 text-center text-xs text-ink-soft">
         Don&apos;t have an account?{' '}
-        <Link href="/register" className="font-bold text-blue hover:underline">
+        <Link
+          href={redirectTo === '/workspaces' ? '/register' : `/register?redirect=${encodeURIComponent(redirectTo)}`}
+          className="font-bold text-blue hover:underline"
+        >
           Create one
         </Link>
       </p>

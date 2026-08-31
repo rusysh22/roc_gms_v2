@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 import type { Where } from 'payload'
 import {
@@ -49,6 +50,8 @@ import {
   type RelationshipDoc,
 } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
+import { buildWizardReturnTo, resolveWizardAccess } from './wizardAccess'
+import { WizardDraftClaim } from './WizardDraftClaim'
 import { FocusHeader } from '../../FocusHeader'
 import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
@@ -132,8 +135,13 @@ const STEPS = [
 // future reorder can't silently desync a hardcoded literal from the array again.
 const stepNumber = (key: (typeof STEPS)[number]['key']) => STEPS.findIndex((step) => step.key === key) + 1
 
+// Steps a logged-out visitor may not reach - the login wall goes up at "Clubs / Teams / Players"
+// ("generate club/player"). Mirrors ANON_WIZARD_STEPS in wizardAccess.ts (the inverse set).
+const AUTH_ONLY_STEPS = new Set(['participants', 'registration', 'draw', 'generate', 'bracket', 'history'])
+
 const errorMessages: Record<string, string> = {
   invalid_event: 'Fill in the event name, start, and end fields.',
+  rate_limited: 'Too many events created from this network in the last hour. Try again later, or sign in to continue.',
   invalid_date_range: 'Event end time must be after the start time (they cannot be the same).',
   invalid_logo: 'That logo file is not an image. Upload a JPG, PNG, or WebP.',
   duplicate_slug: 'That slug is already used. Try a different name or slug.',
@@ -214,10 +222,12 @@ const StepProgress = ({
   eventId,
   current,
   completedSteps,
+  isAnon = false,
 }: {
   eventId: string
   current: string
   completedSteps: Set<string>
+  isAnon?: boolean
 }) => {
   const currentIndex = STEPS.findIndex((step) => step.key === current)
   const completedCount = STEPS.filter((step) => completedSteps.has(step.key)).length
@@ -251,8 +261,10 @@ const StepProgress = ({
       <ol className="hidden items-start lg:flex" aria-label="Wizard steps">
         {STEPS.map((step, index) => {
           // Setup Assistant (index 0) and Event (index 1) are both reachable before an event
-          // exists - everything from Sports onward needs a real eventId.
-          const reachable = index <= 1 || Boolean(eventId)
+          // exists - everything from Sports onward needs a real eventId. A logged-out visitor
+          // additionally can't jump to the login-walled steps (participants onward).
+          const reachable =
+            index <= 1 || (Boolean(eventId) && !(isAnon && AUTH_ONLY_STEPS.has(step.key)))
           const active = index === currentIndex
           const done = completedSteps.has(step.key) && !active
           const href = `/workspaces/event-admin/new-event?${eventId ? `eventId=${eventId}&` : ''}step=${step.key}`
@@ -322,26 +334,43 @@ export default async function NewEventWizardPage({
 }: {
   searchParams?: SearchParams
 }) {
-  const access = await requireWorkspaceAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: '/workspaces/event-admin/new-event',
-    workspaceName: 'New Event Wizard',
-  })
-  if (!access.authorized) {
-    return (
-      <WorkspaceUnauthorized
-        workspaceName={access.workspaceName}
-        allowedRoles={access.allowedRoles}
-      />
-    )
-  }
-
-  const payload = access.payload
   const params = searchParams ? await searchParams : {}
   const eventId = get(params, 'eventId')
   const requestedStep = get(params, 'step')
   const wizardError = get(params, 'wizardError')
   const wizardUpdated = get(params, 'wizardUpdated')
+
+  // A logged-out visitor may walk Setup -> Event -> Sports -> Venues -> Categories; the login wall
+  // goes up at "Clubs / Teams / Players". `requestedStep` (or the pre-event default) is enough to
+  // decide which guard applies - the resolved `step` is re-checked further down for the case where
+  // `firstIncompleteStep` lands on a walled step.
+  const preliminaryStep = requestedStep || (eventId ? 'sports' : 'setup')
+  let payload: Awaited<ReturnType<typeof requireWorkspaceAccess>>['payload']
+  let isAnon = false
+  if (AUTH_ONLY_STEPS.has(preliminaryStep)) {
+    const access = await requireWorkspaceAccess({
+      allowedRoles: WORKSPACE_ROLES.eventAdmin,
+      returnTo: buildWizardReturnTo(preliminaryStep, eventId),
+      workspaceName: 'New Event Wizard',
+    })
+    if (!access.authorized) {
+      return (
+        <WorkspaceUnauthorized
+          workspaceName={access.workspaceName}
+          allowedRoles={access.allowedRoles}
+        />
+      )
+    }
+    payload = access.payload
+  } else {
+    const access = await resolveWizardAccess({
+      step: preliminaryStep,
+      eventId,
+      returnTo: buildWizardReturnTo(preliminaryStep, eventId),
+    })
+    payload = access.payload
+    isAnon = access.mode === 'anon'
+  }
 
   const event = eventId
     ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
@@ -371,6 +400,17 @@ export default async function NewEventWizardPage({
   // back to the top.
   const step = requestedStep || (event ? progress!.firstIncompleteStep : eventId ? 'sports' : 'setup')
 
+  // `firstIncompleteStep` can point past the wall (e.g. straight to Registration) - a logged-out
+  // visitor who lands there via a bare ?eventId= is sent to sign in, carrying their place.
+  if (isAnon && AUTH_ONLY_STEPS.has(step)) {
+    redirect(`/login?redirect=${encodeURIComponent(buildWizardReturnTo(step, eventId))}`)
+  }
+
+  // A signed-in organizer opening a wizard whose event is still an unclaimed anonymous draft they
+  // own: WizardDraftClaim transfers ownership to their account once, then this re-renders clean.
+  const pendingDraftClaim =
+    !isAnon && Boolean(eventId) && Boolean((event as { draft_claim_token?: string | null } | null)?.draft_claim_token)
+
   return (
     // Fixed viewport-height shell from `lg:` up (`h-svh overflow-hidden`) so header/stepper/summary
     // stay put and only the step content scrolls within its own pane below - a lightly-filled step
@@ -381,9 +421,10 @@ export default async function NewEventWizardPage({
     // be fiddlier to use than a single normal scroll, not an improvement.
     <main className="flex min-h-svh flex-col lg:h-svh lg:overflow-hidden">
       {event ? <WizardStepMemory eventId={eventId} step={step} /> : null}
+      {pendingDraftClaim ? <WizardDraftClaim eventId={eventId} /> : null}
       <FocusHeader
-        backHref="/workspaces/event-admin"
-        backLabel="Event Admin"
+        backHref={isAnon ? '/' : '/workspaces/event-admin'}
+        backLabel={isAnon ? 'Home' : 'Event Admin'}
         maxWidthClassName="max-w-7xl"
         title={
           eventLogo?.url ? (
@@ -401,7 +442,7 @@ export default async function NewEventWizardPage({
           )
         }
       >
-        <StepProgress eventId={eventId} current={step} completedSteps={completedSteps} />
+        <StepProgress eventId={eventId} current={step} completedSteps={completedSteps} isAnon={isAnon} />
       </FocusHeader>
 
       <div className="mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 px-4 py-6 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_460px]">
@@ -471,6 +512,7 @@ export default async function NewEventWizardPage({
               setupTournamentType={String(event.setup_tournament_type || '')}
               setupParticipantMode={String(event.setup_participant_mode || '')}
               editingCategoryId={get(params, 'editCategory')}
+              isAnon={isAnon}
             />
           ) : null}
           {step === 'participants' && event ? (
@@ -1193,6 +1235,16 @@ const EventStep = ({
         Also keeps the native beforeunload prompt. The logo file input can't be persisted. */}
     <WizardFormDraft storageKey="new-event:event-step">
       <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
+        {/* Honeypot: hidden from real users, filled only by naive bots - createEventAction writes
+            nothing and returns a benign redirect when it's set. */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="hidden"
+        />
         {/* Carried through from the Setup Assistant (Step 0), if answered - createEventAction
             persists these onto the new event so every later step can read a real default off it. */}
         <input type="hidden" name="setupTournamentType" value={defaultSetupTournamentType} />
@@ -1700,12 +1752,14 @@ const CategoriesStep = async ({
   setupTournamentType,
   setupParticipantMode,
   editingCategoryId,
+  isAnon = false,
 }: {
   payload: Payload
   eventId: string
   setupTournamentType: string
   setupParticipantMode: string
   editingCategoryId?: string
+  isAnon?: boolean
 }) => {
   const [sports, categories, rulesets] = await Promise.all([
     payload.find({ collection: 'sports', depth: 0, limit: 100, where: { event_id: { equals: eventId } }, sort: 'name' }),
@@ -2084,11 +2138,28 @@ const CategoriesStep = async ({
       </Card>
 
       <StepActions sticky>
-        <Button asChild>
-          <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}>
-            Continue to Clubs / Teams / Players
-          </Link>
-        </Button>
+        {isAnon ? (
+          <div className="flex flex-col items-end gap-1.5">
+            <Button asChild>
+              <Link
+                href={`/login?redirect=${encodeURIComponent(
+                  `/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`,
+                )}`}
+              >
+                Sign in to add participants
+              </Link>
+            </Button>
+            <p className="text-xs text-ink-soft">
+              Your event so far is saved. Create a free account to add clubs, teams, and players.
+            </p>
+          </div>
+        ) : (
+          <Button asChild>
+            <Link href={`/workspaces/event-admin/new-event?eventId=${eventId}&step=participants`}>
+              Continue to Clubs / Teams / Players
+            </Link>
+          </Button>
+        )}
       </StepActions>
     </>
   )

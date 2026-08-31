@@ -4,8 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
-import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, text, wizardPage } from './wizardShared'
+import { assertWizardActionAccess } from './wizardAccess'
 
 // Wizard-scoped venue/court CRUD - mirrors sportActions.ts. The Facilities workspace
 // (facilityActions.ts) does the same against the cookie-selected event; these take `eventId` from
@@ -16,10 +16,7 @@ const venuesStep = (eventId: string, query = '') =>
   `${wizardPage}?eventId=${eventId}&step=venues${query}`
 
 export async function addVenueAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'venues')
 
   const eventId = text(formData, 'eventId')
   const name = text(formData, 'name')
@@ -49,7 +46,7 @@ export async function addVenueAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -57,10 +54,7 @@ export async function addVenueAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteVenueAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'venues')
 
   const eventId = text(formData, 'eventId')
   const venueId = text(formData, 'venueId')
@@ -97,7 +91,7 @@ export async function deleteVenueAction(formData: FormData): Promise<void> {
     entityId: venueId,
     before: venue,
     after: null,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -105,10 +99,7 @@ export async function deleteVenueAction(formData: FormData): Promise<void> {
 }
 
 export async function addCourtAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'venues')
 
   const eventId = text(formData, 'eventId')
   const name = text(formData, 'name')
@@ -156,7 +147,7 @@ export async function addCourtAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -164,10 +155,7 @@ export async function addCourtAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteCourtAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'venues')
 
   const eventId = text(formData, 'eventId')
   const courtId = text(formData, 'courtId')
@@ -190,7 +178,7 @@ export async function deleteCourtAction(formData: FormData): Promise<void> {
     entityId: courtId,
     before: court,
     after: null,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)

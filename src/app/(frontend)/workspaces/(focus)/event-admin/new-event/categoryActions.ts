@@ -6,8 +6,8 @@ import { redirect } from 'next/navigation'
 import { recordAuditLog } from '@/lib/audit'
 import { CATEGORY_STATUS_ORDER } from '@/lib/categoryLifecycle'
 import { categoryHasStartedMatch, deleteCategoryCascade } from '@/lib/cascadeDelete'
-import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, isNextControlFlowError, slugify, text, wizardPage } from './wizardShared'
+import { assertWizardActionAccess } from './wizardAccess'
 
 const categoryStatuses = new Set(['draft', 'open', 'locked', 'published', 'archived'])
 const statusRank = (status: string) => {
@@ -28,10 +28,7 @@ const formatTypes = new Set([
 ])
 
 export async function addCategoryAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'categories')
 
   const eventId = text(formData, 'eventId')
   const sportId = text(formData, 'sportId')
@@ -140,7 +137,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -151,10 +148,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
 // move them to 'open'/'locked'/'published' - without it there was no in-app way to publish a
 // category once created (the wizard's create form doesn't expose status).
 export async function updateCategoryStatusAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'categories')
 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
@@ -200,7 +194,7 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
     entityId: categoryId,
     before: { status: before.status },
     after: { status },
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   const event = await getWizardEvent(payload, eventId)
@@ -216,10 +210,7 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
 // abandoning the old one as clutter. Deliberately does not touch `slug` (existing public URLs to
 // this category keep working) or `status` (that stays updateCategoryStatusAction's job).
 export async function updateCategoryAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'categories')
 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
@@ -287,7 +278,7 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
     entityId: categoryId,
     before,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -301,10 +292,7 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
 // Entries/stages/matches are never copied - those belong to a specific competition run, not to
 // the category's configuration.
 export async function duplicateCategoryAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'categories')
 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
@@ -364,7 +352,7 @@ export async function duplicateCategoryAction(formData: FormData): Promise<void>
     entityId: created.id,
     before: null,
     after: { ...data, duplicatedFrom: categoryId },
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -377,10 +365,7 @@ export async function duplicateCategoryAction(formData: FormData): Promise<void>
 // category that was never actually used (e.g. created by mistake, or a leftover before-duplicate
 // draft).
 export async function deleteCategoryAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'categories')
 
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
@@ -418,7 +403,7 @@ export async function deleteCategoryAction(formData: FormData): Promise<void> {
     entityId: categoryId,
     before: { ...category, entryCount: entries.totalDocs, matchCount: matches.totalDocs },
     after: null,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)

@@ -13,6 +13,7 @@
     "brackets:recalculate": "payload run src/scripts/recalculateBrackets.ts",
     "standings:recalculate": "payload run src/scripts/recalculateStandings.ts",
     "medals:recalculate": "payload run src/scripts/recalculateMedals.ts",
+    "drafts:cleanup": "payload run src/scripts/cleanupAbandonedDrafts.ts",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",
     "typecheck": "tsc --noEmit",

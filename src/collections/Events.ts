@@ -218,6 +218,22 @@ export const Events: CollectionConfig = {
       ],
     },
     {
+      // Anonymous "Create New Event" wizard: a logged-out visitor's draft is minted with a random
+      // token here and no EventMemberships row. The token is matched against their `wizard_draft`
+      // cookie to authorize edits, and cleared (with draft_creator_ip) the moment the draft is
+      // claimed by the account they register/log in with - see new-event/wizardAccess.ts. NULL for
+      // every event created by a logged-in organizer, and for every claimed draft.
+      name: 'draft_claim_token',
+      type: 'text',
+      index: true,
+      admin: { hidden: true, readOnly: true },
+    },
+    {
+      name: 'draft_creator_ip',
+      type: 'text',
+      admin: { hidden: true, readOnly: true },
+    },
+    {
       // MSG-12: added so the Setup Assistant's first question can be "how big is your event"
       // (always answerable) instead of a single tournament format/participant mode that a
       // multi-sport event can't honestly answer at the event level - see SetupStep. Purely a

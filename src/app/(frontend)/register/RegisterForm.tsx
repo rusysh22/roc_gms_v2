@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { AlertBanner } from '@/components/ui/alert-banner'
 
-export function RegisterForm() {
+export function RegisterForm({ redirectTo = '/workspaces' }: { redirectTo?: string }) {
   const router = useRouter()
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
@@ -55,11 +55,13 @@ export function RegisterForm() {
       })
 
       if (!loginResponse.ok) {
-        router.push('/login')
+        router.push(
+          redirectTo === '/workspaces' ? '/login' : `/login?redirect=${encodeURIComponent(redirectTo)}`,
+        )
         return
       }
 
-      router.push('/workspaces')
+      router.push(redirectTo)
       router.refresh()
     } catch {
       setError('Something went wrong. Please try again.')

@@ -5,8 +5,8 @@ import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { getCatalogSport } from '@/lib/sportCatalog'
-import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
+import { assertWizardActionAccess } from './wizardAccess'
 
 const formatTypes = new Set([
   'single_elimination',
@@ -33,10 +33,7 @@ const encodeIssues = (issues: { name: string; reason: string }[]) => ({
 // "Add a sport"/"Add a category" forms use - there's no separate catalog-backed data path, so
 // anything created this way is editable/deletable exactly like anything created manually.
 export async function addSportFromCatalogAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'sports')
 
   const eventId = text(formData, 'eventId')
   const sportKey = text(formData, 'sportKey')
@@ -95,7 +92,7 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
       entityId: createdSport.id,
       before: null,
       after: sportData,
-      actorUserId: user.id,
+      actorUserId: user?.id ?? null,
     })
   }
 
@@ -142,7 +139,7 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
       entityId: createdRuleset.id,
       before: null,
       after: rulesetData,
-      actorUserId: user.id,
+      actorUserId: user?.id ?? null,
     })
   }
 
@@ -206,7 +203,7 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
       entityId: createdCategory.id,
       before: null,
       after: categoryData,
-      actorUserId: user.id,
+      actorUserId: user?.id ?? null,
     })
   }
 
@@ -217,7 +214,7 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
     entityId: sportId,
     before: null,
     after: { sportKey: catalogSport!.key, sportCreated, categoriesCreated: created, issues },
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)

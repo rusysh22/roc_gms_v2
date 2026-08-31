@@ -1,16 +1,29 @@
 'use server'
 
+import { randomUUID } from 'node:crypto'
+
 import type { Payload } from 'payload'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { cookies, headers as getHeaders } from 'next/headers'
 
 import { recordAuditLog } from '@/lib/audit'
 import { advanceCategoriesStatus } from '@/lib/categoryLifecycle'
+import { checkAnonymousDraftRateLimit } from '@/lib/anonymousDraftRateLimit'
 import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
 import { slugify, text, wizardPage } from './wizardShared'
+import { claimDraftIfPending, resolveWizardAccess, setWizardDraftCookie } from './wizardAccess'
+
+const getClientIp = async (): Promise<string> => {
+  const headersList = await getHeaders()
+  const forwardedFor = headersList.get('x-forwarded-for')
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim() || 'unknown'
+  }
+  return headersList.get('x-real-ip') || 'unknown'
+}
 
 const eventTimezones = new Set<string>(EVENT_TIMEZONE_OPTIONS.map((option) => option.value))
 
@@ -37,10 +50,33 @@ const findAvailableSlug = async (payload: Payload, base: string): Promise<string
 }
 
 export async function createEventAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
+  // Honeypot: a real visitor never fills the visually-hidden `website` field. A bot that fills
+  // everything trips it - bounce to a benign state, write nothing, give no signal.
+  if (text(formData, 'website')) {
+    redirect(`${wizardPage}?step=event`)
+  }
+
+  // Anonymous visitors are allowed to create the draft event (NEW_EVENT anonymous-wizard plan) -
+  // the login wall goes up at the "Clubs / Teams / Players" step. resolveWizardAccess redirects a
+  // signed-in non-admin away and otherwise hands back an `anon` context here (no eventId yet).
+  const access = await resolveWizardAccess({
+    step: 'event',
+    eventId: '',
+    returnTo: `${wizardPage}?step=event`,
   })
+  const payload = access.payload
+  const user = access.mode === 'user' ? access.user : null
+
+  const isAnon = access.mode === 'anon'
+  let draftClaimToken: string | null = null
+  let draftCreatorIp: string | undefined
+  if (isAnon) {
+    draftCreatorIp = await getClientIp()
+    if (!checkAnonymousDraftRateLimit(draftCreatorIp)) {
+      redirect(`${wizardPage}?step=event&wizardError=rate_limited`)
+    }
+    draftClaimToken = randomUUID()
+  }
 
   const name = text(formData, 'name')
   const rawSlug = text(formData, 'slug')
@@ -144,6 +180,10 @@ export async function createEventAction(formData: FormData): Promise<void> {
       | 'copy_previous'
       | undefined,
     setup_event_scale: setupEventScale as 'single_sport' | 'multi_sport' | undefined,
+    // Set only for a logged-out visitor's draft - matched against their `wizard_draft` cookie
+    // until they register/log in and the draft is claimed (both cleared then).
+    draft_claim_token: draftClaimToken ?? undefined,
+    draft_creator_ip: draftCreatorIp,
   }
   const created = await payload.create({ collection: 'events', data })
   await recordAuditLog({
@@ -153,8 +193,24 @@ export async function createEventAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
+
+  if (isAnon && draftClaimToken) {
+    await setWizardDraftCookie(created.id, draftClaimToken)
+  } else if (user) {
+    // Events.ts's enrollCreatorAsMember hook only fires when the create carries a `req.user`, which
+    // this Local API call does not - enrol the creator here so the event is actually scoped to
+    // them (an anonymous draft is enrolled later, at claim time). Best-effort, mirrors the hook.
+    try {
+      await payload.create({
+        collection: 'event-memberships',
+        data: { event_id: Number(created.id), user_id: Number(user.id) },
+      })
+    } catch (error) {
+      payload.logger.error(`Failed to enrol creator as member of event ${created.id}: ${error}`)
+    }
+  }
 
   // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 13: without this, the workspace's "active event" stayed
   // whatever it was before the wizard ran (or fell back to the earliest-starting event), so an
@@ -171,6 +227,20 @@ export async function createEventAction(formData: FormData): Promise<void> {
   revalidatePath(wizardPage)
   revalidatePath('/workspaces/event-admin')
   redirect(`${wizardPage}?eventId=${created.id}&step=sports&wizardCreated=1`)
+}
+
+// Fired once (from WizardDraftClaim) when a now-authenticated organizer opens a wizard whose event
+// is still an unclaimed anonymous draft they own: transfer ownership to their account. No redirect
+// - claimDraftIfPending revalidates the wizard path, which re-renders without the claim trigger.
+export async function claimDraftEventAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.eventAdmin,
+    returnTo: wizardPage,
+  })
+  const eventId = text(formData, 'eventId')
+  if (eventId) {
+    await claimDraftIfPending(payload, eventId, user)
+  }
 }
 
 // The bulk schedule-revision spreadsheet (export current schedule -> edit dates/venues/courts in

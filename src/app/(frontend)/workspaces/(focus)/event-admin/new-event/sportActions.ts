@@ -5,17 +5,14 @@ import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
 import { categoryHasStartedMatch, deleteCategoryCascade } from '@/lib/cascadeDelete'
-import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { getWizardEvent, slugify, text, wizardPage } from './wizardShared'
+import { assertWizardActionAccess } from './wizardAccess'
 
 const sportTypes = new Set(['court', 'field', 'table', 'board', 'esport', 'track', 'other'])
 const scoreTypes = new Set(['points', 'goals', 'sets', 'time', 'result', 'custom'])
 
 export async function addSportAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'sports')
 
   const eventId = text(formData, 'eventId')
   const name = text(formData, 'name')
@@ -62,7 +59,7 @@ export async function addSportAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -75,10 +72,7 @@ export async function addSportAction(formData: FormData): Promise<void> {
 // category, not out from under it. Rulesets have no delete UI of their own and no value without
 // their sport, so they're removed along with it rather than left permanently orphaned.
 export async function deleteSportAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'sports')
 
   const eventId = text(formData, 'eventId')
   const sportId = text(formData, 'sportId')
@@ -131,7 +125,7 @@ export async function deleteSportAction(formData: FormData): Promise<void> {
     entityId: sportId,
     before: { ...sport, categoryCount: categoriesResult.totalDocs },
     after: null,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
@@ -139,10 +133,7 @@ export async function deleteSportAction(formData: FormData): Promise<void> {
 }
 
 export async function addRulesetAction(formData: FormData): Promise<void> {
-  const { payload, user } = await assertWorkspaceActionAccess({
-    allowedRoles: WORKSPACE_ROLES.eventAdmin,
-    returnTo: wizardPage,
-  })
+  const { payload, user } = await assertWizardActionAccess(formData, 'sports')
 
   const eventId = text(formData, 'eventId')
   const sportId = text(formData, 'sportId')
@@ -194,7 +185,7 @@ export async function addRulesetAction(formData: FormData): Promise<void> {
     entityId: created.id,
     before: null,
     after: data,
-    actorUserId: user.id,
+    actorUserId: user?.id ?? null,
   })
 
   revalidatePath(wizardPage)
