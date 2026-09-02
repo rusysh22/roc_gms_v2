@@ -5,6 +5,9 @@ import { getPayload } from 'payload'
 
 import config from '@payload-config'
 import { getEventThemeStyle } from '@/lib/eventTheme'
+import { eventShareCopy } from '@/lib/shareMessages'
+import { formatEventDateRange } from '@/lib/eventDates'
+import { resolveEventTimezone } from '@/lib/timezone'
 import { getPublicEventBySlug } from '../publicEvents'
 
 type EventLayoutParams = Promise<{ eventSlug: string }>
@@ -27,10 +30,35 @@ export async function generateMetadata({ params }: { params: EventLayoutParams }
   const event = await getPublicEventBySlug(payload, eventSlug)
   const name = event?.name || 'Event'
 
+  const tz = resolveEventTimezone(event?.timezone)
+  const dateLabel =
+    event?.event_start_at && event?.event_end_at
+      ? formatEventDateRange(event.event_start_at, event.event_end_at, tz)
+      : null
+  const copy = eventShareCopy(name, {
+    dateLabel,
+    location: event?.location,
+    tagline: event?.hero_tagline,
+  })
+
+  // The co-located events/[eventSlug]/opengraph-image.tsx is attached automatically by Next
+  // (metadataBase is set in the root layout); this only supplies the flexible text.
   return {
     title: {
       template: '%s | InTourney',
       default: name,
+    },
+    description: copy.description,
+    openGraph: {
+      type: 'website',
+      siteName: 'InTourney',
+      title: name,
+      description: copy.description,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: name,
+      description: copy.description,
     },
   }
 }

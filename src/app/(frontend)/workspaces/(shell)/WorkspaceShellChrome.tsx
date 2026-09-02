@@ -25,7 +25,6 @@ import {
   PlusCircle,
   Settings,
   Shield,
-  ShieldCheck,
   Trophy,
   Users,
   X,
@@ -33,6 +32,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '@/components/brand-logo'
 import type { UserRole } from '@/access/roles'
 import type { ActiveEventDoc } from '../activeEvent'
 import { EventSwitcher } from './EventSwitcher'
@@ -383,12 +383,10 @@ export function WorkspaceShellChrome({
   return (
     <div className="flex min-h-svh bg-mist font-sans text-ink">
       <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r border-line bg-paper lg:flex">
-        <div className="flex items-center gap-2 border-b border-line px-4 py-4">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-green text-paper">
-            <ShieldCheck className="h-4.5 w-4.5" aria-hidden="true" />
-          </span>
+        <div className="flex items-center gap-2.5 border-b border-line px-4 py-4">
+          <BrandLogo variant="icon" height={32} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold text-ink">InTourney</p>
+            <BrandLogo variant="wordmark" height={15} />
             <p className="truncate text-xs font-semibold text-ink-soft">Workspaces</p>
           </div>
         </div>
@@ -415,7 +413,10 @@ export function WorkspaceShellChrome({
                 aria-describedby={undefined}
               >
                 <div className="flex items-center justify-between border-b border-line px-4 py-4">
-                  <Dialog.Title className="text-sm font-extrabold text-ink">InTourney</Dialog.Title>
+                  <Dialog.Title className="text-sm font-extrabold text-ink">
+                    <BrandLogo variant="horizontal" height={20} />
+                    <span className="sr-only">InTourney</span>
+                  </Dialog.Title>
                   <Dialog.Close asChild>
                     <button
                       type="button"

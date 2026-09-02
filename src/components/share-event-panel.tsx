@@ -2,6 +2,7 @@ import Link from 'next/link'
 import QRCode from 'qrcode'
 
 import { getAbsolutePublicUrl } from '@/lib/shareMetadata'
+import { eventShareCopy } from '@/lib/shareMessages'
 import { Card, CardTitle } from '@/components/ui/card'
 import { ShareButtons } from '@/components/share-buttons'
 
@@ -14,11 +15,22 @@ import { ShareButtons } from '@/components/share-buttons'
 export async function ShareEventPanel({
   eventName,
   eventPath,
+  eventDateLabel,
+  eventLocation,
+  eventTagline,
 }: {
   eventName: string
   eventPath: string
+  eventDateLabel?: string | null
+  eventLocation?: string | null
+  eventTagline?: string | null
 }) {
   const url = getAbsolutePublicUrl(eventPath)
+  const shareCopy = eventShareCopy(eventName, {
+    dateLabel: eventDateLabel,
+    location: eventLocation,
+    tagline: eventTagline,
+  })
   const qrSvg = await QRCode.toString(url, {
     type: 'svg',
     margin: 1,
@@ -58,7 +70,7 @@ export async function ShareEventPanel({
           </div>
         </div>
       </div>
-      <ShareButtons title={eventName} description={`Check out ${eventName} on InTourney`} url={url} />
+      <ShareButtons title={eventName} description={shareCopy.description} url={url} />
     </Card>
   )
 }

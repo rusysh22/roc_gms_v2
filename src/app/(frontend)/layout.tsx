@@ -2,7 +2,9 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
+import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
+import { marketingShareCopy } from '@/lib/shareMessages'
 import { getPublicBaseUrl } from '@/lib/shareMetadata'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
@@ -25,27 +27,30 @@ const SITE_DESCRIPTION =
   'creating the event and importing participants, through the draw and match generation, to ' +
   'match-day operations, results, standings, medals, and a public event website.'
 
+const share = marketingShareCopy()
+
 // `metadataBase` is what turns every relative `openGraph.images` / `alternates.canonical` in the
 // tree into an absolute URL - without it Next logs a warning and social crawlers get relative
 // paths they can't resolve. Driven by NEXT_PUBLIC_SITE_URL (see getPublicBaseUrl).
 export const metadata: Metadata = {
   metadataBase: new URL(getPublicBaseUrl()),
   title: { template: '%s | InTourney', default: 'InTourney - run multi-sport tournaments & games' },
-  description: SITE_DESCRIPTION,
+  description: share.description,
   applicationName: 'InTourney',
+  alternates: { canonical: '/' },
+  // The co-located (frontend)/opengraph-image.tsx is attached automatically and inherited by every
+  // public page that doesn't ship its own; this sets the shared text + card type.
   openGraph: {
     type: 'website',
     siteName: 'InTourney',
-    title: 'InTourney - run multi-sport tournaments & games',
-    description: SITE_DESCRIPTION,
+    title: `InTourney - ${share.title}`,
+    description: share.description,
     url: '/',
-    images: ['/og.png'],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'InTourney - run multi-sport tournaments & games',
-    description: SITE_DESCRIPTION,
-    images: ['/og.png'],
+    title: `InTourney - ${share.title}`,
+    description: share.description,
   },
 }
 
@@ -100,7 +105,7 @@ export default async function FrontendLayout({ children }: Props) {
           // eslint-disable-next-line react/no-danger -- server-built from our own constants, no user HTML
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
         />
-        <PublicChrome brand="InTourney" user={user}>
+        <PublicChrome brand={<BrandLogo variant="horizontal" height={22} priority />} user={user}>
           {children}
         </PublicChrome>
       </body>

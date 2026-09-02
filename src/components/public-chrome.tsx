@@ -7,6 +7,7 @@ import { ChevronDown, LogOut } from 'lucide-react'
 
 import { NavBar, type NavItem } from '@/components/nav-bar'
 import { Footer } from '@/components/footer'
+import { BrandLogo } from '@/components/brand-logo'
 import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
 
 // Operational/internal tool routes never get the public floating nav + footer chrome, only the
@@ -150,7 +151,7 @@ function NavCta({ user }: { user: PublicNavUser | null }) {
 }
 
 export interface PublicChromeProps {
-  brand: string
+  brand: React.ReactNode
   user: PublicNavUser | null
   children: React.ReactNode
 }
@@ -195,7 +196,12 @@ export function PublicChrome({ brand, user, children }: PublicChromeProps) {
         cta={<NavCta user={user} />}
       />
       <div className="flex-1 pt-6">{children}</div>
-      <Footer brand={brand} tagline="Hosting your Tournament's" links={navItems} />
+      <Footer
+        brand={<BrandLogo variant="wordmark" height={20} />}
+        brandName="InTourney"
+        tagline="Hosting your Tournament's"
+        links={navItems}
+      />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
@@ -5,6 +6,8 @@ import { ArrowLeft, ChevronRight } from 'lucide-react'
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
+import { buildShareMetadata } from '@/lib/shareMetadata'
+import { matchShareCopy } from '@/lib/shareMessages'
 import { getMatchDetail } from '../../../../matchDetailData'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { ShareButtons } from '@/components/share-buttons'
@@ -44,6 +47,50 @@ const getCategoryHref = (eventPath: string, sport: unknown, category: unknown) =
   return sportSlug && categorySlug ? `${eventPath}/sports/${sportSlug}/${categorySlug}` : ''
 }
 
+// The co-located opengraph-image.tsx here is attached automatically by Next; this supplies the
+// flexible share text (matchup + round + score/live status). Falls through to the event layout's
+// metadata if the match can't be resolved.
+export async function generateMetadata({ params }: { params: MatchPageParams }): Promise<Metadata> {
+  const { eventSlug, matchNumber } = await params
+  const payload = await getPayload({ config })
+  const event = await getPublicEventBySlug(payload, eventSlug)
+  if (!event) return {}
+
+  const found = await payload.find({
+    collection: 'matches',
+    depth: 1,
+    limit: 1,
+    where: { and: [{ match_number: { equals: matchNumber } }, { event_id: { equals: event.id } }] },
+  })
+  const match = found.docs[0] as unknown as Record<string, unknown> | undefined
+  if (!match || match.is_public === false) return {}
+
+  const status = String(match.status || '')
+  const isLive = LIVE_POLL_STATUSES.has(status)
+  const settled = status === 'result_published' || status === 'completed'
+  const aScore = match.participant_a_score
+  const bScore = match.participant_b_score
+  const scoreLabel =
+    typeof aScore === 'number' && typeof bScore === 'number' ? `${aScore}–${bScore}` : null
+
+  const copy = matchShareCopy(
+    getRelationshipLabel(match.participant_a_entry_id as never),
+    getRelationshipLabel(match.participant_b_entry_id as never),
+    {
+      eventName: event.name,
+      roundLabel: typeof match.round_name === 'string' ? match.round_name : null,
+      scoreLabel: settled ? scoreLabel : null,
+      isLive,
+    },
+  )
+
+  return buildShareMetadata({
+    title: copy.title,
+    description: copy.description,
+    path: `/events/${eventSlug}/matches/${matchNumber}`,
+  })
+}
+
 export default async function PublicMatchDetailPage({ params }: { params: MatchPageParams }) {
   const { eventSlug, matchNumber } = await params
   const payload = await getPayload({ config })
@@ -77,9 +124,21 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
   const publicComments = comments.filter(
     (comment) => comment.comment_type === 'public' && comment.status === 'approved',
   )
-  const shareTitle = `${getRelationshipLabel(match.participant_a_entry_id)} vs ${getRelationshipLabel(
-    match.participant_b_entry_id,
-  )} / ${match.match_number}`
+  const isLiveMatch = LIVE_POLL_STATUSES.has(String(match.status || ''))
+  const matchSettled =
+    match.status === 'result_published' || match.status === 'completed'
+  const matchScoreLabel = match.score_summary || null
+  const shareCopy = matchShareCopy(
+    getRelationshipLabel(match.participant_a_entry_id),
+    getRelationshipLabel(match.participant_b_entry_id),
+    {
+      eventName: event.name,
+      roundLabel: match.round_name,
+      scoreLabel: matchSettled ? matchScoreLabel : null,
+      isLive: isLiveMatch,
+    },
+  )
+  const shareTitle = shareCopy.title
   const categoryHref = getCategoryHref(eventPath, match.sport_id, match.category_id)
   const sportId = getRelationshipId(match.sport_id)
   const categoryId = getRelationshipId(match.category_id)
@@ -213,7 +272,7 @@ export default async function PublicMatchDetailPage({ params }: { params: MatchP
 
         <section aria-label="Share this match" className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <p className="text-xs font-bold tracking-wide text-ink-soft uppercase">Share</p>
-          <ShareButtons title={shareTitle} />
+          <ShareButtons title={shareTitle} description={shareCopy.description} />
         </section>
       </div>
     </main>

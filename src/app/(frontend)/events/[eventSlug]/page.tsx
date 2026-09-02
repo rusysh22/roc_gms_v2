@@ -34,6 +34,7 @@ import { getPublicArticles, getScopedPublicAnnouncements } from '../../contentDa
 import { EditableRegion, EventPublicEditor, PublicEditToolbar } from '../../publicEditComponents'
 import { getPublicEditState } from '../../publicEditState'
 import { resolveEventTimezone } from '@/lib/timezone'
+import { formatEventDateRange } from '@/lib/eventDates'
 import {
   formatStatus,
   getDateKey,
@@ -141,33 +142,6 @@ const formatMatchTime = (value: string | null | undefined, tz: string) => {
   }).format(new Date(value))
 }
 
-// A single line summary of when the event runs, e.g. "12-14 Feb 2026" or "28 Feb - 2 Mar 2026" -
-// used in the hero's "at a glance" line instead of the raw start/end timestamps.
-const formatEventDateRange = (startIso: string, endIso: string, tz: string) => {
-  const start = new Date(startIso)
-  const end = new Date(endIso)
-  const day = (date: Date) => new Intl.DateTimeFormat('en', { day: 'numeric', timeZone: tz }).format(date)
-  const monthYear = (date: Date) =>
-    new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: tz }).format(date)
-  const sameMonth =
-    new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: tz }).format(start) ===
-    monthYear(end)
-
-  if (start.toDateString() === end.toDateString()) {
-    return new Intl.DateTimeFormat('en', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: tz,
-    }).format(start)
-  }
-
-  if (sameMonth) {
-    return `${day(start)}-${day(end)} ${monthYear(end)}`
-  }
-
-  return `${day(start)} ${monthYear(start)} - ${day(end)} ${monthYear(end)}`
-}
 
 // A short, human sentence of what's on offer, e.g. "Badminton, Futsal & 3 more sports" - the
 // "to the point" replacement for the old raw sports/categories/clubs/teams/players counter row.
@@ -712,7 +686,13 @@ export default async function EventHomePage({
 
       <section className="px-4 pb-10" aria-label="Share this event">
         <div className="mx-auto max-w-5xl">
-          <ShareEventPanel eventName={event.name} eventPath={eventPath} />
+          <ShareEventPanel
+            eventName={event.name}
+            eventPath={eventPath}
+            eventDateLabel={formatEventDateRange(event.event_start_at, event.event_end_at, timezone)}
+            eventLocation={event.location}
+            eventTagline={event.hero_tagline}
+          />
         </div>
       </section>
 
