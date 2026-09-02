@@ -33,6 +33,8 @@ const share = marketingShareCopy()
 // tree into an absolute URL - without it Next logs a warning and social crawlers get relative
 // paths they can't resolve. Driven by NEXT_PUBLIC_SITE_URL (see getPublicBaseUrl).
 export const metadata: Metadata = {
+  // Absolute base for every relative canonical / og:url / og:image (incl. the generated share
+  // cards). Must resolve to the real public origin, not localhost - see getPublicBaseUrl.
   metadataBase: new URL(getPublicBaseUrl()),
   title: { template: '%s | InTourney', default: 'InTourney - run multi-sport tournaments & games' },
   description: share.description,
