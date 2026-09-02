@@ -18,7 +18,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import type { Metadata } from 'next'
+
 import config from '@payload-config'
+import { buildShareMetadata, getAbsolutePublicUrl } from '@/lib/shareMetadata'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
@@ -40,6 +43,44 @@ import {
 import { getPublicEventBySlug } from '../publicEvents'
 
 export const dynamic = 'force-dynamic'
+
+// The event home page is the main indexable surface per tournament. The parent layout only sets
+// the browser-tab title; this adds the description, canonical URL and social image (the event
+// banner, falling back to the site default) that search + unfurls actually use.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ eventSlug: string }>
+}): Promise<Metadata> {
+  const { eventSlug } = await params
+  const payload = await getPayload({ config })
+  const event = await getPublicEventBySlug(payload, eventSlug)
+
+  if (!event) {
+    return buildShareMetadata({
+      title: 'Event not found',
+      description: 'This event is not available.',
+      path: `/events/${eventSlug}`,
+    })
+  }
+
+  const banner =
+    event.banner_image && typeof event.banner_image === 'object' ? event.banner_image : undefined
+  const logo = event.logo && typeof event.logo === 'object' ? event.logo : undefined
+  const description =
+    event.description?.trim() ||
+    event.hero_tagline?.trim() ||
+    `Schedule, results, standings, brackets and medals for ${event.name}${
+      event.location ? ` in ${event.location}` : ''
+    }, powered by InTourney.`
+
+  return buildShareMetadata({
+    title: event.name,
+    description,
+    path: `/events/${event.slug}`,
+    imageUrl: banner?.url || logo?.url || '/og.png',
+  })
+}
 
 type SportDoc = {
   id: string | number
@@ -279,8 +320,34 @@ export default async function EventHomePage({
       }
     })
 
+  // Structured data so Google can render the tournament as an event (dates, venue, organizer)
+  // rather than a plain blue link. https://schema.org/SportsEvent
+  const eventJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SportsEvent',
+    name: event.name,
+    description: event.description?.trim() || event.hero_tagline?.trim() || undefined,
+    startDate: event.event_start_at,
+    endDate: event.event_end_at,
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    url: getAbsolutePublicUrl(eventPath),
+    image: bannerImage?.url || logoImage?.url || undefined,
+    location: event.location
+      ? { '@type': 'Place', name: event.location, address: event.location }
+      : undefined,
+    organizer: event.organizer_name
+      ? { '@type': 'Organization', name: event.organizer_name }
+      : undefined,
+  }
+
   return (
     <main className="font-sans text-ink">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger -- server-built from our own data, no user HTML
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(eventJsonLd) }}
+      />
       <PublicEditToolbar state={editState} path={eventPath} />
       <AutoRefresh />
       {/* The floating nav pill is `position: sticky`, which still reserves its own height in

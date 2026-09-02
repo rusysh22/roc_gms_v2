@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
 import { PublicChrome } from '@/components/public-chrome'
+import { getPublicBaseUrl } from '@/lib/shareMetadata'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './tailwind.css'
@@ -19,13 +20,68 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 // automatically becomes "<title> | InTourney" via this template - so the browser tab reflects
 // whichever event/article is actually open instead of every tab reading the same static
 // "InTourney". `default` only applies where nothing in the tree sets a title at all.
+const SITE_DESCRIPTION =
+  'InTourney is a platform for planning and running multi-sport tournaments and games - from ' +
+  'creating the event and importing participants, through the draw and match generation, to ' +
+  'match-day operations, results, standings, medals, and a public event website.'
+
+// `metadataBase` is what turns every relative `openGraph.images` / `alternates.canonical` in the
+// tree into an absolute URL - without it Next logs a warning and social crawlers get relative
+// paths they can't resolve. Driven by NEXT_PUBLIC_SITE_URL (see getPublicBaseUrl).
 export const metadata: Metadata = {
-  title: { template: '%s | InTourney', default: 'InTourney' },
-  description: "InTourney - Hosting your Tournament's",
+  metadataBase: new URL(getPublicBaseUrl()),
+  title: { template: '%s | InTourney', default: 'InTourney - run multi-sport tournaments & games' },
+  description: SITE_DESCRIPTION,
+  applicationName: 'InTourney',
+  openGraph: {
+    type: 'website',
+    siteName: 'InTourney',
+    title: 'InTourney - run multi-sport tournaments & games',
+    description: SITE_DESCRIPTION,
+    url: '/',
+    images: ['/og.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'InTourney - run multi-sport tournaments & games',
+    description: SITE_DESCRIPTION,
+    images: ['/og.png'],
+  },
 }
 
 type Props = {
   children: ReactNode
+}
+
+// Organization + WebSite structured data on every public page. This is what lets Google attach a
+// name, logo and (eventually) a knowledge panel / sitelinks to the "InTourney" brand query rather
+// than treating each page as an unrelated blue link. `sameAs` should list the official social
+// profiles once they exist. https://schema.org/Organization + https://schema.org/WebSite
+function siteJsonLd() {
+  const base = getPublicBaseUrl()
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': `${base}/#organization`,
+        name: 'InTourney',
+        url: base,
+        // TODO: swap for a dedicated square logo (512x512) once one exists; og.png is the only
+        // brand image currently shipped and beats a 404 here.
+        logo: `${base}/og.png`,
+        description: SITE_DESCRIPTION,
+        sameAs: [] as string[],
+      },
+      {
+        '@type': 'WebSite',
+        '@id': `${base}/#website`,
+        name: 'InTourney',
+        url: base,
+        publisher: { '@id': `${base}/#organization` },
+      },
+    ],
+  }
 }
 
 export default async function FrontendLayout({ children }: Props) {
@@ -39,6 +95,11 @@ export default async function FrontendLayout({ children }: Props) {
           rather than being pinned to the actual design tokens, so any route/wrapper that broke the
           inheritance chain would fall back to plain browser defaults. */}
       <body className="bg-paper font-sans text-ink">
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger -- server-built from our own constants, no user HTML
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
+        />
         <PublicChrome brand="InTourney" user={user}>
           {children}
         </PublicChrome>

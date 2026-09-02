@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -15,6 +16,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 
 export const dynamic = 'force-dynamic'
+
+// Explicit canonical for the marketing root (the layout default no longer pins one so inner pages
+// can own theirs). Title/description/OG are inherited from the root layout.
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+}
 
 /*
  * Landing page pass against miqdadbadjuber/anti-slop.
@@ -163,7 +170,8 @@ export default function MarketingHomePage() {
               <span className="text-green">You run the event.</span>
             </h1>
             <p className="mt-5 text-base leading-relaxed text-ink-soft sm:text-lg">
-              InTourney replaces the tournament spreadsheet with a guided setup wizard, brackets and
+              <strong className="font-semibold text-ink">InTourney</strong> replaces the tournament
+              spreadsheet with a guided setup wizard, brackets and
               standings that build from your entries, live scoring, and a branded public page for
               every event - office olympiads, sports days, or multi-club competitions.
             </p>
