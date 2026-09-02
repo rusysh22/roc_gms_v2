@@ -347,7 +347,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'female',
       identification_number: 'ID-0002',
       photo: '',
-      sport_name: '',
+      sport_name: 'Badminton',
       category_name: 'Badminton Singles Women',
     },
     // Just registered - no identification_number assigned yet. Left blank, not "N/A" or "-".

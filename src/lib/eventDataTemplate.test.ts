@@ -78,10 +78,12 @@ describe('buildEventDataTemplateWorkbook', () => {
       buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
     )
 
-    // pair category -> example Pairs, each built from two example Players on the Players sheet
+    // pair category -> example Pairs, each built from two example Players on the Players sheet.
+    // Every example row fills sport_name so the (sport, category) pair is unambiguous.
     const pairExamples = parsed.pairs.filter((p) => p.player1Name.startsWith('EXAMPLE - '))
     expect(pairExamples.length).toBeGreaterThanOrEqual(3)
     expect(pairExamples.every((p) => p.categoryNames?.[0] === 'Badminton Doubles Men')).toBe(true)
+    expect(pairExamples.every((p) => p.sportName === 'Badminton')).toBe(true)
     const playerNames = new Set(parsed.players.map((p) => p.name))
     for (const pair of pairExamples) {
       expect(playerNames.has(pair.player1Name)).toBe(true)
@@ -92,6 +94,7 @@ describe('buildEventDataTemplateWorkbook', () => {
     const teamExamples = parsed.teams.filter((t) => t.name.startsWith('EXAMPLE - '))
     expect(teamExamples.length).toBeGreaterThanOrEqual(3)
     expect(teamExamples.every((t) => t.categoryNames?.[0] === 'Petanque Triples')).toBe(true)
+    expect(teamExamples.every((t) => t.sportName === 'Petanque')).toBe(true)
   })
 
   it('adds list data validations and a hidden _Reference sheet', async () => {
@@ -110,7 +113,9 @@ describe('buildEventDataTemplateWorkbook', () => {
       type: 'list',
       formulae: [`"individual,pair,team,club,open,tbd"`],
     })
-    // category_name dropdown must be non-blocking (comma lists allowed)
-    expect(wb.getWorksheet('Players')!.getCell('H2').dataValidation?.errorStyle).toBe('warning')
+    // Players sheet: sport_name (col H) + category_name (col I) dropdowns are both non-blocking
+    // (comma lists / free text allowed on category_name; sport_name is a plain hint).
+    expect(wb.getWorksheet('Players')!.getCell('H2').dataValidation).toMatchObject({ type: 'list' })
+    expect(wb.getWorksheet('Players')!.getCell('I2').dataValidation?.errorStyle).toBe('warning')
   })
 })

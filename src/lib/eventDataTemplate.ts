@@ -155,11 +155,11 @@ export const buildEventDataTemplateWorkbook = async (
     'still type a comma-separated list of several categories; the dropdown there only warns, it does',
     'not block.',
     '',
-    '"sport_name" on Clubs / Teams / Players / Pairs is optional. It only matters when two sports in',
-    'this event have a category with the same name - fill it in to say which sport the category_name',
-    'on that row belongs to. Example rows already fill it wherever a name is shared. If one row',
-    'registers into categories in different sports, leave it blank and prefix each name instead:',
-    '"Badminton :: Men\'s Doubles, Tennis :: Men\'s Doubles".',
+    '"sport_name" on Clubs / Teams / Players / Pairs says which sport the category_name(s) on that',
+    'row belong to. It only matters when two sports in this event have a category with the same name',
+    '(e.g. "Men\'s Doubles" in both Badminton and Tennis) - otherwise you can leave it blank. Every',
+    'example row already fills it in. If one row registers into categories in different sports, leave',
+    'sport_name blank and prefix each name instead: "Badminton :: Men\'s Doubles, Tennis :: Men\'s Doubles".',
     '',
     'EXAMPLE ROWS: the Clubs / Teams / Players / Pairs sheets come pre-filled with worked example',
     "rows built from THIS event's own categories, so you can see how the data fits together:",
@@ -295,25 +295,19 @@ export const buildEventDataTemplateWorkbook = async (
   // example Pairs, team categories get example Teams. Every generated cell in a name column is
   // prefixed "EXAMPLE - " so the organizer can spot and bulk-delete them (see Instructions).
   const EX = 'EXAMPLE - '
-  // A category is identified by (sport, name), not name alone. When two sports in this event share
-  // a category name ("Men's Doubles" in Badminton AND Tennis), a `category_name` cell on its own is
-  // ambiguous - so the generated example rows also fill `sport_name` for those names. Names that
-  // are unique across the event leave `sport_name` blank to keep the sheet uncluttered.
+  // A category is identified by (sport, name), not name alone - a suffix-only name ("Men's Doubles")
+  // can exist in several sports. Every generated example row iterates a real category doc, so it
+  // knows the sport - fill `sport_name` on all of them so the rows are unambiguous and double as a
+  // worked example of how the column is used.
   type ExampleCat = { name: string; sport: string }
   const catsByMode = (mode: string): ExampleCat[] =>
     categories.docs
       .filter((c) => String(c.participant_mode || '').toLowerCase() === mode)
-      .map((c) => ({ name: String(c.name), sport: sportNameById.get(String(c.sport_id)) ?? '' }))
-  const sportsPerCategoryName = new Map<string, Set<string>>()
-  for (const c of categories.docs) {
-    const key = String(c.name).trim().toLowerCase()
-    const set = sportsPerCategoryName.get(key) ?? new Set<string>()
-    set.add(sportNameById.get(String(c.sport_id)) ?? '')
-    sportsPerCategoryName.set(key, set)
-  }
-  // The `sport_name` value to write for an example row's category - only when the name collides.
-  const scopeSport = (cat: ExampleCat | null): string =>
-    cat && (sportsPerCategoryName.get(cat.name.trim().toLowerCase())?.size ?? 0) > 1 ? cat.sport : ''
+      .map((c) => ({
+        name: String(c.name),
+        sport: relationshipName(c.sport_id as RelationshipValue, sportNameById),
+      }))
+  const scopeSport = (cat: ExampleCat | null): string => cat?.sport ?? ''
 
   const individualCats = [...catsByMode('individual'), ...catsByMode('open'), ...catsByMode('tbd')]
   const pairCats = catsByMode('pair')
