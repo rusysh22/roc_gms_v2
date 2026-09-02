@@ -2,7 +2,9 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
 
+import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
+import { marketingShareCopy } from '@/lib/shareMessages'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './tailwind.css'
@@ -19,9 +21,29 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 // automatically becomes "<title> | InTourney" via this template - so the browser tab reflects
 // whichever event/article is actually open instead of every tab reading the same static
 // "InTourney". `default` only applies where nothing in the tree sets a title at all.
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL || process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'
+
+const share = marketingShareCopy()
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: { template: '%s | InTourney', default: 'InTourney' },
-  description: "InTourney - Hosting your Tournament's",
+  description: share.description,
+  applicationName: 'InTourney',
+  // The co-located (frontend)/opengraph-image.tsx is attached automatically and inherited by every
+  // public page that doesn't ship its own; this sets the shared text + card type.
+  openGraph: {
+    type: 'website',
+    siteName: 'InTourney',
+    title: `InTourney - ${share.title}`,
+    description: share.description,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `InTourney - ${share.title}`,
+    description: share.description,
+  },
 }
 
 type Props = {
@@ -39,7 +61,7 @@ export default async function FrontendLayout({ children }: Props) {
           rather than being pinned to the actual design tokens, so any route/wrapper that broke the
           inheritance chain would fall back to plain browser defaults. */}
       <body className="bg-paper font-sans text-ink">
-        <PublicChrome brand="InTourney" user={user}>
+        <PublicChrome brand={<BrandLogo variant="horizontal" height={22} priority />} user={user}>
           {children}
         </PublicChrome>
       </body>

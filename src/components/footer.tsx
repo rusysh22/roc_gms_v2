@@ -10,12 +10,14 @@ export interface FooterLink {
 
 export interface FooterProps {
   brand: React.ReactNode
+  /** Plain-text brand name for the legal/copyright line (where a logo image would read oddly). */
+  brandName?: string
   tagline?: string
   links?: FooterLink[]
   className?: string
 }
 
-export function Footer({ brand, tagline, links = [], className }: FooterProps) {
+export function Footer({ brand, brandName, tagline, links = [], className }: FooterProps) {
   const year = new Date().getFullYear()
 
   return (
@@ -23,7 +25,7 @@ export function Footer({ brand, tagline, links = [], className }: FooterProps) {
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-extrabold">{brand}</p>
+            <div className="text-sm font-extrabold">{brand}</div>
             {tagline ? <p className="mt-1 text-sm text-ink-soft">{tagline}</p> : null}
           </div>
           {links.length > 0 ? (
@@ -41,7 +43,7 @@ export function Footer({ brand, tagline, links = [], className }: FooterProps) {
           ) : null}
         </div>
         <p className="border-t border-line pt-4 text-xs text-ink-soft">
-          &copy; {year} {brand}. All rights reserved.
+          &copy; {year} {brandName ?? brand}. All rights reserved.
         </p>
       </div>
     </footer>

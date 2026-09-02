@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CalendarClock, LayoutGrid, Medal, Radio, Trophy } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { BrandLogo } from '@/components/brand-logo'
 
 // Slide content mirrors real product surfaces (see package.json's brackets:recalculate,
 // standings:recalculate, medals:recalculate scripts, the live-score workspace route, and
@@ -141,9 +142,9 @@ export function LoginShowcase() {
         />
       </div>
 
-      <Link href="/" className="relative flex w-fit items-center gap-2 text-paper no-underline">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg font-extrabold">
-          IT
+      <Link href="/" className="relative flex w-fit items-center gap-2.5 text-paper no-underline">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white">
+          <BrandLogo variant="icon" height={22} />
         </span>
         <span className="text-sm font-extrabold tracking-wide">InTourney</span>
       </Link>

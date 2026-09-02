@@ -5,6 +5,8 @@ type ShareMetadataInput = {
   description: string
   path?: string
   imageUrl?: string
+  /** Open Graph object type. Defaults to 'article' (blog-style posts); pass 'website' for hubs. */
+  type?: 'article' | 'website'
 }
 
 export const getPublicBaseUrl = () => {
@@ -32,10 +34,14 @@ export const buildShareMetadata = ({
   description,
   path,
   imageUrl,
+  type = 'article',
 }: ShareMetadataInput): Metadata => {
   const url = path ? getAbsolutePublicUrl(path) : getPublicBaseUrl()
   const image = imageUrl ? getAbsolutePublicUrl(imageUrl) : undefined
 
+  // `images` is left undefined when there's no explicit override so Next falls back to the
+  // co-located `opengraph-image` / `twitter-image` for this route (or the site default). The card
+  // is always `summary_large_image` because every route resolves to a 1200x630 InTourney card.
   return {
     title,
     description,
@@ -46,11 +52,12 @@ export const buildShareMetadata = ({
       title,
       description,
       url,
-      type: 'article',
+      type,
+      siteName: 'InTourney',
       images: image ? [{ url: image }] : undefined,
     },
     twitter: {
-      card: image ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title,
       description,
       images: image ? [image] : undefined,

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, Trophy } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
+import { BrandLogo } from '@/components/brand-logo'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { LoginForm } from './LoginForm'
 import { LoginShowcase } from './LoginShowcase'
@@ -51,8 +52,8 @@ export default async function LoginPage({
           carousel - keeps the two breakpoints visually related instead of feeling like two
           different pages. */}
       <div className="flex flex-col items-center gap-2 bg-gradient-to-br from-green to-blue px-6 py-10 text-center lg:hidden">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-paper">
-          <Trophy className="h-6 w-6" aria-hidden="true" />
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white">
+          <BrandLogo variant="icon" height={28} />
         </span>
         <p className="text-lg font-extrabold text-paper">InTourney</p>
         <p className="text-xs font-semibold text-paper/70">Manage your tournaments, all in one place</p>

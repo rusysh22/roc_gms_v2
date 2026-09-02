@@ -25,6 +25,10 @@ export default function GlobalError({
           textAlign: 'center',
         }}
       >
+        {/* Plain <img> to a static public asset - no Image/Tailwind dependency, matching the rest
+            of this deliberately pipeline-free boundary. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/icon.png" alt="InTourney" width={40} height={40} style={{ height: 40, width: 'auto' }} />
         <h1 style={{ fontSize: '1.125rem', fontWeight: 800 }}>Something went wrong</h1>
         <p style={{ fontSize: '0.875rem', color: '#41564f', maxWidth: '28rem' }}>
           The application failed to load. Retrying usually fixes it.

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
+import { BrandLogo } from '@/components/brand-logo'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { RegisterForm } from './RegisterForm'
 
@@ -30,6 +31,7 @@ export default async function RegisterPage() {
         </div>
 
         <div className="w-full text-left">
+          <BrandLogo variant="horizontal" height={24} className="mb-5" />
           <h1 className="text-[28px] font-extrabold tracking-tight text-ink">Create your account</h1>
           <p className="mt-1 text-sm font-medium text-ink-soft/80">
             Get started with InTourney - it only takes a minute.
