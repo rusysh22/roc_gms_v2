@@ -10,8 +10,14 @@ type ShareMetadataInput = {
 }
 
 export const getPublicBaseUrl = () => {
+  // NEXT_PUBLIC_SERVER_URL is the one actually set in this project's env (.env / docker-compose /
+  // prod) - it MUST come first, otherwise metadataBase + every canonical/og:url/og:image falls
+  // back to localhost and social crawlers (WhatsApp, Meta, ...) can't fetch the share image.
   const configuredUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'
+    process.env.NEXT_PUBLIC_SERVER_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.PAYLOAD_PUBLIC_SERVER_URL ||
+    'http://localhost:3000'
 
   return configuredUrl.replace(/\/$/, '')
 }

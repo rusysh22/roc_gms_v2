@@ -5,6 +5,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
 import { marketingShareCopy } from '@/lib/shareMessages'
+import { getPublicBaseUrl } from '@/lib/shareMetadata'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './tailwind.css'
@@ -21,13 +22,12 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 // automatically becomes "<title> | InTourney" via this template - so the browser tab reflects
 // whichever event/article is actually open instead of every tab reading the same static
 // "InTourney". `default` only applies where nothing in the tree sets a title at all.
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000'
-
 const share = marketingShareCopy()
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  // Absolute base for every relative canonical / og:url / og:image (incl. the generated share
+  // cards). Must resolve to the real public origin, not localhost - see getPublicBaseUrl.
+  metadataBase: new URL(getPublicBaseUrl()),
   title: { template: '%s | InTourney', default: 'InTourney' },
   description: share.description,
   applicationName: 'InTourney',
