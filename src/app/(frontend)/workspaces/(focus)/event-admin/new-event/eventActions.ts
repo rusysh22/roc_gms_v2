@@ -14,7 +14,12 @@ import { DEFAULT_EVENT_TIMEZONE, EVENT_TIMEZONE_OPTIONS } from '@/lib/timezone'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
 import { slugify, text, wizardPage } from './wizardShared'
-import { claimDraftIfPending, resolveWizardAccess, setWizardDraftCookie } from './wizardAccess'
+import {
+  assertWizardActionAccess,
+  claimDraftIfPending,
+  resolveWizardAccess,
+  setWizardDraftCookie,
+} from './wizardAccess'
 
 const getClientIp = async (): Promise<string> => {
   const headersList = await getHeaders()
@@ -227,6 +232,139 @@ export async function createEventAction(formData: FormData): Promise<void> {
   revalidatePath(wizardPage)
   revalidatePath('/workspaces/event-admin')
   redirect(`${wizardPage}?eventId=${created.id}&step=sports&wizardCreated=1`)
+}
+
+// Revisiting the "Event" step once the draft event already exists: the form is pre-filled from the
+// saved row (see EventStep in page.tsx) and submits here instead of createEventAction, so going
+// back to fix a name/date/timezone updates the event in place rather than trying to create a
+// duplicate (which always tripped the slug-uniqueness check). Anonymous drafts can be edited too -
+// the login wall is still further along - so this mirrors createEventAction's access model.
+export async function updateEventAction(formData: FormData): Promise<void> {
+  if (text(formData, 'website')) {
+    redirect(`${wizardPage}?step=event`)
+  }
+
+  const eventId = text(formData, 'eventId')
+  if (!eventId) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+
+  const access = await assertWizardActionAccess(formData, 'event')
+  const payload = access.payload
+  const user = access.mode === 'user' ? access.user : null
+
+  const before = await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
+  if (!before) {
+    redirect(`${wizardPage}?step=event&wizardError=missing_event`)
+  }
+
+  const name = text(formData, 'name')
+  const rawSlug = text(formData, 'slug')
+  const slug = slugify(rawSlug || name)
+  const start = text(formData, 'eventStart')
+  const end = text(formData, 'eventEnd')
+  const location = text(formData, 'location')
+  const organizerName = text(formData, 'organizerName')
+  const timezoneInput = text(formData, 'timezone')
+  const timezone = eventTimezones.has(timezoneInput) ? timezoneInput : DEFAULT_EVENT_TIMEZONE
+  const setupTournamentTypeInput = text(formData, 'setupTournamentType')
+  const setupParticipantModeInput = text(formData, 'setupParticipantMode')
+  const setupParticipantSourceInput = text(formData, 'setupParticipantSource')
+  const setupEventScaleInput = text(formData, 'setupEventScale')
+
+  const redirectWithInput = (errorCode: string, extra?: Record<string, string>): never => {
+    const query = new URLSearchParams({
+      eventId,
+      step: 'event',
+      wizardError: errorCode,
+      name,
+      slug: rawSlug,
+      eventStart: start,
+      eventEnd: end,
+      location,
+      organizerName,
+      timezone,
+      setupTournamentType: setupTournamentTypeInput,
+      setupParticipantMode: setupParticipantModeInput,
+      setupParticipantSource: setupParticipantSourceInput,
+      setupEventScale: setupEventScaleInput,
+      ...extra,
+    })
+    redirect(`${wizardPage}?${query.toString()}`)
+  }
+
+  if (!name || !slug || !start || !end) {
+    redirectWithInput('invalid_event')
+  }
+  if (new Date(end).getTime() <= new Date(start).getTime()) {
+    redirectWithInput('invalid_date_range')
+  }
+
+  if (slug !== before!.slug) {
+    const duplicate = await payload.find({
+      collection: 'events',
+      depth: 0,
+      limit: 1,
+      where: { and: [{ slug: { equals: slug } }, { id: { not_equals: eventId } }] },
+    })
+    if (duplicate.docs.length > 0) {
+      const suggestedSlug = await findAvailableSlug(payload, slug)
+      redirectWithInput('duplicate_slug', suggestedSlug ? { suggestedSlug } : undefined)
+    }
+  }
+
+  let logoId: number | undefined
+  const logoFile = formData.get('logo')
+  if (logoFile instanceof File && logoFile.size > 0) {
+    if (!logoFile.type.startsWith('image/')) {
+      redirectWithInput('invalid_logo')
+    }
+    const buffer = Buffer.from(await logoFile.arrayBuffer())
+    const media = await payload.create({
+      collection: 'media',
+      data: { alt: `${name} logo` },
+      file: { data: buffer, mimetype: logoFile.type, name: logoFile.name, size: logoFile.size },
+    })
+    logoId = Number(media.id)
+  }
+
+  const data = {
+    name,
+    slug,
+    ...(logoId ? { logo: logoId } : {}),
+    event_start_at: new Date(start).toISOString(),
+    event_end_at: new Date(end).toISOString(),
+    timezone: timezone as (typeof EVENT_TIMEZONE_OPTIONS)[number]['value'],
+    location: location || null,
+    organizer_name: organizerName || null,
+    setup_tournament_type: (setupTournamentTypes.has(setupTournamentTypeInput)
+      ? setupTournamentTypeInput
+      : null) as 'single_elimination' | 'round_robin' | 'group_stage_to_knockout' | 'league' | null,
+    setup_participant_mode: (setupParticipantModes.has(setupParticipantModeInput)
+      ? setupParticipantModeInput
+      : null) as 'individual' | 'pair' | 'team' | 'club' | null,
+    setup_participant_source: (setupParticipantSources.has(setupParticipantSourceInput)
+      ? setupParticipantSourceInput
+      : null) as 'manual' | 'excel' | 'registration_form' | 'copy_previous' | null,
+    setup_event_scale: (setupEventScales.has(setupEventScaleInput)
+      ? setupEventScaleInput
+      : null) as 'single_sport' | 'multi_sport' | null,
+  }
+
+  await payload.update({ collection: 'events', id: eventId, data })
+  await recordAuditLog({
+    payload,
+    action: 'event.update',
+    entityType: 'events',
+    entityId: eventId,
+    before,
+    after: { ...before, ...data },
+    actorUserId: user?.id ?? null,
+  })
+
+  revalidatePath(wizardPage)
+  revalidatePath('/workspaces/event-admin')
+  redirect(`${wizardPage}?eventId=${eventId}&step=event&wizardUpdated=1`)
 }
 
 // Fired once (from WizardDraftClaim) when a now-authenticated organizer opens a wizard whose event

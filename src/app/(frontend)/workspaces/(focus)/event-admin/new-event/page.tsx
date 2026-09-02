@@ -55,7 +55,12 @@ import { WizardDraftClaim } from './WizardDraftClaim'
 import { FocusHeader } from '../../FocusHeader'
 import { EventNameSlugFields } from './EventNameSlugFields'
 import { SummaryDetailModal, type SummaryDetailItem } from './SummaryDetailModal'
-import { createEventAction, openScheduleImportAction, publishEventAction } from './eventActions'
+import {
+  createEventAction,
+  openScheduleImportAction,
+  publishEventAction,
+  updateEventAction,
+} from './eventActions'
 import { AUTO_GENERATE_FORMATS, summarizeCategoryFixtures } from './wizardShared'
 import { readImportSidecar } from './importScratch'
 import { computeWizardProgress } from '@/lib/wizardProgress'
@@ -107,6 +112,12 @@ export const dynamic = 'force-dynamic'
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 const get = (params: Record<string, string | string[] | undefined>, key: string) =>
   Array.isArray(params[key]) ? params[key][0] || '' : params[key] || ''
+
+// Stored event times are ISO UTC; a <input type="datetime-local"> wants a bare `YYYY-MM-DDTHH:mm`.
+// createEventAction/updateEventAction persist the field with `new Date(value).toISOString()`, so
+// slicing the ISO string back to minutes round-trips exactly (both sides read the value in UTC).
+const toDatetimeLocal = (iso: unknown) =>
+  typeof iso === 'string' && iso ? new Date(iso).toISOString().slice(0, 16) : ''
 
 // NOVICE_ADMIN_FLOW_UX_REDESIGN.md item 5: "Entries & Seeding" used to be one step covering two
 // different decisions - who's registered, and what order they're seeded in - "sering dikerjakan
@@ -488,19 +499,34 @@ export default async function NewEventWizardPage({
 
           {step === 'setup' ? <SetupStep scale={get(params, 'scale')} /> : null}
           {step === 'event' ? (
+            // Once the draft event exists, the form is pre-filled from the saved row and edits it in
+            // place - revisiting this step from later in the wizard (e.g. after a refresh) used to
+            // show a blank "create" form, so the already-entered name/dates looked lost even though
+            // the Progress panel still had them. Query params still win when present, so a failed
+            // submission's bounce-back re-populates exactly what was typed.
             <EventStep
-              defaultName={get(params, 'name')}
-              defaultSlug={get(params, 'slug')}
+              eventId={eventId || undefined}
+              defaultName={get(params, 'name') || String(event?.name ?? '')}
+              defaultSlug={get(params, 'slug') || String(event?.slug ?? '')}
               suggestedSlug={get(params, 'suggestedSlug')}
-              defaultStart={get(params, 'eventStart')}
-              defaultEnd={get(params, 'eventEnd')}
-              defaultLocation={get(params, 'location')}
-              defaultOrganizerName={get(params, 'organizerName')}
-              defaultSetupTournamentType={get(params, 'setupTournamentType')}
-              defaultSetupParticipantMode={get(params, 'setupParticipantMode')}
-              defaultSetupParticipantSource={get(params, 'setupParticipantSource')}
-              defaultSetupEventScale={get(params, 'setupEventScale')}
-              defaultTimezone={get(params, 'timezone')}
+              defaultStart={get(params, 'eventStart') || toDatetimeLocal(event?.event_start_at)}
+              defaultEnd={get(params, 'eventEnd') || toDatetimeLocal(event?.event_end_at)}
+              defaultLocation={get(params, 'location') || String(event?.location ?? '')}
+              defaultOrganizerName={get(params, 'organizerName') || String(event?.organizer_name ?? '')}
+              defaultSetupTournamentType={
+                get(params, 'setupTournamentType') || String(event?.setup_tournament_type ?? '')
+              }
+              defaultSetupParticipantMode={
+                get(params, 'setupParticipantMode') || String(event?.setup_participant_mode ?? '')
+              }
+              defaultSetupParticipantSource={
+                get(params, 'setupParticipantSource') || String(event?.setup_participant_source ?? '')
+              }
+              defaultSetupEventScale={
+                get(params, 'setupEventScale') || String(event?.setup_event_scale ?? '')
+              }
+              defaultTimezone={get(params, 'timezone') || String(event?.timezone ?? '')}
+              existingLogoUrl={eventLogo?.url}
             />
           ) : null}
           {step === 'sports' && event ? <SportsStep payload={payload} eventId={eventId} /> : null}
@@ -1196,6 +1222,7 @@ const SetupStep = ({ scale }: { scale?: string }) => {
 }
 
 const EventStep = ({
+  eventId,
   defaultName,
   defaultSlug,
   suggestedSlug,
@@ -1208,7 +1235,9 @@ const EventStep = ({
   defaultSetupParticipantSource,
   defaultSetupEventScale,
   defaultTimezone,
+  existingLogoUrl,
 }: {
+  eventId?: string
   defaultName: string
   defaultSlug: string
   suggestedSlug: string
@@ -1221,7 +1250,10 @@ const EventStep = ({
   defaultSetupParticipantSource: string
   defaultSetupEventScale: string
   defaultTimezone: string
-}) => (
+  existingLogoUrl?: string
+}) => {
+  const isEditing = Boolean(eventId)
+  return (
   <Card className="flex flex-col gap-4">
     <div>
       <CardTitle>{stepNumber('event')}. Event details</CardTitle>
@@ -1234,8 +1266,12 @@ const EventStep = ({
         refresh/crash/accidental navigation mid-entry doesn't lose a typed-out name/dates/timezone.
         Also keeps the native beforeunload prompt. The logo file input can't be persisted. */}
     <WizardFormDraft storageKey="new-event:event-step">
-      <form action={createEventAction} className="grid gap-4 sm:grid-cols-2">
-        {/* Honeypot: hidden from real users, filled only by naive bots - createEventAction writes
+      <form
+        action={isEditing ? updateEventAction : createEventAction}
+        className="grid gap-4 sm:grid-cols-2"
+      >
+        {isEditing ? <input type="hidden" name="eventId" value={eventId} /> : null}
+        {/* Honeypot: hidden from real users, filled only by naive bots - the action writes
             nothing and returns a benign redirect when it's set. */}
         <input
           type="text"
@@ -1288,6 +1324,17 @@ const EventStep = ({
           <Input name="organizerName" placeholder="e.g. HR Committee" defaultValue={defaultOrganizerName} />
         </Field>
         <Field label="Event logo (optional)" className="sm:col-span-2">
+          {isEditing && existingLogoUrl ? (
+            <span className="mb-2 flex items-center gap-2 text-xs text-ink-soft">
+              {/* eslint-disable-next-line @next/next/no-img-element -- Payload upload URL */}
+              <img
+                src={existingLogoUrl}
+                alt=""
+                className="h-8 w-8 rounded-full border border-line object-cover"
+              />
+              Current logo &mdash; upload a new file to replace it.
+            </span>
+          ) : null}
           <FileUpload
             id="event-logo-upload"
             name="logo"
@@ -1298,13 +1345,14 @@ const EventStep = ({
         </Field>
         <div className="sm:col-span-2">
           <SubmitButton className="w-full sm:w-auto">
-            Create event &amp; continue
+            {isEditing ? 'Save changes' : 'Create event & continue'}
           </SubmitButton>
         </div>
       </form>
     </WizardFormDraft>
   </Card>
-)
+  )
+}
 
 type Payload = Awaited<ReturnType<typeof requireWorkspaceAccess>> extends { payload: infer P }
   ? P
