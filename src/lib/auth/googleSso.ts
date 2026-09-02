@@ -23,6 +23,21 @@ export const isGoogleSsoEnabled = () => getGoogleOAuthConfig() !== null
 
 export const googleCallbackUrl = (origin: string) => `${origin}/api/auth/google/callback`
 
+/**
+ * The app's public origin. Behind the production reverse proxy, a Route Handler's
+ * `request.nextUrl.origin` resolves to the internal `http://localhost:3000` (nginx doesn't forward
+ * `X-Forwarded-Host`), which would send Google a `redirect_uri` that never matches the console
+ * config. NEXT_PUBLIC_SERVER_URL is the canonical URL this project already sets per-env; fall back
+ * to the request origin only for local dev where it isn't configured.
+ */
+export const resolvePublicOrigin = (requestOrigin: string) => {
+  const configured =
+    process.env.NEXT_PUBLIC_SERVER_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.PAYLOAD_PUBLIC_SERVER_URL
+  return (configured || requestOrigin).replace(/\/$/, '')
+}
+
 /** Only ever redirect within the app - an open `redirect` param is a phishing vector. */
 export const sanitizeRedirect = (value: string | null | undefined, fallback = '/workspaces') => {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return fallback

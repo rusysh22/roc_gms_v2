@@ -9,6 +9,7 @@ import {
   OAUTH_STATE_COOKIE,
   getGoogleOAuthConfig,
   googleCallbackUrl,
+  resolvePublicOrigin,
   sanitizeRedirect,
 } from '@/lib/auth/googleSso'
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic'
 // short-lived cookies, then bounce the browser to Google's consent screen.
 export function GET(request: NextRequest) {
   const config = getGoogleOAuthConfig()
-  const origin = request.nextUrl.origin
+  const origin = resolvePublicOrigin(request.nextUrl.origin)
 
   if (!config) {
     return NextResponse.redirect(new URL('/login?error=sso_unavailable', origin))

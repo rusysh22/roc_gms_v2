@@ -9,6 +9,7 @@ import {
   exchangeCodeForTokens,
   getGoogleOAuthConfig,
   googleCallbackUrl,
+  resolvePublicOrigin,
   sanitizeRedirect,
 } from '@/lib/auth/googleSso'
 import { buildPayloadSessionCookie, findOrCreateSsoUser } from '@/lib/auth/googleSsoSession'
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic'
 // code for an id_token, resolve/create the Payload user, and hand the browser a real Payload
 // session cookie before redirecting on.
 export async function GET(request: NextRequest) {
-  const origin = request.nextUrl.origin
+  const origin = resolvePublicOrigin(request.nextUrl.origin)
   const params = request.nextUrl.searchParams
   const fail = (reason: string) => NextResponse.redirect(new URL(`/login?error=${reason}`, origin))
 
