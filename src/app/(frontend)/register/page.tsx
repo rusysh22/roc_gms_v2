@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 
 import { BrandLogo } from '@/components/brand-logo'
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button'
+import { isGoogleSsoEnabled } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { RegisterForm } from './RegisterForm'
 
@@ -55,6 +57,16 @@ export default async function RegisterPage({
         </div>
 
         <div className="mt-8 w-full">
+          {isGoogleSsoEnabled() ? (
+            <>
+              <GoogleSignInButton redirectTo={redirectTo} label="Sign up with Google" />
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-line" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft">or</span>
+                <span className="h-px flex-1 bg-line" />
+              </div>
+            </>
+          ) : null}
           <RegisterForm redirectTo={redirectTo} />
         </div>
 

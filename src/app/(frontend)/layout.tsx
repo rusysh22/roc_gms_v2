@@ -6,6 +6,7 @@ import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
 import { marketingShareCopy } from '@/lib/shareMessages'
 import { getPublicBaseUrl } from '@/lib/shareMetadata'
+import { isGoogleSsoEnabled } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './tailwind.css'
@@ -107,7 +108,11 @@ export default async function FrontendLayout({ children }: Props) {
           // eslint-disable-next-line react/no-danger -- server-built from our own constants, no user HTML
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd()) }}
         />
-        <PublicChrome brand={<BrandLogo variant="horizontal" height={22} priority />} user={user}>
+        <PublicChrome
+          brand={<BrandLogo variant="horizontal" height={22} priority />}
+          user={user}
+          googleSsoEnabled={isGoogleSsoEnabled()}
+        >
           {children}
         </PublicChrome>
       </body>

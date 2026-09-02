@@ -8,6 +8,7 @@ import { ChevronDown, LogOut } from 'lucide-react'
 import { NavBar, type NavItem } from '@/components/nav-bar'
 import { Footer } from '@/components/footer'
 import { BrandLogo } from '@/components/brand-logo'
+import { LoginDialog } from '@/components/auth/login-dialog'
 import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
 
 // Operational/internal tool routes never get the public floating nav + footer chrome, only the
@@ -125,16 +126,15 @@ function UserMenu({ user }: { user: PublicNavUser }) {
   )
 }
 
-function NavCta({ user }: { user: PublicNavUser | null }) {
+function NavCta({
+  user,
+  googleSsoEnabled,
+}: {
+  user: PublicNavUser | null
+  googleSsoEnabled: boolean
+}) {
   if (!user) {
-    return (
-      <Link
-        href="/login"
-        className="rounded-full bg-green px-3 py-1.5 text-xs font-bold whitespace-nowrap text-paper no-underline transition-colors hover:bg-ink"
-      >
-        Log in
-      </Link>
-    )
+    return <LoginDialog googleSsoEnabled={googleSsoEnabled} />
   }
 
   return (
@@ -153,10 +153,11 @@ function NavCta({ user }: { user: PublicNavUser | null }) {
 export interface PublicChromeProps {
   brand: React.ReactNode
   user: PublicNavUser | null
+  googleSsoEnabled: boolean
   children: React.ReactNode
 }
 
-export function PublicChrome({ brand, user, children }: PublicChromeProps) {
+export function PublicChrome({ brand, user, googleSsoEnabled, children }: PublicChromeProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const showChrome =
@@ -193,7 +194,7 @@ export function PublicChrome({ brand, user, children }: PublicChromeProps) {
         brand={brand}
         items={navItems}
         activeHref={activeHref}
-        cta={<NavCta user={user} />}
+        cta={<NavCta user={user} googleSsoEnabled={googleSsoEnabled} />}
       />
       <div className="flex-1 pt-6">{children}</div>
       <Footer

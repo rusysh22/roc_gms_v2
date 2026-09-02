@@ -19,6 +19,9 @@ services:
       PAYLOAD_ADMIN_AUTOLOGIN: ${PAYLOAD_ADMIN_AUTOLOGIN:-false}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@roc-gms.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMe123!}
+      # Optional "Sign in with Google" - see .env.example
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - "3000:3000"
     volumes:
