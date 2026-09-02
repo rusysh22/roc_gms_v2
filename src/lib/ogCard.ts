@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
+import opentype from 'opentype.js'
 import sharp from 'sharp'
 
 // Shared renderer for every co-located `opengraph-image` route (Open Graph + Twitter/X - what
@@ -8,9 +9,10 @@ import sharp from 'sharp'
 // card: the InTourney mark, a flexible kicker/title/subtitle, and the wordmark at the bottom.
 // Copy comes from src/lib/shareMessages.ts so the wording stays consistent and tunable.
 //
-// Built with `sharp` (already a project dependency, used for the favicons) rather than next/og:
-// on this toolchain next/og's bundled encoder throws on raw-buffer PNGs, and sharp's SVG
-// rasteriser is rock-solid here.
+// Text is converted to vector <path> outlines with opentype.js (bundled Plus Jakarta Sans woff
+// subsets) and the whole card is rasterised with sharp. This deliberately depends on NO system
+// fonts and NOT on next/og (whose bundled encoder throws `colourspace: parameter space not set`
+// on this toolchain) - so the output is byte-identical on a laptop and on a bare Alpine container.
 
 export const OG_SIZE = { width: 1200, height: 630 } as const
 export const OG_CONTENT_TYPE = 'image/png'
@@ -18,44 +20,65 @@ export const OG_CONTENT_TYPE = 'image/png'
 const W = 1200
 const H = 630
 const PAD = 72
+const RAIL = 20
 
 const INK = '#0c231f'
 const INK_SOFT = '#41564f'
 const PAPER = '#ffffff'
 const DEFAULT_ACCENT = '#118653'
-// 'DejaVu Sans' is listed first as the reliable server-side fallback (bundled into the Docker
-// image via `apk add font-dejavu`); desktop dev falls through to the platform UI sans.
-const FONT_STACK =
-  "'Plus Jakarta Sans','Segoe UI',Roboto,'Helvetica Neue',Arial,'DejaVu Sans','Noto Sans',sans-serif"
+
+const fontFile = (name: string) => join(process.cwd(), 'src/lib/og-fonts', name)
+const parseFont = (name: string) => {
+  const buf = readFileSync(fontFile(name))
+  return opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))
+}
+const FONT_TITLE = parseFont('jakarta-800.woff') // headline
+const FONT_EYEBROW = parseFont('jakarta-700.woff') // kicker
+const FONT_BODY = parseFont('jakarta-500.woff') // subtitle
 
 type BrandAsset = { uri: string; w: number; h: number }
-
 const loadAsset = (relPath: string): BrandAsset => {
   const buf = readFileSync(join(process.cwd(), relPath))
-  // PNG: width @16..20, height @20..24 (big-endian) in the IHDR chunk.
-  const w = buf.readUInt32BE(16)
-  const h = buf.readUInt32BE(20)
-  return { uri: `data:image/png;base64,${buf.toString('base64')}`, w, h }
+  return { uri: `data:image/png;base64,${buf.toString('base64')}`, w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) }
 }
 const ICON = loadAsset('public/brand/icon.png')
 const WORDMARK = loadAsset('public/brand/wordmark.png')
 
-const escapeXml = (s: string) =>
-  s.replace(/[<>&'"]/g, (c) =>
-    c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === "'" ? '&apos;' : '&quot;',
-  )
+type Font = ReturnType<typeof parseFont>
 
-// Greedy word-wrap using an average glyph-width estimate (no font metrics available to the SVG
-// rasteriser, so this stays deliberately conservative). Overflow past `maxLines` gets an ellipsis.
-const wrap = (text: string, fontSize: number, maxWidth: number, maxLines: number): string[] => {
-  const perLine = Math.max(8, Math.floor(maxWidth / (fontSize * 0.56)))
+// `tracking` is opentype.js' per-mille letter-spacing (80 ≈ 0.08em).
+const measure = (font: Font, text: string, size: number, tracking = 0) =>
+  font.getAdvanceWidth(text, size, { tracking } as opentype.RenderOptions)
+
+// `y` is the text baseline. Returns an SVG <path> element.
+const textPath = (
+  font: Font,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  fill: string,
+  tracking = 0,
+) => {
+  const path = font.getPath(text, x, y, size, { tracking, kerning: true } as opentype.RenderOptions)
+  return `<path d="${path.toPathData(2)}" fill="${fill}"/>`
+}
+
+// Greedy word-wrap using real glyph advance widths. Overflow past `maxLines` gets an ellipsis.
+const wrapByWidth = (
+  font: Font,
+  text: string,
+  size: number,
+  maxWidth: number,
+  maxLines: number,
+): string[] => {
   const words = text.split(/\s+/).filter(Boolean)
   const lines: string[] = []
   let current = ''
 
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word
-    if (candidate.length <= perLine || !current) {
+    if (measure(font, candidate, size) <= maxWidth || !current) {
       current = candidate
       continue
     }
@@ -67,9 +90,11 @@ const wrap = (text: string, fontSize: number, maxWidth: number, maxLines: number
 
   const consumed = lines.join(' ').split(/\s+/).filter(Boolean).length
   if (consumed < words.length && lines.length) {
-    const last = lines[lines.length - 1].replace(/[.,;:]+$/, '')
-    lines[lines.length - 1] =
-      last.length > perLine - 1 ? `${last.slice(0, perLine - 1).trimEnd()}…` : `${last}…`
+    let last = lines[lines.length - 1].replace(/[.,;:]+$/, '')
+    while (last && measure(font, `${last}…`, size) > maxWidth) {
+      last = last.slice(0, -1).trimEnd()
+    }
+    lines[lines.length - 1] = `${last}…`
   }
   return lines
 }
@@ -91,58 +116,62 @@ export type OgCardInput = {
 }
 
 const buildSvg = ({ eyebrow, title, subtitle, accent = DEFAULT_ACCENT }: OgCardInput): string => {
-  const contentW = W - PAD * 2 - 20 /* accent rail */
-
+  const contentW = 984
+  const eyebrowText = eyebrow
+    ? (eyebrow.length > 64 ? `${eyebrow.slice(0, 61)}…` : eyebrow).toUpperCase()
+    : ''
   const tSize = titleSize(title)
-  const titleLines = wrap(title, tSize, contentW, 3)
-  const subtitleLines = subtitle ? wrap(subtitle, 30, contentW, 2) : []
+  const titleLines = wrapByWidth(FONT_TITLE, title, tSize, contentW, 3)
+  const subtitleLines = subtitle ? wrapByWidth(FONT_BODY, subtitle, 30, contentW, 2) : []
 
-  // Vertically centre the text block between the top mark and the bottom wordmark.
+  const titleLineH = tSize * 1.16
+  const subSize = 30
+  const subLineH = 40
+
+  // Block height (top of eyebrow cap -> subtitle baseline), used to vertically centre the text
+  // between the top mark and the bottom wordmark.
   const blockH =
-    (eyebrow ? 34 : 0) + titleLines.length * tSize * 1.08 + (subtitleLines.length ? 22 + subtitleLines.length * 40 : 0)
-  let y = Math.max(224, (H - blockH) / 2)
+    (eyebrowText ? 24 + 26 : 0) +
+    tSize +
+    (titleLines.length - 1) * titleLineH +
+    (subtitleLines.length ? 30 + (subtitleLines.length - 1) * subLineH + subSize : 0)
+  const regionTop = 170
+  const regionBottom = H - PAD - 42 - 28
+  let y = Math.max(regionTop, (regionTop + regionBottom - blockH) / 2)
 
-  const parts: string[] = []
-  parts.push(`<rect width="${W}" height="${H}" fill="${PAPER}"/>`)
-  parts.push(`<rect width="20" height="${H}" fill="${accent}"/>`)
-  // faint oversized watermark of the mark
-  parts.push(
-    `<image href="${ICON.uri}" x="${W - 360}" y="${H - 330}" width="470" height="${Math.round((470 * ICON.h) / ICON.w)}" opacity="0.05"/>`,
-  )
-  // top mark
-  parts.push(`<image href="${ICON.uri}" x="${PAD}" y="64" width="112" height="${Math.round((112 * ICON.h) / ICON.w)}"/>`)
+  const parts: string[] = [
+    `<rect width="${W}" height="${H}" fill="${PAPER}"/>`,
+    `<rect width="${RAIL}" height="${H}" fill="${accent}"/>`,
+    `<image href="${ICON.uri}" x="${W - 350}" y="${H - 330}" width="460" height="${Math.round((460 * ICON.h) / ICON.w)}" opacity="0.05"/>`,
+    `<image href="${ICON.uri}" x="${PAD}" y="60" width="110" height="${Math.round((110 * ICON.h) / ICON.w)}"/>`,
+  ]
 
-  if (eyebrow) {
-    parts.push(
-      `<text x="${PAD}" y="${y}" font-family="${FONT_STACK}" font-size="24" font-weight="700" letter-spacing="2" fill="${accent}">${escapeXml(
-        eyebrow.length > 72 ? `${eyebrow.slice(0, 69)}…` : eyebrow,
-      ).toUpperCase()}</text>`,
-    )
-    y += 34
+  if (eyebrowText) {
+    y += 20 // cap top -> baseline
+    parts.push(textPath(FONT_EYEBROW, eyebrowText, PAD, y, 23, accent, 90))
+    y += 26 + tSize * 0.82 // gap + title ascent -> first title baseline
+  } else {
+    y += tSize * 0.82
   }
 
-  y += tSize * 0.85
   for (const line of titleLines) {
-    parts.push(
-      `<text x="${PAD}" y="${y}" font-family="${FONT_STACK}" font-size="${tSize}" font-weight="800" fill="${INK}">${escapeXml(line)}</text>`,
-    )
-    y += tSize * 1.08
+    parts.push(textPath(FONT_TITLE, line, PAD, y, tSize, INK))
+    y += titleLineH
   }
 
   if (subtitleLines.length) {
-    y += 22
+    y += 30 - titleLineH + tSize * 0.28 + subSize * 0.72 // gap + last descent + sub ascent
     for (const line of subtitleLines) {
-      parts.push(
-        `<text x="${PAD}" y="${y}" font-family="${FONT_STACK}" font-size="30" font-weight="500" fill="${INK_SOFT}">${escapeXml(line)}</text>`,
-      )
-      y += 40
+      parts.push(textPath(FONT_BODY, line, PAD, y, subSize, INK_SOFT))
+      y += subLineH
     }
   }
 
-  // bottom wordmark
-  const wmH = 44
+  const wmH = 42
   const wmW = Math.round((wmH * WORDMARK.w) / WORDMARK.h)
-  parts.push(`<image href="${WORDMARK.uri}" x="${PAD}" y="${H - PAD - wmH}" width="${wmW}" height="${wmH}"/>`)
+  parts.push(
+    `<image href="${WORDMARK.uri}" x="${PAD}" y="${H - PAD - wmH}" width="${wmW}" height="${wmH}"/>`,
+  )
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`
 }

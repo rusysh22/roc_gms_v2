@@ -6,6 +6,7 @@ import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
 import { marketingShareCopy } from '@/lib/shareMessages'
 import { getPublicBaseUrl } from '@/lib/shareMetadata'
+import { isGoogleSsoEnabled } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from './getCurrentPublicUser'
 
 import './tailwind.css'
@@ -61,7 +62,11 @@ export default async function FrontendLayout({ children }: Props) {
           rather than being pinned to the actual design tokens, so any route/wrapper that broke the
           inheritance chain would fall back to plain browser defaults. */}
       <body className="bg-paper font-sans text-ink">
-        <PublicChrome brand={<BrandLogo variant="horizontal" height={22} priority />} user={user}>
+        <PublicChrome
+          brand={<BrandLogo variant="horizontal" height={22} priority />}
+          user={user}
+          googleSsoEnabled={isGoogleSsoEnabled()}
+        >
           {children}
         </PublicChrome>
       </body>

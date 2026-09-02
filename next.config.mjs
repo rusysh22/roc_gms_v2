@@ -26,6 +26,16 @@ const nextConfig = {
   // package that pulls optional stream/zip deps - let Next require it at runtime instead of trying
   // to bundle it into the route.
   serverExternalPackages: ['exceljs'],
+  // The generated social cards (src/lib/ogCard.ts) read the brand PNGs and bundled font subsets
+  // from disk at request time - make sure a traced/standalone build ships them.
+  outputFileTracingIncludes: {
+    '/opengraph-image': ['./public/brand/*.png', './src/lib/og-fonts/*.woff'],
+    '/events/[eventSlug]/opengraph-image': ['./public/brand/*.png', './src/lib/og-fonts/*.woff'],
+    '/events/[eventSlug]/matches/[matchNumber]/opengraph-image': [
+      './public/brand/*.png',
+      './src/lib/og-fonts/*.woff',
+    ],
+  },
   async headers() {
     return [
       {
