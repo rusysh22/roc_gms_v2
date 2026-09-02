@@ -155,6 +155,12 @@ export const buildEventDataTemplateWorkbook = async (
     'still type a comma-separated list of several categories; the dropdown there only warns, it does',
     'not block.',
     '',
+    '"sport_name" on Clubs / Teams / Players / Pairs is optional. It only matters when two sports in',
+    'this event have a category with the same name - fill it in to say which sport the category_name',
+    'on that row belongs to. Example rows already fill it wherever a name is shared. If one row',
+    'registers into categories in different sports, leave it blank and prefix each name instead:',
+    '"Badminton :: Men\'s Doubles, Tennis :: Men\'s Doubles".',
+    '',
     'EXAMPLE ROWS: the Clubs / Teams / Players / Pairs sheets come pre-filled with worked example',
     "rows built from THIS event's own categories, so you can see how the data fits together:",
     '  - every "individual" category (singles, solo events) gets example Players registered into it;',
@@ -289,14 +295,30 @@ export const buildEventDataTemplateWorkbook = async (
   // example Pairs, team categories get example Teams. Every generated cell in a name column is
   // prefixed "EXAMPLE - " so the organizer can spot and bulk-delete them (see Instructions).
   const EX = 'EXAMPLE - '
-  const catNamesByMode = (mode: string): string[] =>
+  // A category is identified by (sport, name), not name alone. When two sports in this event share
+  // a category name ("Men's Doubles" in Badminton AND Tennis), a `category_name` cell on its own is
+  // ambiguous - so the generated example rows also fill `sport_name` for those names. Names that
+  // are unique across the event leave `sport_name` blank to keep the sheet uncluttered.
+  type ExampleCat = { name: string; sport: string }
+  const catsByMode = (mode: string): ExampleCat[] =>
     categories.docs
       .filter((c) => String(c.participant_mode || '').toLowerCase() === mode)
-      .map((c) => String(c.name))
-  const individualCatNames = [...catNamesByMode('individual'), ...catNamesByMode('open'), ...catNamesByMode('tbd')]
-  const pairCatNames = catNamesByMode('pair')
-  const teamCatNames = catNamesByMode('team')
-  const clubCatNames = catNamesByMode('club')
+      .map((c) => ({ name: String(c.name), sport: sportNameById.get(String(c.sport_id)) ?? '' }))
+  const sportsPerCategoryName = new Map<string, Set<string>>()
+  for (const c of categories.docs) {
+    const key = String(c.name).trim().toLowerCase()
+    const set = sportsPerCategoryName.get(key) ?? new Set<string>()
+    set.add(sportNameById.get(String(c.sport_id)) ?? '')
+    sportsPerCategoryName.set(key, set)
+  }
+  // The `sport_name` value to write for an example row's category - only when the name collides.
+  const scopeSport = (cat: ExampleCat | null): string =>
+    cat && (sportsPerCategoryName.get(cat.name.trim().toLowerCase())?.size ?? 0) > 1 ? cat.sport : ''
+
+  const individualCats = [...catsByMode('individual'), ...catsByMode('open'), ...catsByMode('tbd')]
+  const pairCats = catsByMode('pair')
+  const teamCats = catsByMode('team')
+  const clubCats = catsByMode('club')
 
   // Reference contingent names for the examples: the event's real clubs if it has any (so the
   // club_name dropdowns match), otherwise invented "EXAMPLE - Contingent X" names that we also add
@@ -322,11 +344,12 @@ export const buildEventDataTemplateWorkbook = async (
     gender: string
     identification_number: string
     photo: string
+    sport_name: string
     category_name: string
   }
   const examplePlayers: PlayerExample[] = []
   let playerSeq = 0
-  const addExamplePlayer = (categoryName: string): string => {
+  const addExamplePlayer = (cat: ExampleCat | null): string => {
     playerSeq += 1
     const first = FIRST_NAMES[(playerSeq - 1) % FIRST_NAMES.length]
     const name = `${EX}${first} P${String(playerSeq).padStart(2, '0')}`
@@ -338,14 +361,15 @@ export const buildEventDataTemplateWorkbook = async (
       gender: playerSeq % 2 === 0 ? 'female' : 'male',
       identification_number: `EX-${String(playerSeq).padStart(3, '0')}`,
       photo: '',
-      category_name: categoryName,
+      sport_name: scopeSport(cat),
+      category_name: cat?.name ?? '',
     })
     return name
   }
 
   // Individual categories: 4 example entrants each, registered straight into the category.
-  for (const catName of individualCatNames.slice(0, 4)) {
-    for (let i = 0; i < 4; i += 1) addExamplePlayer(catName)
+  for (const cat of individualCats.slice(0, 4)) {
+    for (let i = 0; i < 4; i += 1) addExamplePlayer(cat)
   }
 
   // Pair categories: 3 example pairs each. The two players are added to the Players sheet with no
@@ -355,33 +379,42 @@ export const buildEventDataTemplateWorkbook = async (
     player2_name: string
     team_name: string
     club_name: string
+    sport_name: string
     category_name: string
   }
   const examplePairs: PairExample[] = []
-  for (const catName of pairCatNames.slice(0, 3)) {
+  for (const cat of pairCats.slice(0, 3)) {
     for (let i = 0; i < 3; i += 1) {
-      const p1 = addExamplePlayer('')
-      const p2 = addExamplePlayer('')
+      const p1 = addExamplePlayer(null)
+      const p2 = addExamplePlayer(null)
       examplePairs.push({
         player1_name: p1,
         player2_name: p2,
         team_name: '',
         club_name: contingent(i),
-        category_name: catName,
+        sport_name: scopeSport(cat),
+        category_name: cat.name,
       })
     }
   }
 
   // Team categories: 3 example squads each, tied to a contingent.
-  type TeamExample = { name: string; club_name: string; contact_email: string; category_name: string }
+  type TeamExample = {
+    name: string
+    club_name: string
+    contact_email: string
+    sport_name: string
+    category_name: string
+  }
   const exampleTeams: TeamExample[] = []
-  for (const catName of teamCatNames.slice(0, 3)) {
+  for (const cat of teamCats.slice(0, 3)) {
     for (let i = 0; i < 3; i += 1) {
       exampleTeams.push({
-        name: `${EX}${baseContingents[i % baseContingents.length]} ${catName}`,
+        name: `${EX}${baseContingents[i % baseContingents.length]} ${cat.name}`,
         club_name: contingent(i),
         contact_email: '',
-        category_name: catName,
+        sport_name: scopeSport(cat),
+        category_name: cat.name,
       })
     }
   }
@@ -389,10 +422,16 @@ export const buildEventDataTemplateWorkbook = async (
   // Guarantee at least a handful of Players rows even for an event with no individual/pair
   // categories yet, so the sheet's columns are still illustrated.
   if (examplePlayers.length === 0) {
-    for (let i = 0; i < 6; i += 1) addExamplePlayer('')
+    for (let i = 0; i < 6; i += 1) addExamplePlayer(null)
   }
   if (exampleTeams.length === 0) {
-    exampleTeams.push({ name: `${EX}delete this row`, club_name: '', contact_email: '', category_name: '' })
+    exampleTeams.push({
+      name: `${EX}delete this row`,
+      club_name: '',
+      contact_email: '',
+      sport_name: '',
+      category_name: '',
+    })
   }
 
   // --- Clubs ---
@@ -401,21 +440,30 @@ export const buildEventDataTemplateWorkbook = async (
     { header: 'name', width: 30 },
     { header: 'contact_person', width: 22 },
     { header: 'contact_email', width: 28 },
+    { header: 'sport_name', width: 16 },
     { header: 'category_name', width: 28 },
   ])
   if (hasRealClubs) {
-    clubsSheet.addRow({ name: `${EX}delete this row`, contact_person: '', contact_email: '', category_name: '' })
+    clubsSheet.addRow({
+      name: `${EX}delete this row`,
+      contact_person: '',
+      contact_email: '',
+      sport_name: '',
+      category_name: '',
+    })
   } else {
     baseContingents.forEach((base, i) => {
       clubsSheet.addRow({
         name: `${EX}${base}`,
         contact_person: i === 0 ? 'Jane Doe' : '',
         contact_email: i === 0 ? 'jane.doe@example.com' : '',
-        category_name: i === 0 ? (clubCatNames[0] ?? '') : '',
+        sport_name: i === 0 ? scopeSport(clubCats[0] ?? null) : '',
+        category_name: i === 0 ? (clubCats[0]?.name ?? '') : '',
       })
     })
   }
-  if (categoriesRef) applyList(clubsSheet, 'D', categoriesRef)
+  if (sportsRef) applyList(clubsSheet, 'D', sportsRef)
+  if (categoriesRef) applyList(clubsSheet, 'E', categoriesRef)
 
   // --- Teams ---
   const teamsSheet = workbook.addWorksheet('Teams')
@@ -423,11 +471,13 @@ export const buildEventDataTemplateWorkbook = async (
     { header: 'name', width: 34 },
     { header: 'club_name', width: 22 },
     { header: 'contact_email', width: 28 },
+    { header: 'sport_name', width: 16 },
     { header: 'category_name', width: 28 },
   ])
   for (const team of exampleTeams) teamsSheet.addRow(team)
   if (clubsRef) applyList(teamsSheet, 'B', clubsRef)
-  if (categoriesRef) applyList(teamsSheet, 'D', categoriesRef)
+  if (sportsRef) applyList(teamsSheet, 'D', sportsRef)
+  if (categoriesRef) applyList(teamsSheet, 'E', categoriesRef)
 
   // --- Players ---
   const playersSheet = workbook.addWorksheet('Players')
@@ -439,12 +489,14 @@ export const buildEventDataTemplateWorkbook = async (
     { header: 'gender', width: 18 },
     { header: 'identification_number', width: 22 },
     { header: 'photo', width: 34 },
+    { header: 'sport_name', width: 16 },
     { header: 'category_name', width: 28 },
   ])
   for (const player of examplePlayers) playersSheet.addRow(player)
   if (clubsRef) applyList(playersSheet, 'B', clubsRef)
   applyList(playersSheet, 'E', `"${ENUMS.gender}"`, { strict: true })
-  if (categoriesRef) applyList(playersSheet, 'H', categoriesRef)
+  if (sportsRef) applyList(playersSheet, 'H', sportsRef)
+  if (categoriesRef) applyList(playersSheet, 'I', categoriesRef)
 
   // --- Pairs ---
   const pairsSheet = workbook.addWorksheet('Pairs')
@@ -453,6 +505,7 @@ export const buildEventDataTemplateWorkbook = async (
     { header: 'player2_name', width: 24 },
     { header: 'team_name', width: 30 },
     { header: 'club_name', width: 22 },
+    { header: 'sport_name', width: 16 },
     { header: 'category_name', width: 28 },
   ])
   if (examplePairs.length > 0) {
@@ -463,11 +516,13 @@ export const buildEventDataTemplateWorkbook = async (
       player2_name: '',
       team_name: '',
       club_name: '',
+      sport_name: '',
       category_name: '',
     })
   }
   if (clubsRef) applyList(pairsSheet, 'D', clubsRef)
-  if (categoriesRef) applyList(pairsSheet, 'E', categoriesRef)
+  if (sportsRef) applyList(pairsSheet, 'E', sportsRef)
+  if (categoriesRef) applyList(pairsSheet, 'F', categoriesRef)
 
   return Buffer.from(await workbook.xlsx.writeBuffer())
 }

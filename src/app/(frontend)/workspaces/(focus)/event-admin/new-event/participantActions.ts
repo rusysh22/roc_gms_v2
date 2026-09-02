@@ -260,45 +260,101 @@ const validCategoryStatuses = new Set(['draft', 'open', 'locked', 'published', '
 const validThirdPlacePolicies = new Set(['none', 'match', 'shared'])
 const validScoreTypes = new Set(['points', 'goals', 'sets', 'time', 'result', 'custom'])
 
-type ImportCategoryDoc = { id: unknown; name: unknown; participant_mode: unknown }
+// `sportSlug`/`sportName` (lower-cased) are attached by buildCategoryNameIndex so a suffix-only
+// `category_name` can be scoped to one sport when the same name is reused across sports.
+type ImportCategoryDoc = {
+  id: unknown
+  name: unknown
+  participant_mode: unknown
+  sport_id?: unknown
+  sportSlug?: string
+  sportName?: string
+}
 
-const buildCategoryNameIndex = (categories: ImportCategoryDoc[]) => {
+type SportIndex = { slugById?: Map<string, string>; nameById?: Map<string, string> }
+
+const buildCategoryNameIndex = (categories: ImportCategoryDoc[], sports?: SportIndex) => {
   const map = new Map<string, ImportCategoryDoc[]>()
   for (const category of categories) {
+    const sportId = category.sport_id === undefined ? undefined : String(category.sport_id)
+    const enriched: ImportCategoryDoc = {
+      ...category,
+      sportSlug: category.sportSlug ?? (sportId ? sports?.slugById?.get(sportId) : undefined),
+      sportName: (category.sportName ?? (sportId ? sports?.nameById?.get(sportId) : undefined))?.toLowerCase(),
+    }
     const key = String(category.name).trim().toLowerCase()
     const list = map.get(key) || []
-    list.push(category)
+    list.push(enriched)
     map.set(key, list)
   }
   return map
+}
+
+// A `category_name` cell may be sport-qualified as "Sport :: Category" (also "Sport > Category")
+// for the case where one row registers into categories spanning different sports and a single
+// `sport_name` column can't scope them all.
+const CATEGORY_SPORT_SEPARATORS = [' :: ', ' > ']
+
+const splitQualifiedCategoryName = (raw: string): { sportName?: string; categoryName: string } => {
+  for (const separator of CATEGORY_SPORT_SEPARATORS) {
+    const index = raw.indexOf(separator)
+    if (index > 0 && index + separator.length < raw.length) {
+      return { sportName: raw.slice(0, index).trim(), categoryName: raw.slice(index + separator.length).trim() }
+    }
+  }
+  return { categoryName: raw.trim() }
+}
+
+const categorySportMatches = (category: ImportCategoryDoc, sportScope: string): boolean => {
+  if (!sportScope) return true
+  const scopeSlug = slugify(sportScope)
+  return category.sportSlug === scopeSlug || category.sportName === sportScope.toLowerCase()
 }
 
 // `category_name` on any import sheet (see participantsImportTemplate.ts) is an optional shortcut
 // that both creates the row AND registers it into one or more categories in one step, instead of a
 // separate trip through the wizard's Registration step - the cell may list several comma-separated
 // names (parseCategoryNames in participantsImport.ts), each resolved and applied independently here.
-// Resolved by exact case-insensitive name match against this event's categories - ambiguous (same
-// name reused across two categories) or mode-mismatched (e.g. a Players row against a team-mode
-// category) resolves to a warning for that one name instead of guessing which one was meant.
+// Resolution: exact case-insensitive name match, narrowed by sport (a row-level `sport_name` column
+// or a "Sport :: Name" prefix) and by participant type. Anything still ambiguous or mismatched
+// resolves to a warning for that one name rather than guessing which category was meant.
 const resolveImportCategory = (
   categoriesByName: Map<string, ImportCategoryDoc[]>,
   categoryName: string | undefined,
   expectedMode: string,
+  rowSportName?: string,
 ): { category: ImportCategoryDoc } | { warning: string } | null => {
   if (!categoryName) {
     return null
   }
-  const matches = categoriesByName.get(categoryName.trim().toLowerCase()) || []
+  const { sportName: qualifiedSport, categoryName: bareName } = splitQualifiedCategoryName(categoryName)
+  const sportScope = (qualifiedSport || rowSportName || '').trim()
+
+  const matches = categoriesByName.get(bareName.toLowerCase()) || []
   if (matches.length === 0) {
     return { warning: `Category "${categoryName}" not found - not registered to any category` }
   }
-  const modeMatches = matches.filter((category) => String(category.participant_mode) === expectedMode)
+
+  const sportScoped = sportScope
+    ? matches.filter((category) => categorySportMatches(category, sportScope))
+    : matches
+  if (sportScope && sportScoped.length === 0) {
+    return { warning: `Category "${bareName}" not found in sport "${sportScope}" - not registered` }
+  }
+
+  const modeMatches = sportScoped.filter((category) => String(category.participant_mode) === expectedMode)
   if (modeMatches.length === 0) {
     return { warning: `Category "${categoryName}" doesn't accept this participant type - not registered` }
   }
   if (modeMatches.length > 1) {
+    const sports = [...new Set(modeMatches.map((category) => category.sportName).filter(Boolean))]
+    if (sports.length > 1) {
+      return {
+        warning: `Category "${bareName}" exists in ${sports.length} sports (${sports.join(', ')}) - add a "sport_name" column or write it as "${sports[0]} :: ${bareName}"`,
+      }
+    }
     return {
-      warning: `Category name "${categoryName}" is ambiguous (matches ${modeMatches.length} categories) - register manually in the Registration step`,
+      warning: `Category name "${bareName}" is ambiguous (matches ${modeMatches.length} categories) - register manually in the Registration step`,
     }
   }
   return { category: modeMatches[0] }
@@ -339,6 +395,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
   const knownSportSlugs = new Set(existingSports.docs.map((sport) => String(sport.slug)))
   const knownSportNames = new Set(existingSports.docs.map((sport) => String(sport.name).trim().toLowerCase()))
   const sportSlugById = new Map(existingSports.docs.map((sport) => [String(sport.id), String(sport.slug)]))
+  const sportNameById = new Map(existingSports.docs.map((sport) => [String(sport.id), String(sport.name)]))
   // Category slugs are unique per (sport, slug), not event-wide - key the dedup set the same way so
   // two sports can each carry an "Open" / "Men's Team" category (see CompetitionCategories.ts).
   const categoryKey = (sportName: string | undefined, slug: string) => `${slugify(sportName || '')}::${slug}`
@@ -355,7 +412,10 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       .filter(Boolean),
   )
   const knownPlayerNames = new Set(existingPlayers.docs.map((player) => String(player.name).trim().toLowerCase()))
-  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
+  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[], {
+    slugById: sportSlugById,
+    nameById: sportNameById,
+  })
   // A `category_name` cell on a participant sheet can point at a Category defined in the same
   // workbook, not just one already in the event - add those to the resolver index, skipping any
   // whose slug already exists so an existing+sheet pairing doesn't read as a false "ambiguous".
@@ -364,7 +424,13 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     if (!slug || !row.sportName || knownSportCategorySlugs.has(categoryKey(row.sportName, slug))) continue
     const key = row.name.trim().toLowerCase()
     const list = categoriesByName.get(key) || []
-    list.push({ id: `sheet:${slug}`, name: row.name, participant_mode: row.participantMode || 'open' })
+    list.push({
+      id: `sheet:${slug}`,
+      name: row.name,
+      participant_mode: row.participantMode || 'open',
+      sportSlug: slugify(row.sportName),
+      sportName: row.sportName.toLowerCase(),
+    })
     categoriesByName.set(key, list)
   }
 
@@ -427,11 +493,12 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     name: string,
     categoryNames: string[] | undefined,
     expectedMode: string,
+    rowSportName?: string,
   ): string[] => {
     const notes: string[] = []
     if (!categoryNames) return notes
     for (const categoryName of categoryNames) {
-      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode, rowSportName)
       if (!result) continue
       if ('warning' in result) {
         warn(sheet, name, result.warning)
@@ -547,16 +614,21 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
   }
 
-  const CLUBS_COLS = ['name', 'contact', 'category_name']
+  const CLUBS_COLS = ['name', 'contact', 'sport_name', 'category_name']
   for (const row of parsed.clubs) {
-    const cells = [row.name || '', row.contactPerson || row.contactEmail || '', (row.categoryNames || []).join(', ')]
+    const cells = [
+      row.name || '',
+      row.contactPerson || row.contactEmail || '',
+      row.sportName || '',
+      (row.categoryNames || []).join(', '),
+    ]
     const slug = slugify(row.name)
     const key = row.name.trim().toLowerCase()
     if (!slug) {
       skipRow('Clubs', CLUBS_COLS, cells, row.name, 'Missing or invalid name')
       continue
     }
-    const notes = checkCategory('Clubs', row.name, row.categoryNames, 'club')
+    const notes = checkCategory('Clubs', row.name, row.categoryNames, 'club', row.sportName)
     if (knownClubNames.has(key)) {
       clubsToUpdate += 1
       recordRow('Clubs', CLUBS_COLS, cells, 'update', notes)
@@ -567,9 +639,9 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
   }
 
-  const TEAMS_COLS = ['name', 'club', 'category_name']
+  const TEAMS_COLS = ['name', 'club', 'sport_name', 'category_name']
   for (const row of parsed.teams) {
-    const cells = [row.name || '', row.clubName || '', (row.categoryNames || []).join(', ')]
+    const cells = [row.name || '', row.clubName || '', row.sportName || '', (row.categoryNames || []).join(', ')]
     const slug = slugify(row.name)
     if (!slug) {
       skipRow('Teams', TEAMS_COLS, cells, row.name, 'Missing or invalid name')
@@ -580,7 +652,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Teams', row.name, `Club "${row.clubName}" not found - will be saved without a club`)
       notes.push(`club "${row.clubName}" not found -> none`)
     }
-    notes.push(...checkCategory('Teams', row.name, row.categoryNames, 'team'))
+    notes.push(...checkCategory('Teams', row.name, row.categoryNames, 'team', row.sportName))
     if (knownTeamSlugs.has(slug)) {
       teamsToUpdate += 1
       recordRow('Teams', TEAMS_COLS, cells, 'update', notes)
@@ -591,13 +663,14 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
     }
   }
 
-  const PLAYERS_COLS = ['name', 'club', 'gender', 'id', 'category_name']
+  const PLAYERS_COLS = ['name', 'club', 'gender', 'id', 'sport_name', 'category_name']
   for (const row of parsed.players) {
     const cells = [
       row.name || '',
       row.clubName || '',
       row.gender || '',
       row.identificationNumber || '',
+      row.sportName || '',
       (row.categoryNames || []).join(', '),
     ]
     const identificationNumberKey = row.identificationNumber ? row.identificationNumber.trim().toLowerCase() : ''
@@ -617,16 +690,22 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Players', row.name, `Gender "${row.gender}" is not valid - will be saved without a gender`)
       notes.push(`gender "${row.gender}" invalid -> none`)
     }
-    notes.push(...checkCategory('Players', row.name, row.categoryNames, 'individual'))
+    notes.push(...checkCategory('Players', row.name, row.categoryNames, 'individual', row.sportName))
     playersToCreate += 1
     knownPlayerNames.add(row.name.trim().toLowerCase())
     recordRow('Players', PLAYERS_COLS, cells, 'create', notes)
   }
 
-  const PAIRS_COLS = ['player 1', 'player 2', 'club', 'category_name']
+  const PAIRS_COLS = ['player 1', 'player 2', 'club', 'sport_name', 'category_name']
   for (const row of parsed.pairs) {
     const label = row.teamName || `${row.player1Name} / ${row.player2Name}`
-    const cells = [row.player1Name || '', row.player2Name || '', row.clubName || '', (row.categoryNames || []).join(', ')]
+    const cells = [
+      row.player1Name || '',
+      row.player2Name || '',
+      row.clubName || '',
+      row.sportName || '',
+      (row.categoryNames || []).join(', '),
+    ]
     const p1Key = row.player1Name.trim().toLowerCase()
     const p2Key = row.player2Name.trim().toLowerCase()
     if (p1Key === p2Key) {
@@ -642,7 +721,7 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
       warn('Pairs', label, `Club "${row.clubName}" not found - will be saved without a club`)
       notes.push(`club "${row.clubName}" not found -> none`)
     }
-    notes.push(...checkCategory('Pairs', label, row.categoryNames, 'pair'))
+    notes.push(...checkCategory('Pairs', label, row.categoryNames, 'pair', row.sportName))
     pairsToCreate += 1
     recordRow('Pairs', PAIRS_COLS, cells, 'create', notes)
   }
@@ -804,9 +883,13 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
   // created here. `sportIdByName`/`sportIdBySlug` and `rulesetIdByName` back that resolution.
   const sportIdBySlug = new Map<string, number>()
   const sportIdByName = new Map<string, number>()
+  const sportSlugById = new Map<string, string>()
+  const sportNameById = new Map<string, string>()
   for (const sport of existingSports.docs) {
     sportIdBySlug.set(String(sport.slug), Number(sport.id))
     sportIdByName.set(String(sport.name).trim().toLowerCase(), Number(sport.id))
+    sportSlugById.set(String(sport.id), String(sport.slug))
+    sportNameById.set(String(sport.id), String(sport.name))
   }
   const rulesetIdByName = new Map<string, number>()
   const rulesetIdBySlug = new Map<string, number>()
@@ -834,7 +917,10 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       .map((player) => (player.identification_number ? String(player.identification_number).trim().toLowerCase() : ''))
       .filter(Boolean),
   )
-  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[])
+  const categoriesByName = buildCategoryNameIndex(existingCategories.docs as ImportCategoryDoc[], {
+    slugById: sportSlugById,
+    nameById: sportNameById,
+  })
 
   let created = 0
   let updated = 0
@@ -876,10 +962,11 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
     sourceName: string,
     categoryNames: string[] | undefined,
     expectedMode: string,
+    rowSportName?: string,
   ) => {
     if (!categoryNames) return
     for (const categoryName of categoryNames) {
-      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode)
+      const result = resolveImportCategory(categoriesByName, categoryName, expectedMode, rowSportName)
       if (!result) continue
       if ('warning' in result) {
         warn(sheet, sourceName, result.warning)
@@ -1111,7 +1198,13 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         // below (queueRegistration reads categoriesByName).
         const key = row.name.trim().toLowerCase()
         const list = categoriesByName.get(key) || []
-        list.push({ id: doc.id, name: row.name, participant_mode: participantMode })
+        list.push({
+          id: doc.id,
+          name: row.name,
+          participant_mode: participantMode,
+          sportSlug: sportSlugById.get(String(sportId)) ?? (row.sportName ? slugify(row.sportName) : undefined),
+          sportName: (sportNameById.get(String(sportId)) ?? row.sportName)?.toLowerCase(),
+        })
         categoriesByName.set(key, list)
         await recordAuditLog({
           payload,
@@ -1153,7 +1246,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
           actorUserId: user.id,
         })
         updated += 1
-        queueRegistration('Clubs', 'clubs', existingId, row.name, row.categoryNames, 'club')
+        queueRegistration('Clubs', 'clubs', existingId, row.name, row.categoryNames, 'club', row.sportName)
         continue
       }
       const duplicate = await payload.find({
@@ -1176,7 +1269,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       const doc = await payload.create({ collection: 'clubs', data })
       clubIdByName.set(key, Number(doc.id))
       created += 1
-      queueRegistration('Clubs', 'clubs', Number(doc.id), row.name, row.categoryNames, 'club')
+      queueRegistration('Clubs', 'clubs', Number(doc.id), row.name, row.categoryNames, 'club', row.sportName)
     } catch {
       skip('Clubs', row.name, 'Could not save (unexpected error)')
     }
@@ -1214,7 +1307,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
           actorUserId: user.id,
         })
         updated += 1
-        queueRegistration('Teams', 'teams', Number(before.id), row.name, row.categoryNames, 'team')
+        queueRegistration('Teams', 'teams', Number(before.id), row.name, row.categoryNames, 'team', row.sportName)
         continue
       }
       const data = {
@@ -1226,7 +1319,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       }
       const doc = await payload.create({ collection: 'teams', data })
       created += 1
-      queueRegistration('Teams', 'teams', Number(doc.id), row.name, row.categoryNames, 'team')
+      queueRegistration('Teams', 'teams', Number(doc.id), row.name, row.categoryNames, 'team', row.sportName)
     } catch {
       skip('Teams', row.name, 'Could not save (unexpected error)')
     }
@@ -1264,7 +1357,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
       }
       playerIdByName.set(String(row.name).trim().toLowerCase(), Number(doc.id))
       created += 1
-      queueRegistration('Players', 'players', Number(doc.id), row.name, row.categoryNames, 'individual')
+      queueRegistration('Players', 'players', Number(doc.id), row.name, row.categoryNames, 'individual', row.sportName)
     } catch {
       // Falls through here mainly if the unique (event_id, identification_number) DB index is hit
       // despite the in-memory check above - e.g. a concurrent import into the same event.
@@ -1336,7 +1429,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
         })
       }
       created += 1
-      queueRegistration('Pairs', 'teams', Number(team.id), name, row.categoryNames, 'pair')
+      queueRegistration('Pairs', 'teams', Number(team.id), name, row.categoryNames, 'pair', row.sportName)
     } catch {
       skip('Pairs', label, 'Could not save (unexpected error)')
     }

@@ -1,7 +1,22 @@
 import * as XLSX from 'xlsx'
 
-export type ParsedClubRow = { name: string; contactPerson?: string; contactEmail?: string; categoryNames?: string[] }
-export type ParsedTeamRow = { name: string; clubName?: string; contactEmail?: string; categoryNames?: string[] }
+// `sportName` (optional `sport_name` column) scopes every `category_name` on the row to one sport,
+// so a suffix-only category name reused across sports ("Men's Doubles" in Badminton AND Tennis)
+// still resolves unambiguously. Blank = resolve by name alone (fine when names are unique).
+export type ParsedClubRow = {
+  name: string
+  contactPerson?: string
+  contactEmail?: string
+  categoryNames?: string[]
+  sportName?: string
+}
+export type ParsedTeamRow = {
+  name: string
+  clubName?: string
+  contactEmail?: string
+  categoryNames?: string[]
+  sportName?: string
+}
 export type ParsedPlayerRow = {
   name: string
   clubName?: string
@@ -11,6 +26,7 @@ export type ParsedPlayerRow = {
   identificationNumber?: string
   photo?: string
   categoryNames?: string[]
+  sportName?: string
 }
 // A pair has no name of its own on the sheet - it's identified by its two players, matched by
 // name against the Players sheet (same file) or an existing player already in the event.
@@ -22,6 +38,7 @@ export type ParsedPairRow = {
   teamName?: string
   clubName?: string
   categoryNames?: string[]
+  sportName?: string
 }
 
 // prd/redesign/import-data-and-draft-persistence.md track IMP: the workbook now also carries the
@@ -169,6 +186,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       contactPerson: str(row.contact_person) || undefined,
       contactEmail: str(row.contact_email) || undefined,
       categoryNames: parseCategoryNames(str(row.category_name)),
+      sportName: str(row.sport_name) || undefined,
     }))
     .filter((row) => row.name)
 
@@ -178,6 +196,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       clubName: str(row.club_name) || undefined,
       contactEmail: str(row.contact_email) || undefined,
       categoryNames: parseCategoryNames(str(row.category_name)),
+      sportName: str(row.sport_name) || undefined,
     }))
     .filter((row) => row.name)
 
@@ -191,6 +210,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       identificationNumber: str(row.identification_number) || undefined,
       photo: str(row.photo) || undefined,
       categoryNames: parseCategoryNames(str(row.category_name)),
+      sportName: str(row.sport_name) || undefined,
     }))
     .filter((row) => row.name)
 
@@ -201,6 +221,7 @@ export const parseParticipantsWorkbook = (fileBuffer: ArrayBuffer): ParsedPartic
       teamName: str(row.team_name) || undefined,
       clubName: str(row.club_name) || undefined,
       categoryNames: parseCategoryNames(str(row.category_name)),
+      sportName: str(row.sport_name) || undefined,
     }))
     .filter((row) => row.player1Name && row.player2Name)
 

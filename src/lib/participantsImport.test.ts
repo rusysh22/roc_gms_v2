@@ -39,9 +39,14 @@ describe('parseParticipantsWorkbook', () => {
     expect(playerWithCategory).toMatchObject({ categoryNames: ['Badminton Singles Women'] })
     const playerWithoutCategory = parsed.players.find((player) => player.name === 'John Smith')
     expect(playerWithoutCategory).toMatchObject({ categoryNames: undefined })
-    // The Teams sheet demonstrates the comma-separated multi-category form.
+    // The Teams sheet demonstrates the comma-separated multi-category form + the sport_name scope.
     const teamWithMultipleCategories = parsed.teams.find((team) => team.name === 'Jakarta Futsal Men')
-    expect(teamWithMultipleCategories).toMatchObject({ categoryNames: ['Futsal Men', 'Futsal Open'] })
+    expect(teamWithMultipleCategories).toMatchObject({
+      categoryNames: ['Futsal Men', 'Futsal Open'],
+      sportName: 'Futsal',
+    })
+    // A row that doesn't need it leaves sport_name blank -> undefined.
+    expect(parsed.teams.find((team) => team.name === 'Bandung Futsal Men')?.sportName).toBeUndefined()
     // Pairs are matched by player name, not id - both names must round-trip exactly.
     expect(parsed.pairs[0]).toMatchObject({
       player1Name: 'John Smith',
@@ -130,6 +135,46 @@ describe('parseParticipantsWorkbook', () => {
     })
     expect(parsed.players.find((p) => p.name === 'No Category')).toMatchObject({ categoryNames: undefined })
     expect(parsed.players.find((p) => p.name === 'Only Commas')).toMatchObject({ categoryNames: undefined })
+  })
+
+  it('reads the optional sport_name column on Clubs / Teams / Players / Pairs', () => {
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([{ name: 'Alpha', sport_name: 'Badminton', category_name: "Men's Doubles" }]),
+      'Clubs',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([{ name: 'Alpha Squad', sport_name: 'Futsal', category_name: "Men's Team" }]),
+      'Teams',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([
+        { name: 'Jane Doe', sport_name: 'Tennis', category_name: "Men's Singles" },
+        { name: 'No Sport', category_name: "Men's Singles" },
+      ]),
+      'Players',
+    )
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([
+        { player1_name: 'Jane Doe', player2_name: 'No Sport', sport_name: 'Badminton', category_name: "Mixed Doubles" },
+      ]),
+      'Pairs',
+    )
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+
+    const parsed = parseParticipantsWorkbook(
+      buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer,
+    )
+
+    expect(parsed.clubs[0]).toMatchObject({ sportName: 'Badminton' })
+    expect(parsed.teams[0]).toMatchObject({ sportName: 'Futsal' })
+    expect(parsed.players.find((p) => p.name === 'Jane Doe')).toMatchObject({ sportName: 'Tennis' })
+    expect(parsed.players.find((p) => p.name === 'No Sport')?.sportName).toBeUndefined()
+    expect(parsed.pairs[0]).toMatchObject({ sportName: 'Badminton' })
   })
 
   it('leaves identificationNumber and photo undefined when the columns are blank', () => {

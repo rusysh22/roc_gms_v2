@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
 
-import { LoginPanel } from '@/components/auth/login-panel'
+import { LoginRouteModal } from '@/components/auth/login-route-modal'
 import { isGoogleSsoEnabled } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 
@@ -22,6 +20,9 @@ const sanitizeRedirect = (value: string | undefined) => {
   return value
 }
 
+// There's no standalone login *page* - the nav opens a modal. This route exists only as a
+// redirect/deep-link target (protected pages send here with ?redirect=, SSO failures with
+// ?error=), and it renders that same modal over a branded backdrop.
 export default async function LoginPage({
   searchParams,
 }: {
@@ -36,24 +37,10 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center bg-mist px-4 py-10 font-sans sm:px-6">
-      <div className="mx-auto flex w-full max-w-md flex-col">
-        <Link
-          href="/"
-          className="mb-6 flex items-center gap-1.5 text-xs font-semibold text-ink-soft no-underline transition-colors hover:text-ink"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          Back to home
-        </Link>
-
-        <div className="rounded-panel border border-line bg-paper p-6 shadow-sm sm:p-8">
-          <LoginPanel
-            redirectTo={redirectTo}
-            ssoError={error ?? null}
-            googleSsoEnabled={isGoogleSsoEnabled()}
-          />
-        </div>
-      </div>
-    </main>
+    <LoginRouteModal
+      redirectTo={redirectTo}
+      ssoError={error ?? null}
+      googleSsoEnabled={isGoogleSsoEnabled()}
+    />
   )
 }

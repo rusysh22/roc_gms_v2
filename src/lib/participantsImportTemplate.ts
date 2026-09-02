@@ -124,6 +124,14 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
         'that one registration is skipped (with a warning after import), the row and its other, valid ' +
         'registrations are unaffected.',
     ],
+    [
+      '7b. "sport_name" (on Clubs, Teams, Players, Pairs) is optional and only matters when two sports ' +
+        'in your event have a category with the same name (e.g. "Men\'s Doubles" in both Badminton and ' +
+        'Tennis). Fill it in to say which sport the category_name(s) on that row belong to. If one row ' +
+        'registers into categories across different sports, leave this blank and instead prefix each ' +
+        'name: "Badminton :: Men\'s Doubles, Tennis :: Men\'s Doubles". When category names are already ' +
+        'unique across your event, you can ignore this column entirely.',
+    ],
     ['8. Do not rename any sheet tab - the importer reads them by name.'],
     ['9. Delete the example rows before adding your own data (or just overwrite them row by row).'],
     ['10. Upload this file on the Import step of the New Event Wizard.'],
@@ -284,13 +292,13 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
   XLSX.utils.book_append_sheet(workbook, categoriesSheet, 'Categories')
 
   const clubsSheet = XLSX.utils.json_to_sheet([
-    { name: 'Contingent Jakarta', contact_person: 'Jane Doe', contact_email: 'jane.doe@example.com', category_name: '' },
-    { name: 'Contingent Bandung', contact_person: 'Amir Hidayat', contact_email: 'amir.h@example.com', category_name: '' },
-    { name: 'Contingent Surabaya', contact_person: '', contact_email: '', category_name: '' },
-    { name: 'Contingent Yogyakarta', contact_person: 'Siti Rahma', contact_email: 'siti.rahma@example.com', category_name: '' },
-    { name: 'Contingent Medan', contact_person: '', contact_email: '', category_name: '' },
+    { name: 'Contingent Jakarta', contact_person: 'Jane Doe', contact_email: 'jane.doe@example.com', sport_name: '', category_name: '' },
+    { name: 'Contingent Bandung', contact_person: 'Amir Hidayat', contact_email: 'amir.h@example.com', sport_name: '', category_name: '' },
+    { name: 'Contingent Surabaya', contact_person: '', contact_email: '', sport_name: '', category_name: '' },
+    { name: 'Contingent Yogyakarta', contact_person: 'Siti Rahma', contact_email: 'siti.rahma@example.com', sport_name: '', category_name: '' },
+    { name: 'Contingent Medan', contact_person: '', contact_email: '', sport_name: '', category_name: '' },
   ])
-  clubsSheet['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 28 }, { wch: 26 }]
+  clubsSheet['!cols'] = [{ wch: 26 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 26 }]
   XLSX.utils.book_append_sheet(workbook, clubsSheet, 'Clubs')
 
   const teamsSheet = XLSX.utils.json_to_sheet([
@@ -298,18 +306,21 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       name: 'Jakarta Futsal Men',
       club_name: 'Contingent Jakarta',
       contact_email: 'team.jakarta.futsal@example.com',
+      // "sport_name" scopes the category_name(s) below to one sport, so a suffix-only category name
+      // ("Men", "Open") that another sport also uses still resolves to the right one.
+      sport_name: 'Futsal',
       // Demonstrates the optional register-on-import shortcut, including the comma-separated
       // multi-category form - only matches whichever of these two category names already exist in
       // this event ("Futsal Men", "Futsal Open"), the other is simply skipped with a warning.
       category_name: 'Futsal Men, Futsal Open',
     },
-    { name: 'Bandung Futsal Men', club_name: 'Contingent Bandung', contact_email: '', category_name: '' },
-    { name: 'Jakarta Basketball 5x5 Women', club_name: 'Contingent Jakarta', contact_email: '', category_name: '' },
+    { name: 'Bandung Futsal Men', club_name: 'Contingent Bandung', contact_email: '', sport_name: '', category_name: '' },
+    { name: 'Jakarta Basketball 5x5 Women', club_name: 'Contingent Jakarta', contact_email: '', sport_name: '', category_name: '' },
     // No club_name: a mixed/combined team that doesn't belong to any single contingent - shows the
     // field is genuinely optional, not just "usually filled in."
-    { name: 'Organizing Committee Mixed Volleyball', club_name: '', contact_email: 'events@example.com', category_name: '' },
+    { name: 'Organizing Committee Mixed Volleyball', club_name: '', contact_email: 'events@example.com', sport_name: '', category_name: '' },
   ])
-  teamsSheet['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 28 }, { wch: 26 }]
+  teamsSheet['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 26 }]
   XLSX.utils.book_append_sheet(workbook, teamsSheet, 'Teams')
 
   const playersSheet = XLSX.utils.json_to_sheet([
@@ -322,6 +333,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'male',
       identification_number: 'ID-0001',
       photo: 'https://example.com/photos/john-smith.jpg',
+      sport_name: '',
       category_name: '',
     },
     // Individual sport (e.g. badminton singles) - never appears on any Teams row, and that's fine.
@@ -335,6 +347,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'female',
       identification_number: 'ID-0002',
       photo: '',
+      sport_name: '',
       category_name: 'Badminton Singles Women',
     },
     // Just registered - no identification_number assigned yet. Left blank, not "N/A" or "-".
@@ -346,6 +359,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'male',
       identification_number: '',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
     {
@@ -356,6 +370,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'female',
       identification_number: 'ID-0004',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
     // Gender left blank - it's optional, not every organizer collects or needs it.
@@ -367,6 +382,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: '',
       identification_number: 'ID-0005',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
     {
@@ -377,6 +393,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'prefer_not_to_say',
       identification_number: 'ID-0006',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
     // No club_name - not every participant has to belong to a contingent (e.g. an independent
@@ -389,6 +406,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'male',
       identification_number: '',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
     {
@@ -399,6 +417,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: 'female',
       identification_number: 'ID-0008',
       photo: 'https://example.com/photos/gita-ayu.jpg',
+      sport_name: '',
       category_name: '',
     },
     // Only name and email filled in - everything else genuinely optional.
@@ -410,6 +429,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       gender: '',
       identification_number: '',
       photo: '',
+      sport_name: '',
       category_name: '',
     },
   ])
@@ -421,6 +441,7 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
     { wch: 18 },
     { wch: 22 },
     { wch: 36 },
+    { wch: 16 },
     { wch: 26 },
   ]
   XLSX.utils.book_append_sheet(workbook, playersSheet, 'Players')
@@ -434,10 +455,11 @@ export const buildParticipantsTemplateWorkbook = (): Buffer => {
       player2_name: 'Citra Lestari',
       team_name: '',
       club_name: '',
+      sport_name: '',
       category_name: '',
     },
   ])
-  pairsSheet['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 30 }, { wch: 22 }, { wch: 26 }]
+  pairsSheet['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 30 }, { wch: 22 }, { wch: 16 }, { wch: 26 }]
   XLSX.utils.book_append_sheet(workbook, pairsSheet, 'Pairs')
 
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
