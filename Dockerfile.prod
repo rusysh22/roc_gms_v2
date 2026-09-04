@@ -15,7 +15,10 @@ ENV PAYLOAD_SECRET=${PAYLOAD_SECRET}
 ENV DATABASE_URL=${DATABASE_URL}
 
 RUN mkdir -p src/generated && npm run generate:types
-RUN npm run build
+# Turbopack (the Next 16 build default) fails to statically resolve lightningcss's native binding
+# on alpine/musl ("Cannot find module '../lightningcss.linux-x64-musl.node'"); the webpack builder
+# handles the same tree fine. See CLAUDE memory / redeploy notes.
+RUN npm run build -- --webpack
 
 EXPOSE 3000
 
