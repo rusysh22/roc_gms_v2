@@ -162,12 +162,13 @@ export default async function EventHomePage({
   searchParams: HomeSearchParams
 }) {
   const { eventSlug } = await params
-  const editState = await getPublicEditState(await searchParams)
+  const resolvedSearchParams = await searchParams
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
     notFound()
   }
+  const editState = await getPublicEditState(resolvedSearchParams, event.id)
   const timezone = resolveEventTimezone(event.timezone)
   const eventPath = `/events/${event.slug}`
   const bannerImage =

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { Plus_Jakarta_Sans } from 'next/font/google'
+import { GoogleAnalytics } from '@next/third-parties/google'
 
 import { BrandLogo } from '@/components/brand-logo'
 import { PublicChrome } from '@/components/public-chrome'
@@ -92,6 +93,13 @@ function siteJsonLd() {
   }
 }
 
+// GA4 measurement ID, inlined at build time. Analytics only loads when it's set AND this is a
+// production build - so local dev and preview builds don't pollute the visitor numbers. The
+// <GoogleAnalytics> helper (from @next/third-parties) also fires a page_view on client-side route
+// changes, which a raw gtag snippet would miss in the App Router.
+const gaId = process.env.NEXT_PUBLIC_GA_ID
+const analyticsEnabled = Boolean(gaId) && process.env.NODE_ENV === 'production'
+
 export default async function FrontendLayout({ children }: Props) {
   const user = await getCurrentPublicUser()
 
@@ -115,6 +123,7 @@ export default async function FrontendLayout({ children }: Props) {
         >
           {children}
         </PublicChrome>
+        {analyticsEnabled && gaId ? <GoogleAnalytics gaId={gaId} /> : null}
       </body>
     </html>
   )

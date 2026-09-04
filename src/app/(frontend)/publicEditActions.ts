@@ -7,7 +7,16 @@ import { getPayload, type Payload } from 'payload'
 
 import config from '@payload-config'
 import { recordAuditLog } from '@/lib/audit'
+import { canAccessEvent } from '@/access/eventMembership'
 import { canEditEventPublicContent, hasPublicEditRole } from './publicEditState'
+
+const relationId = (value: unknown): string | number | undefined => {
+  if (typeof value === 'string' || typeof value === 'number') return value
+  if (value && typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+    return (value as { id: string | number }).id
+  }
+  return undefined
+}
 
 type PublicEditUser = {
   id: string | number
@@ -68,6 +77,9 @@ export async function updateEventPublicContentAction(formData: FormData): Promis
   if (!canEditEventPublicContent(actor)) {
     redirect(`${returnTo}?editError=unauthorized`)
   }
+  if (!(await canAccessEvent(payload, actor as Parameters<typeof canAccessEvent>[1], id))) {
+    redirect(`${returnTo}?editError=unauthorized`)
+  }
   const before = await payload.findByID({ collection: 'events', id, depth: 0 })
   const visibility = textField(formData, 'visibility')
   if (visibility && !eventVisibilities.has(visibility)) {
@@ -114,6 +126,13 @@ export async function updateArticlePublicContentAction(formData: FormData): Prom
   const payload = await getPayload({ config })
   const actor = await getAuthorizedActor(payload)
   const before = await payload.findByID({ collection: 'articles', id, depth: 0 })
+  const articleEventId = relationId(before.event_id)
+  if (
+    !articleEventId ||
+    !(await canAccessEvent(payload, actor as Parameters<typeof canAccessEvent>[1], articleEventId))
+  ) {
+    redirect(`${returnTo}?editError=unauthorized`)
+  }
   const statusInput = textField(formData, 'status')
   if (statusInput && !contentStatuses.has(statusInput)) {
     redirect(`${returnTo}?editError=invalid_status`)
@@ -167,6 +186,17 @@ export async function updateAnnouncementPublicContentAction(formData: FormData):
   const payload = await getPayload({ config })
   const actor = await getAuthorizedActor(payload)
   const before = await payload.findByID({ collection: 'announcements', id, depth: 0 })
+  const announcementEventId = relationId(before.event_id)
+  if (
+    !announcementEventId ||
+    !(await canAccessEvent(
+      payload,
+      actor as Parameters<typeof canAccessEvent>[1],
+      announcementEventId,
+    ))
+  ) {
+    redirect(`${returnTo}?editError=unauthorized`)
+  }
   const statusInput = textField(formData, 'status')
   if (statusInput && !contentStatuses.has(statusInput)) {
     redirect(`${returnTo}?editError=invalid_status`)

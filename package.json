@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@g-loot/react-tournament-brackets": "^1.0.31-rc",
+    "@next/third-parties": "^16.3.4",
     "@payloadcms/db-postgres": "3.85.2",
     "@payloadcms/next": "3.85.2",
     "@payloadcms/richtext-lexical": "3.85.2",

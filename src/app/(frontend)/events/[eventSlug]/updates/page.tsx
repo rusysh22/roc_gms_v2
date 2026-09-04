@@ -46,12 +46,12 @@ export default async function UpdatesPage({
   searchParams: PageSearchParams
 }) {
   const [{ eventSlug }, resolvedSearchParams] = await Promise.all([params, searchParams])
-  const editState = await getPublicEditState(resolvedSearchParams)
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
     notFound()
   }
+  const editState = await getPublicEditState(resolvedSearchParams, event.id)
   const eventPath = `/events/${event.slug}`
   const updatesPath = `${eventPath}/updates`
   const activeTab = getActiveTab(resolvedSearchParams.tab)

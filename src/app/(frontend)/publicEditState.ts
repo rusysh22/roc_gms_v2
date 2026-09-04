@@ -2,6 +2,7 @@ import { headers as getHeaders } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@payload-config'
+import { canAccessEvent } from '@/access/eventMembership'
 
 type SearchParams = Record<string, string | string[] | undefined>
 
@@ -31,14 +32,37 @@ export const hasPublicEditRole = (user: PublicEditUser | null | undefined) =>
 export const canEditEventPublicContent = (user: PublicEditUser | null | undefined) =>
   Boolean(user?.roles?.some((role) => role === 'super_admin' || role === 'event_admin'))
 
+/** Roles on Users are global, so a role check alone lets any event_admin edit *every* event's
+ * public content. This narrows it to the specific event: the caller must hold an EventMemberships
+ * row for that event (super_admin bypasses), matching the backoffice scope boundary. */
+export const canEditEventContentScoped = async (
+  payload: Awaited<ReturnType<typeof getPayload>>,
+  user: PublicEditUser | null | undefined,
+  eventId: string | number,
+): Promise<boolean> => {
+  if (!hasPublicEditRole(user) || !user) {
+    return false
+  }
+  return canAccessEvent(
+    payload,
+    user as Parameters<typeof canAccessEvent>[1],
+    eventId,
+  )
+}
+
 export const getPublicEditState = async (
   searchParams?: SearchParams,
+  eventId?: string | number,
 ): Promise<PublicEditState> => {
   const payload = await getPayload({ config })
   const headersList = await getHeaders()
   const { user } = await payload.auth({ headers: headersList })
   const publicUser = user as PublicEditUser | null
-  const canEdit = hasPublicEditRole(publicUser)
+  const canEdit =
+    hasPublicEditRole(publicUser) &&
+    (eventId === undefined
+      ? true
+      : await canEditEventContentScoped(payload, publicUser, eventId))
   const previewRequested = getParam(searchParams, 'preview') === '1'
   const editRequested = getParam(searchParams, 'edit') === '1'
 

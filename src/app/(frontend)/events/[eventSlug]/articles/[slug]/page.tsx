@@ -59,12 +59,12 @@ export default async function ArticleDetailPage({
   searchParams: PageSearchParams
 }) {
   const [{ eventSlug, slug }, resolvedSearchParams] = await Promise.all([params, searchParams])
-  const editState = await getPublicEditState(resolvedSearchParams)
   const payload = await getPayload({ config })
   const event = await getPublicEventBySlug(payload, eventSlug)
   if (!event) {
     notFound()
   }
+  const editState = await getPublicEditState(resolvedSearchParams, event.id)
   const eventPath = `/events/${event.slug}`
 
   const article = await getPublicArticleBySlugForMode({
