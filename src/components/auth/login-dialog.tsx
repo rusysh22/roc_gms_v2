@@ -38,7 +38,7 @@ export function LoginDialog({
       <DialogContent
         title="Sign in to InTourney"
         description="Use Google or your email and password."
-        className="max-w-md"
+        className="sm:max-w-md"
       >
         <LoginPanel
           redirectTo={redirectTo}

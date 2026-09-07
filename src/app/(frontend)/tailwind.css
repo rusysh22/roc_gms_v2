@@ -104,8 +104,9 @@
   }
 }
 
-/* Modal chrome (src/components/ui/dialog.tsx): `overlay-in` fades the scrim, `dialog-pop` gives
- * the panel a quick spring-ish pop-in - scale + lift from slightly below, settling into place.
+/* Modal chrome (src/components/ui/dialog.tsx): `overlay-in` fades the scrim. The panel animation is
+ * viewport-aware: on mobile the dialog is a bottom sheet that slides up (`sheet-in`/`sheet-out`),
+ * on >=sm it's centred and does a calm fade with a tiny rise, no bounce (`dialog-in`/`dialog-out`).
  * Applied via Tailwind `data-[state=open]:animate-[...]` / `data-[state=closed]:animate-[...]`
  * utilities on the Radix Overlay/Content, which flip `data-state` on open and close. */
 @keyframes overlay-in {
@@ -126,34 +127,54 @@
   }
 }
 
-@keyframes dialog-pop {
-  0% {
+/* Mobile: bottom sheet. */
+@keyframes sheet-in {
+  from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 12px)) scale(0.94);
+    transform: translateY(100%);
   }
-  60% {
+  to {
     opacity: 1;
-    transform: translate(-50%, calc(-50% - 2px)) scale(1.01);
+    transform: translateY(0);
   }
-  100% {
+}
+
+@keyframes sheet-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+/* >=sm: centred panel, calm fade + tiny rise, no overshoot. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 6px)) scale(0.98);
+  }
+  to {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
 }
 
-@keyframes dialog-pop-out {
+@keyframes dialog-out {
   from {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
   to {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 8px)) scale(0.96);
+    transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  @keyframes dialog-pop {
+  @keyframes sheet-in {
     from {
       opacity: 0;
     }
@@ -161,7 +182,23 @@
       opacity: 1;
     }
   }
-  @keyframes dialog-pop-out {
+  @keyframes sheet-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes dialog-out {
     from {
       opacity: 1;
     }

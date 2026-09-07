@@ -26,12 +26,18 @@ const DialogContent = React.forwardRef<
         ref={ref}
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
-          'fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-panel border border-line bg-paper p-6 shadow-md outline-none',
-          'will-change-transform data-[state=closed]:animate-[dialog-pop-out_140ms_ease-in] data-[state=open]:animate-[dialog-pop_220ms_cubic-bezier(0.22,1,0.36,1)]',
+          // Mobile: bottom sheet. >=sm: centred panel.
+          'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[90svh] w-full flex-col gap-4 rounded-t-panel border border-line bg-paper p-6 pt-4 shadow-md outline-none',
+          'sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:mx-0 sm:max-h-[85vh] sm:w-[92vw] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-panel sm:pt-6',
+          'will-change-transform',
+          'data-[state=open]:animate-[sheet-in_280ms_cubic-bezier(0.32,0.72,0,1)] data-[state=closed]:animate-[sheet-out_200ms_ease-in]',
+          'sm:data-[state=open]:animate-[dialog-in_180ms_ease-out] sm:data-[state=closed]:animate-[dialog-out_130ms_ease-in]',
           className,
         )}
         {...props}
       >
+        {/* Grab handle - sheet affordance on mobile only. */}
+        <div aria-hidden className="mx-auto -mt-1 h-1 w-9 shrink-0 rounded-full bg-line sm:hidden" />
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <DialogPrimitive.Title className="text-base font-extrabold text-ink">{title}</DialogPrimitive.Title>
