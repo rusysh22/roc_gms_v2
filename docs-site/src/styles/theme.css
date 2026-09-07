@@ -1,0 +1,43 @@
+/* InTourney brand palette for Starlight. The app itself is built on a green primary
+ * (--color-green #118653) with a near-black "ink" (#0c231f) — these map that onto Starlight's
+ * accent + gray scales so the docs header, links, active sidebar item and search match the
+ * product. Accent ramp generated around #118653; kept legible on both themes. */
+:root {
+  --sl-color-accent-low: #d7ede2;
+  --sl-color-accent: #118653;
+  --sl-color-accent-high: #0b5738;
+
+  --sl-color-text-accent: #0d6e44;
+
+  --sl-color-white: #0c231f;
+  --sl-color-gray-1: #17322c;
+  --sl-color-gray-2: #3a4d47;
+  --sl-color-gray-3: #5b6f68;
+  --sl-color-gray-4: #8a9d96;
+  --sl-color-gray-5: #c3d2cc;
+  --sl-color-gray-6: #eef4f1;
+  --sl-color-gray-7: #f6faf8;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #0b3b28;
+  --sl-color-accent: #16a862;
+  --sl-color-accent-high: #b7ecd3;
+
+  --sl-color-text-accent: #3fd08a;
+
+  --sl-color-white: #f4faf7;
+  --sl-color-gray-1: #e3ede9;
+  --sl-color-gray-2: #b7c7c1;
+  --sl-color-gray-3: #7e928b;
+  --sl-color-gray-4: #4c605a;
+  --sl-color-gray-5: #34473f;
+  --sl-color-gray-6: #1d322c;
+  --sl-color-gray-7: #16261f;
+  --sl-color-bg: #0c1c18;
+}
+
+/* The site title sits next to the mark — match the app's extra-bold wordmark weight. */
+.site-title {
+  font-weight: 800;
+}

@@ -35,6 +35,54 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // Scrollspy for same-page anchor links (the marketing homepage: `/#features`, `/#how-it-works`).
+  // `activeHref` alone can't track these - it's derived from the pathname, which never changes as
+  // you scroll or click a hash link. Here we watch the referenced sections and light up whichever
+  // one currently sits under the floating navbar; when none does (scrolled to the very top) the
+  // plain-pathname item - "Home" - stays active instead.
+  const anchorIds = React.useMemo(
+    () =>
+      items
+        .filter((item) => item.href.includes('#'))
+        .map((item) => item.href.slice(item.href.indexOf('#') + 1)),
+    [items],
+  )
+  const [activeAnchor, setActiveAnchor] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (anchorIds.length === 0) return
+    const NAV_OFFSET = 120
+    const compute = () => {
+      let current: string | null = null
+      for (const id of anchorIds) {
+        const el = document.getElementById(id)
+        if (el && el.getBoundingClientRect().top - NAV_OFFSET <= 0) current = id
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        current = anchorIds[anchorIds.length - 1]
+      }
+      setActiveAnchor(current)
+    }
+    compute()
+    window.addEventListener('scroll', compute, { passive: true })
+    window.addEventListener('resize', compute)
+    window.addEventListener('hashchange', compute)
+    return () => {
+      window.removeEventListener('scroll', compute)
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('hashchange', compute)
+    }
+  }, [anchorIds])
+
+  const isItemActive = (href: string) => {
+    if (anchorIds.length > 0) {
+      if (href.includes('#')) return activeAnchor === href.slice(href.indexOf('#') + 1)
+      // Non-anchor item on a page that has anchor nav (Home): active only at the top.
+      if (href === activeHref) return activeAnchor === null
+    }
+    return href === activeHref
+  }
+
   return (
     <header className={cn('sticky top-4 z-50 flex justify-center px-4 font-sans', className)}>
       <div
@@ -52,7 +100,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
 
         <nav className="hidden min-w-0 items-center gap-0.5 md:flex lg:gap-1" aria-label="Primary">
           {items.map((item) => {
-            const isActive = item.href === activeHref
+            const isActive = isItemActive(item.href)
             return (
               <Link
                 key={item.href}
@@ -101,7 +149,7 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
               </div>
               <nav className="flex flex-col gap-1" aria-label="Primary">
                 {items.map((item) => {
-                  const isActive = item.href === activeHref
+                  const isActive = isItemActive(item.href)
                   return (
                     <Link
                       key={item.href}

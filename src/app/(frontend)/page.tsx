@@ -254,7 +254,11 @@ export default function MarketingHomePage() {
 
       {/* Features - a bento: one lead tile carrying the core promise, five supporting tiles.
           Breaks the old uniform 3x2 grid (RHYTHM 2). */}
-      <section className="px-4 py-20" id="features" aria-labelledby="features-title">
+      <section
+        className="scroll-mt-28 px-4 py-20"
+        id="features"
+        aria-labelledby="features-title"
+      >
         <div className="mx-auto max-w-6xl">
           <div className="max-w-2xl">
             <SectionEyebrow tone="green">What runs it</SectionEyebrow>
@@ -290,7 +294,7 @@ export default function MarketingHomePage() {
       {/* How it works - a horizontal rail with the connector motif between steps (RHYTHM break
           from the card grid above). */}
       <section
-        className="border-y border-line bg-mist px-4 py-20"
+        className="scroll-mt-28 border-y border-line bg-mist px-4 py-20"
         id="how-it-works"
         aria-labelledby="how-it-works-title"
       >

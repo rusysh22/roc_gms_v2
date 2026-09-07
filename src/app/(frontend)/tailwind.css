@@ -104,6 +104,73 @@
   }
 }
 
+/* Modal chrome (src/components/ui/dialog.tsx): `overlay-in` fades the scrim, `dialog-pop` gives
+ * the panel a quick spring-ish pop-in - scale + lift from slightly below, settling into place.
+ * Applied via Tailwind `data-[state=open]:animate-[...]` / `data-[state=closed]:animate-[...]`
+ * utilities on the Radix Overlay/Content, which flip `data-state` on open and close. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.94);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, calc(-50% - 2px)) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-pop-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes dialog-pop {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes dialog-pop-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+}
+
 @layer components {
   .table-scroll-shadow {
     background:

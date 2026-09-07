@@ -21,10 +21,24 @@ export default defineConfig({
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       lastUpdated: true,
       favicon: '/favicon.svg',
+      // The brand mark next to the site title (kept — "InTourney Docs" still reads as the title).
+      // The "iT" mark is bright green on both themes, so one asset covers light and dark.
+      logo: { src: './src/assets/brand-icon.png', alt: 'InTourney' },
+      // Brand palette (green accent + ink grays) so the docs chrome matches the app.
+      customCss: ['./src/styles/theme.css'],
+      social: [
+        { icon: 'external', label: 'InTourney', href: 'https://intourney.id' },
+      ],
+      editLink: {
+        baseUrl: 'https://github.com/rusysh22/roc_gms_v2/edit/develop/docs-site/',
+      },
       // Crawlers + social unfurls. Starlight already emits <title>, meta description, canonical,
       // og:title/description and the RSS-less basics; these fill in the image + Twitter card and a
       // stable site name. Per-page <title>/description still come from each file's frontmatter.
       head: [
+        { tag: 'meta', attrs: { name: 'theme-color', content: '#118653' } },
+        { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/brand-icon.png' } },
+        { tag: 'link', attrs: { rel: 'icon', type: 'image/png', href: '/brand-icon.png' } },
         { tag: 'meta', attrs: { property: 'og:site_name', content: 'InTourney Docs' } },
         { tag: 'meta', attrs: { property: 'og:image', content: OG_IMAGE } },
         { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },

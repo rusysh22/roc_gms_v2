@@ -21,12 +21,13 @@ const DialogContent = React.forwardRef<
   const descriptionId = React.useId()
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/40" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/40 data-[state=closed]:animate-[overlay-out_120ms_ease-in] data-[state=open]:animate-[overlay-in_150ms_ease-out]" />
       <DialogPrimitive.Content
         ref={ref}
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
           'fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-panel border border-line bg-paper p-6 shadow-md outline-none',
+          'will-change-transform data-[state=closed]:animate-[dialog-pop-out_140ms_ease-in] data-[state=open]:animate-[dialog-pop_220ms_cubic-bezier(0.22,1,0.36,1)]',
           className,
         )}
         {...props}
