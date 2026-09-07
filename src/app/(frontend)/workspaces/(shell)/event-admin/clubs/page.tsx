@@ -1,21 +1,23 @@
-import Link from 'next/link'
-import { Pencil, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import type { Where } from 'payload'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { CrudFormModal } from '@/components/ui/crud-modal'
+import { DataTableToolbar } from '@/components/ui/data-table-toolbar'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { saveClubAction } from './clubActions'
+import { deleteClubAction, saveClubAction } from './clubActions'
 import { copyParticipantsFromEventAction } from './copyParticipantsActions'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +25,9 @@ export const dynamic = 'force-dynamic'
 const basePage = '/workspaces/event-admin/clubs'
 const clubErrorMessages: Record<string, string> = {
   invalid_input: 'Fill in a valid club name and email.',
+  invalid_relationship: 'That club does not belong to the active event.',
   duplicate_slug: 'That name/slug is already used by another club.',
+  club_in_use: 'This club still has players, teams, or entries - remove those first.',
 }
 const copyErrorMessages: Record<string, string> = {
   invalid_input: 'Choose a different event to copy from.',
@@ -57,20 +61,18 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
   }
 
   const params = searchParams ? await searchParams : {}
-  const query = get(params, 'q').toLowerCase()
+  const query = get(params, 'q')
   const editingId = get(params, 'edit')
   const clubError = get(params, 'clubError')
   const clubUpdated = get(params, 'clubUpdated')
   const copyError = get(params, 'copyError')
   const copySummary = get(params, 'copySummary')
-  const [clubs, otherEvents] = await Promise.all([
-    access.payload.find({
-      collection: 'clubs',
-      depth: 0,
-      limit: 200,
-      sort: 'name',
-      where: { event_id: { equals: activeEvent.id } },
-    }),
+  const eventWhere = { event_id: { equals: activeEvent.id } }
+  const listWhere: Where = query
+    ? { and: [eventWhere, { or: [{ name: { contains: query } }, { slug: { contains: query } }] }] }
+    : eventWhere
+  const [clubs, otherEvents, editingDoc] = await Promise.all([
+    access.payload.find({ collection: 'clubs', depth: 0, limit: 200, sort: 'name', where: listWhere }),
     access.payload.find({
       collection: 'events',
       depth: 0,
@@ -78,11 +80,11 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
       sort: '-createdAt',
       where: { id: { not_equals: activeEvent.id } },
     }),
+    editingId
+      ? access.payload.findByID({ collection: 'clubs', id: editingId, depth: 0 }).catch(() => null)
+      : null,
   ])
-  const editing = clubs.docs.find((club) => String(club.id) === editingId)
-  const visible = clubs.docs.filter(
-    (club) => !query || `${club.name} ${club.slug}`.toLowerCase().includes(query),
-  )
+  const editing = editingDoc || undefined
 
   const form = (
     <form action={saveClubAction} className="grid gap-4 sm:grid-cols-2">
@@ -113,9 +115,7 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
         <Textarea name="description" defaultValue={editing?.description || ''} />
       </Field>
       <div className="sm:col-span-2">
-        <SubmitButton className="w-full sm:w-auto">
-          {editing ? 'Save club' : 'Add club'}
-        </SubmitButton>
+        <SubmitButton className="w-full sm:w-auto">{editing ? 'Save club' : 'Add club'}</SubmitButton>
       </div>
     </form>
   )
@@ -152,19 +152,14 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
         </AlertBanner>
       ) : null}
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-sm" action={basePage}>
-          {/* AUDIT_UI_UX_CSS FORM-03/A11Y-01: the one raw Input left without an accessible name
-              after the Field-based fixes elsewhere - a compact inline search bar with no visible
-              label by design, so an aria-label (not a visible Field label) is the right fit here. */}
-          <Input name="q" defaultValue={query} placeholder="Search by name..." aria-label="Search clubs by name" />
-          <Button type="submit" variant="secondary">
-            Search
-          </Button>
-        </form>
-
-        <div className="flex shrink-0 items-center gap-2">
-          {otherEvents.docs.length > 0 ? (
+      <DataTableToolbar
+        action={basePage}
+        searchName="q"
+        searchDefaultValue={query}
+        searchPlaceholder="Search by name..."
+        searchLabel="Search clubs by name"
+        io={
+          otherEvents.docs.length > 0 ? (
             <Dialog>
               <DialogTrigger asChild>
                 <Button size="sm" variant="secondary">
@@ -192,25 +187,30 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
                 </form>
               </DialogContent>
             </Dialog>
-          ) : null}
-          <CrudFormModal
-            key={editingId || 'add'}
-            title={editing ? `Edit ${editing.name}` : 'Add club'}
-            openDefault={Boolean(editing)}
-            closeHref={basePage}
-            trigger={
-              <Button size="sm">
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add club
-              </Button>
-            }
-          >
-            {form}
-          </CrudFormModal>
-        </div>
-      </div>
+          ) : null
+        }
+        actions={
+          <>
+            <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{clubs.totalDocs} clubs</p>
+            <CrudFormModal
+              key={editingId || 'add'}
+              title={editing ? `Edit ${editing.name}` : 'Add club'}
+              openDefault={Boolean(editing)}
+              closeHref={basePage}
+              trigger={
+                <Button size="sm">
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add club
+                </Button>
+              }
+            >
+              {form}
+            </CrudFormModal>
+          </>
+        }
+      />
 
-      {visible.length === 0 ? (
+      {clubs.docs.length === 0 ? (
         <EmptyState>No clubs found.</EmptyState>
       ) : (
         <Table>
@@ -223,18 +223,18 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visible.map((club) => (
+            {clubs.docs.map((club) => (
               <TableRow key={club.id}>
                 <TableCell className="font-bold">{club.name}</TableCell>
                 <TableCell className="text-ink-soft">{club.contact_person || '—'}</TableCell>
                 <TableCell className="text-ink-soft">{club.contact_email || '—'}</TableCell>
                 <TableCell className="text-right">
-                  <Button asChild size="sm" variant="ghost">
-                    <Link href={`${basePage}?edit=${club.id}`}>
-                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                      Edit
-                    </Link>
-                  </Button>
+                  <RowActions
+                    editHref={`${basePage}?edit=${club.id}`}
+                    deleteAction={deleteClubAction}
+                    deleteId={club.id}
+                    deleteDescription={`Delete "${club.name}"? Only allowed if it has no players, teams, or entries.`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

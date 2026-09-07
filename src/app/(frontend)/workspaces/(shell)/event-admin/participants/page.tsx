@@ -1,13 +1,14 @@
-import Link from 'next/link'
-import { Pencil, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { ComboboxField } from '@/components/ui/combobox'
 import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,7 +16,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero, toOptions, type WorkspaceOption } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
-import { savePlayerAction, saveRosterAction, saveTeamAction } from './participantActions'
+import {
+  deletePlayerAction,
+  deleteRosterAction,
+  deleteTeamAction,
+  savePlayerAction,
+  saveRosterAction,
+  saveTeamAction,
+} from './participantActions'
 
 export const dynamic = 'force-dynamic'
 const basePage = '/workspaces/event-admin/participants'
@@ -26,6 +34,8 @@ const participantErrorMessages: Record<string, string> = {
   invalid_relationship: 'One of the selected club/team/player/category does not belong to the active event.',
   duplicate_slug: 'That name/slug is already used by another team.',
   duplicate_roster: 'That player is already on this team roster (for this category).',
+  player_in_use: 'This player is on a roster, is a team captain, or has an entry - remove those first.',
+  team_in_use: 'This team still has roster members or an entry - remove those first.',
 }
 type Params = Promise<Record<string, string | string[] | undefined>>
 const get = (p: Record<string, string | string[] | undefined>, k: string) =>
@@ -48,16 +58,15 @@ const ChoiceField = ({
   value?: string
   required?: boolean
 }) => (
-  <Field label={label}>
-    <Select name={name} required={required} defaultValue={value}>
-      <option value="">Select {label.toLowerCase()}</option>
-      {options.map((x) => (
-        <option key={x.id} value={x.id}>
-          {x.label}
-        </option>
-      ))}
-    </Select>
-  </Field>
+  <ComboboxField
+    label={label}
+    name={name}
+    required={required}
+    allowClear={!required}
+    placeholder={`Select ${label.toLowerCase()}...`}
+    options={options.map((x) => ({ value: x.id, label: x.label }))}
+    defaultValue={value}
+  />
 )
 
 export default async function ParticipantsPage({ searchParams }: { searchParams?: Params }) {
@@ -261,12 +270,12 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                   <TableCell className="text-ink-soft">{nameOf(x.club_id)}</TableCell>
                   <TableCell className="text-ink-soft">{x.email || '—'}</TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?kind=player&edit=${x.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
+                    <RowActions
+                      editHref={`${basePage}?kind=player&edit=${x.id}`}
+                      deleteAction={deletePlayerAction}
+                      deleteId={x.id}
+                      deleteDescription={`Delete "${x.name}"? Only allowed if they have no roster, captaincy, or entry.`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -312,12 +321,12 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                   <TableCell className="text-ink-soft">{nameOf(x.club_id)}</TableCell>
                   <TableCell className="text-ink-soft">{nameOf(x.captain_player_id)}</TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?kind=team&edit=${x.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
+                    <RowActions
+                      editHref={`${basePage}?kind=team&edit=${x.id}`}
+                      deleteAction={deleteTeamAction}
+                      deleteId={x.id}
+                      deleteDescription={`Delete "${x.name}"? Only allowed if it has no roster members or entry.`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -367,12 +376,12 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                     <StatusBadge tone={x.status === 'active' ? 'green' : 'neutral'}>{x.status}</StatusBadge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?kind=roster&edit=${x.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
+                    <RowActions
+                      editHref={`${basePage}?kind=roster&edit=${x.id}`}
+                      deleteAction={deleteRosterAction}
+                      deleteId={x.id}
+                      deleteDescription={`Remove ${nameOf(x.player_id)} from ${nameOf(x.team_id)}?`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -31,3 +31,26 @@ export async function saveClubAction(formData: FormData): Promise<void> {
   }
   revalidatePath(page); revalidatePath('/workspaces/event-admin'); redirect(`${page}?clubUpdated=1`)
 }
+
+export async function deleteClubAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
+  const event = await getActiveEvent(payload)
+  const id = text(formData, 'id')
+  if (!event || !id) redirect(`${page}?clubError=invalid_input`)
+
+  const club = await payload.findByID({ collection: 'clubs', id, depth: 0 }).catch(() => null)
+  if (!club || String(club.event_id) !== String(event.id)) redirect(`${page}?clubError=invalid_relationship`)
+
+  const [players, teams, entries] = await Promise.all([
+    payload.count({ collection: 'players', where: { club_id: { equals: id } } }),
+    payload.count({ collection: 'teams', where: { club_id: { equals: id } } }),
+    payload.count({ collection: 'competition-entries', where: { club_id: { equals: id } } }),
+  ])
+  if (players.totalDocs + teams.totalDocs + entries.totalDocs > 0) {
+    redirect(`${page}?clubError=club_in_use`)
+  }
+
+  await payload.delete({ collection: 'clubs', id })
+  await recordAuditLog({ payload, action: 'club.delete', entityType: 'clubs', entityId: id, before: club, after: null, actorUserId: user.id })
+  revalidatePath(page); revalidatePath('/workspaces/event-admin'); redirect(`${page}?clubUpdated=1`)
+}

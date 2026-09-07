@@ -1,20 +1,22 @@
-import Link from 'next/link'
-import { Pencil, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import type { Where } from 'payload'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { ComboboxField } from '@/components/ui/combobox'
 import { CrudFormModal } from '@/components/ui/crud-modal'
+import { DataTableToolbar } from '@/components/ui/data-table-toolbar'
+import { DetailModal } from '@/components/ui/detail-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { RowActions } from '@/components/ui/row-actions'
 import { RulesetFieldset } from '@/components/ui/RulesetFieldset'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatRulesetSummary } from '@/lib/rulesetSummary'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero } from '../../../workspaceComponents'
-import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { deleteRulesetAction, saveRulesetAction } from './rulesetActions'
 
@@ -63,8 +65,12 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
 
   const params = searchParams ? await searchParams : {}
   const editingId = get(params, 'edit')
+  const viewId = get(params, 'view')
+  const query = get(params, 'q')
   const rulesetError = get(params, 'rulesetError')
   const rulesetUpdated = get(params, 'rulesetUpdated')
+  const eventWhere = { event_id: { equals: activeEvent.id } }
+  const listWhere: Where = query ? { and: [eventWhere, { name: { contains: query } }] } : eventWhere
 
   const [rulesets, sports, categories] = await Promise.all([
     access.payload.find({
@@ -72,7 +78,7 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
       depth: 0,
       limit: 200,
       sort: 'name',
-      where: { event_id: { equals: activeEvent.id } },
+      where: listWhere,
     }),
     access.payload.find({
       collection: 'sports',
@@ -98,6 +104,8 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
   }
 
   const editing = rulesets.docs.find((ruleset) => String(ruleset.id) === editingId)
+  const viewing = viewId ? rulesets.docs.find((ruleset) => String(ruleset.id) === viewId) : undefined
+  const sportOptions = sports.docs.map((sport) => ({ value: String(sport.id), label: sport.name }))
 
   const form = (
     <form action={saveRulesetAction} className="flex flex-col gap-4">
@@ -106,18 +114,13 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
         <Field label="Ruleset name">
           <Input name="name" required defaultValue={editing?.name || ''} />
         </Field>
-        <Field label="Sport">
-          <Select name="sportId" required defaultValue={editing?.sport_id ? String(editing.sport_id) : ''}>
-            <option value="" disabled>
-              Select sport
-            </option>
-            {sports.docs.map((sport) => (
-              <option key={sport.id} value={String(sport.id)}>
-                {sport.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <ComboboxField
+          label="Sport"
+          name="sportId"
+          required
+          options={sportOptions}
+          defaultValue={editing?.sport_id ? String(editing.sport_id) : ''}
+        />
       </div>
       <RulesetFieldset
         values={{
@@ -159,24 +162,52 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
         </AlertBanner>
       ) : null}
 
-      <div className="mb-4 flex justify-end">
-        {sports.docs.length === 0 ? null : (
-          <CrudFormModal
-            key={editingId || 'add'}
-            title={editing ? `Edit ${editing.name}` : 'Add ruleset'}
-            openDefault={Boolean(editing)}
-            closeHref={basePage}
-            trigger={
-              <Button size="sm">
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add ruleset
-              </Button>
-            }
-          >
-            {form}
-          </CrudFormModal>
-        )}
-      </div>
+      <DataTableToolbar
+        action={basePage}
+        searchName="q"
+        searchDefaultValue={query}
+        searchPlaceholder="Search by name..."
+        searchLabel="Search rulesets by name"
+        actions={
+          <>
+            <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{rulesets.totalDocs} rulesets</p>
+            {sports.docs.length === 0 ? null : (
+              <CrudFormModal
+                key={editingId || 'add'}
+                title={editing ? `Edit ${editing.name}` : 'Add ruleset'}
+                openDefault={Boolean(editing)}
+                closeHref={basePage}
+                trigger={
+                  <Button size="sm">
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    Add ruleset
+                  </Button>
+                }
+              >
+                {form}
+              </CrudFormModal>
+            )}
+          </>
+        }
+      />
+
+      {viewing ? (
+        <DetailModal
+          key={`view-${viewId}`}
+          title={viewing.name}
+          openDefault
+          closeHref={basePage}
+          items={[
+            { label: 'Sport', value: sportNameById.get(String(viewing.sport_id)) || '—' },
+            { label: 'Summary', value: formatRulesetSummary(viewing) },
+            { label: 'Score type', value: viewing.score_type || '—' },
+            { label: 'Points (W/D/L)', value: `${viewing.points_win ?? '—'} / ${viewing.points_draw ?? '—'} / ${viewing.points_loss ?? '—'}` },
+            { label: 'Duration (min)', value: viewing.default_duration_minutes ?? '—' },
+            { label: 'Min rest (min)', value: viewing.min_rest_minutes ?? '—' },
+            { label: 'Used by', value: `${categoryCountByRuleset.get(String(viewing.id)) || 0} categories` },
+          ]}
+        />
+      ) : null}
 
       {sports.docs.length === 0 ? (
         <EmptyState>Add a sport first, then come back to define its rules.</EmptyState>
@@ -204,31 +235,15 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
                   {(categoryCountByRuleset.get(String(ruleset.id)) || 0) === 1 ? 'y' : 'ies'}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button asChild size="sm" variant="ghost">
-                      <Link href={`${basePage}?edit=${ruleset.id}`}>
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        Edit
-                      </Link>
-                    </Button>
-                    {(categoryCountByRuleset.get(String(ruleset.id)) || 0) === 0 ? (
-                      <>
-                        <form id={`delete-ruleset-${ruleset.id}`} action={deleteRulesetAction}>
-                          <input type="hidden" name="id" value={String(ruleset.id)} />
-                        </form>
-                        <ConfirmSubmitButton
-                          formId={`delete-ruleset-${ruleset.id}`}
-                          tone="destructive"
-                          variant="ghost"
-                          size="sm"
-                          className="text-danger"
-                          confirmMessage={`Delete "${ruleset.name}"?`}
-                        >
-                          Delete
-                        </ConfirmSubmitButton>
-                      </>
-                    ) : null}
-                  </div>
+                  <RowActions
+                    viewHref={`${basePage}?view=${ruleset.id}`}
+                    editHref={`${basePage}?edit=${ruleset.id}`}
+                    deleteAction={
+                      (categoryCountByRuleset.get(String(ruleset.id)) || 0) === 0 ? deleteRulesetAction : undefined
+                    }
+                    deleteId={ruleset.id}
+                    deleteDescription={`Delete "${ruleset.name}"?`}
+                  />
                 </TableCell>
               </TableRow>
             ))}

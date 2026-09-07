@@ -17,6 +17,7 @@ export function DataTableToolbar({
   searchLabel = 'Search',
   hiddenFields,
   filters,
+  io,
   actions,
 }: {
   action: string
@@ -26,6 +27,8 @@ export function DataTableToolbar({
   searchLabel?: string
   hiddenFields?: ReactNode
   filters?: ReactNode
+  /** Import/Export controls slot - sits between the filters and the "Add" button. */
+  io?: ReactNode
   actions?: ReactNode
 }) {
   return (
@@ -44,7 +47,12 @@ export function DataTableToolbar({
           Search
         </Button>
       </form>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      {io || actions ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {io}
+          {actions}
+        </div>
+      ) : null}
     </div>
   )
 }

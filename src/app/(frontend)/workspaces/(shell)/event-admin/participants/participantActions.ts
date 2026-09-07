@@ -51,3 +51,58 @@ export async function saveRosterAction(form: FormData): Promise<void> {
   if (id) { const before = await payload.findByID({ collection: 'rosters', id, depth: 0 }); await payload.update({ collection: 'rosters', id, data }); await recordAuditLog({ payload, action: 'roster.update', entityType: 'rosters', entityId: id, before, after: data, actorUserId: user.id }) } else { const created = await payload.create({ collection: 'rosters', data }); await recordAuditLog({ payload, action: 'roster.create', entityType: 'rosters', entityId: created.id, before: null, after: data, actorUserId: user.id }) }
   refresh(); redirect(`${page}?rosterUpdated=1`)
 }
+
+const loadOwned = async (
+  payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload'],
+  collection: 'players' | 'teams' | 'rosters',
+  id: string,
+  eventId: string | number,
+) => {
+  const doc = await payload.findByID({ collection, id, depth: 0 }).catch(() => null) as { id?: string | number; event_id?: string | number } | null
+  if (!doc || String(doc.event_id) !== String(eventId)) throw new Error('invalid_relationship')
+  return doc
+}
+
+export async function deletePlayerAction(form: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
+  const event = await activeEvent(payload); const id = text(form, 'id')
+  if (!event || !id) redirect(`${page}?participantError=invalid_player`)
+  let before
+  try { before = await loadOwned(payload, 'players', id, event.id) } catch { redirect(`${page}?participantError=invalid_relationship`) }
+  const [rosters, captainOf, entries] = await Promise.all([
+    payload.count({ collection: 'rosters', where: { player_id: { equals: id } } }),
+    payload.count({ collection: 'teams', where: { captain_player_id: { equals: id } } }),
+    payload.count({ collection: 'competition-entries', where: { player_id: { equals: id } } }),
+  ])
+  if (rosters.totalDocs + captainOf.totalDocs + entries.totalDocs > 0) redirect(`${page}?participantError=player_in_use`)
+  await payload.delete({ collection: 'players', id })
+  await recordAuditLog({ payload, action: 'player.delete', entityType: 'players', entityId: id, before, after: null, actorUserId: user.id })
+  refresh(); redirect(`${page}?playerUpdated=1`)
+}
+
+export async function deleteTeamAction(form: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
+  const event = await activeEvent(payload); const id = text(form, 'id')
+  if (!event || !id) redirect(`${page}?participantError=invalid_team`)
+  let before
+  try { before = await loadOwned(payload, 'teams', id, event.id) } catch { redirect(`${page}?participantError=invalid_relationship`) }
+  const [rosters, entries] = await Promise.all([
+    payload.count({ collection: 'rosters', where: { team_id: { equals: id } } }),
+    payload.count({ collection: 'competition-entries', where: { team_id: { equals: id } } }),
+  ])
+  if (rosters.totalDocs + entries.totalDocs > 0) redirect(`${page}?participantError=team_in_use`)
+  await payload.delete({ collection: 'teams', id })
+  await recordAuditLog({ payload, action: 'team.delete', entityType: 'teams', entityId: id, before, after: null, actorUserId: user.id })
+  refresh(); redirect(`${page}?teamUpdated=1`)
+}
+
+export async function deleteRosterAction(form: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
+  const event = await activeEvent(payload); const id = text(form, 'id')
+  if (!event || !id) redirect(`${page}?participantError=invalid_roster`)
+  let before
+  try { before = await loadOwned(payload, 'rosters', id, event.id) } catch { redirect(`${page}?participantError=invalid_relationship`) }
+  await payload.delete({ collection: 'rosters', id })
+  await recordAuditLog({ payload, action: 'roster.delete', entityType: 'rosters', entityId: id, before, after: null, actorUserId: user.id })
+  refresh(); redirect(`${page}?rosterUpdated=1`)
+}

@@ -1,20 +1,19 @@
-import Link from 'next/link'
-import { Pencil, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
+import { ComboboxField } from '@/components/ui/combobox'
 import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { RowActions } from '@/components/ui/row-actions'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero, toOptions } from '../../../workspaceComponents'
-import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { deleteCourtAction, deleteVenueAction, saveCourtAction, saveVenueAction } from './facilityActions'
 
@@ -119,37 +118,25 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
       <Field label="Name">
         <Input name="name" required defaultValue={court?.name || ''} />
       </Field>
-      <Field label="Venue">
-        <Select
-          name="venueId"
-          required
-          defaultValue={
-            typeof court?.venue_id === 'object' ? String(court.venue_id?.id || '') : String(court?.venue_id || '')
-          }
-        >
-          <option value="">Select venue</option>
-          {toOptions(venues.docs).map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Sport">
-        <Select
-          name="sportId"
-          defaultValue={
-            typeof court?.sport_id === 'object' ? String(court.sport_id?.id || '') : String(court?.sport_id || '')
-          }
-        >
-          <option value="">Any sport</option>
-          {toOptions(sports.docs).map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <ComboboxField
+        label="Venue"
+        name="venueId"
+        required
+        options={toOptions(venues.docs).map((o) => ({ value: o.id, label: o.label }))}
+        defaultValue={
+          typeof court?.venue_id === 'object' ? String(court.venue_id?.id || '') : String(court?.venue_id || '')
+        }
+      />
+      <ComboboxField
+        label="Sport"
+        name="sportId"
+        allowClear
+        placeholder="Any sport"
+        options={toOptions(sports.docs).map((o) => ({ value: o.id, label: o.label }))}
+        defaultValue={
+          typeof court?.sport_id === 'object' ? String(court.sport_id?.id || '') : String(court?.sport_id || '')
+        }
+      />
       <Field label="Capacity">
         <Input name="capacity" type="number" min="0" defaultValue={court?.capacity ?? ''} />
       </Field>
@@ -214,27 +201,12 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
                   <TableCell className="text-ink-soft">{item.address || '—'}</TableCell>
                   <TableCell className="text-ink-soft">{item.is_virtual ? 'Virtual' : 'Physical'}</TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button asChild size="sm" variant="ghost">
-                        <Link href={`${basePage}?venue=${item.id}`}>
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          Edit
-                        </Link>
-                      </Button>
-                      <form id={`delete-venue-${item.id}`} action={deleteVenueAction}>
-                        <input type="hidden" name="id" value={String(item.id)} />
-                      </form>
-                      <ConfirmSubmitButton
-                        formId={`delete-venue-${item.id}`}
-                        tone="destructive"
-                        variant="ghost"
-                        size="sm"
-                        className="text-danger"
-                        confirmMessage={`Delete "${item.name}"? Only allowed if it has no courts or matches.`}
-                      >
-                        Delete
-                      </ConfirmSubmitButton>
-                    </div>
+                    <RowActions
+                      editHref={`${basePage}?venue=${item.id}`}
+                      deleteAction={deleteVenueAction}
+                      deleteId={item.id}
+                      deleteDescription={`Delete "${item.name}"? Only allowed if it has no courts or matches.`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -286,27 +258,12 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
                     </StatusBadge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button asChild size="sm" variant="ghost">
-                        <Link href={`${basePage}?court=${item.id}`}>
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          Edit
-                        </Link>
-                      </Button>
-                      <form id={`delete-court-${item.id}`} action={deleteCourtAction}>
-                        <input type="hidden" name="id" value={String(item.id)} />
-                      </form>
-                      <ConfirmSubmitButton
-                        formId={`delete-court-${item.id}`}
-                        tone="destructive"
-                        variant="ghost"
-                        size="sm"
-                        className="text-danger"
-                        confirmMessage={`Delete "${item.name}"? Only allowed if no matches are assigned to it.`}
-                      >
-                        Delete
-                      </ConfirmSubmitButton>
-                    </div>
+                    <RowActions
+                      editHref={`${basePage}?court=${item.id}`}
+                      deleteAction={deleteCourtAction}
+                      deleteId={item.id}
+                      deleteDescription={`Delete "${item.name}"? Only allowed if no matches are assigned to it.`}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

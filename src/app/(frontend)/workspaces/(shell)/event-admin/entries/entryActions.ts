@@ -14,7 +14,10 @@ const validStatuses = new Set(['pending', 'confirmed', 'waitlisted', 'withdrawn'
 export async function saveCompetitionEntryAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
   const event = await getActiveEvent(payload)
-  const id = text(formData, 'id'); const displayName = text(formData, 'displayName'); const categoryId = text(formData, 'categoryId'); const entryType = text(formData, 'entryType'); const status = text(formData, 'status'); const sourceId = text(formData, 'sourceId')
+  const id = text(formData, 'id'); const displayName = text(formData, 'displayName'); const categoryId = text(formData, 'categoryId'); const entryType = text(formData, 'entryType'); const status = text(formData, 'status')
+  // The source picker is one grouped combobox (Players / Teams / Clubs), so its value is prefixed
+  // (`player:123`) to stay unique across the groups - strip the prefix back to a bare id here.
+  const rawSource = text(formData, 'sourceId'); const sourceId = rawSource.includes(':') ? rawSource.split(':')[1] : rawSource
   if (!event || !displayName || !categoryId || !validTypes.has(entryType) || !validStatuses.has(status)) redirect(`${page}?entryError=invalid_input`)
   try {
     const category = await payload.findByID({ collection: 'competition-categories', id: categoryId, depth: 0 }) as { event_id?: string | number }
@@ -30,5 +33,33 @@ export async function saveCompetitionEntryAction(formData: FormData): Promise<vo
   const data = { event_id: Number(event.id), category_id: Number(categoryId), display_name: displayName, entry_type: entryType as 'individual' | 'pair' | 'team' | 'club' | 'open' | 'tbd', status: status as 'pending' | 'confirmed' | 'waitlisted' | 'withdrawn' | 'disqualified', seed_number: seedNumber, player_id: entryType === 'individual' ? (sourceId ? Number(sourceId) : undefined) : undefined, team_id: entryType === 'team' ? (sourceId ? Number(sourceId) : undefined) : undefined, club_id: entryType === 'club' ? (sourceId ? Number(sourceId) : undefined) : undefined }
   if (id) { const before = await payload.findByID({ collection: 'competition-entries', id, depth: 0 }); await payload.update({ collection: 'competition-entries', id, data }); await recordAuditLog({ payload, action: 'competition_entry.update', entityType: 'competition-entries', entityId: id, before, after: data, actorUserId: user.id }) }
   else { const created = await payload.create({ collection: 'competition-entries', data }); await recordAuditLog({ payload, action: 'competition_entry.create', entityType: 'competition-entries', entityId: created.id, before: null, after: data, actorUserId: user.id }) }
+  revalidatePath(page); revalidatePath('/workspaces/event-admin'); revalidatePath('/workspaces/scheduler'); redirect(`${page}?entryUpdated=1`)
+}
+
+export async function deleteCompetitionEntryAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.draw, returnTo: page })
+  const event = await getActiveEvent(payload)
+  const id = text(formData, 'id')
+  if (!event || !id) redirect(`${page}?entryError=invalid_input`)
+
+  const entry = await payload.findByID({ collection: 'competition-entries', id, depth: 0 }).catch(() => null)
+  if (!entry || String(entry.event_id) !== String(event!.id)) redirect(`${page}?entryError=invalid_relationship`)
+
+  // Block the delete while the entry is still wired into results - matches (as either participant
+  // or the recorded winner), a standings row, or a medal record.
+  const [asA, asB, asWinner, standings, medals] = await Promise.all([
+    payload.count({ collection: 'matches', where: { participant_a_entry_id: { equals: id } } }),
+    payload.count({ collection: 'matches', where: { participant_b_entry_id: { equals: id } } }),
+    payload.count({ collection: 'matches', where: { winner_entry_id: { equals: id } } }),
+    payload.count({ collection: 'standings', where: { entry_id: { equals: id } } }),
+    payload.count({ collection: 'medal-records', where: { entry_id: { equals: id } } }),
+  ])
+  if (asA.totalDocs + asB.totalDocs + asWinner.totalDocs + standings.totalDocs + medals.totalDocs > 0) {
+    redirect(`${page}?entryError=entry_in_use`)
+  }
+
+  const before = await payload.findByID({ collection: 'competition-entries', id, depth: 0 }).catch(() => null)
+  await payload.delete({ collection: 'competition-entries', id })
+  await recordAuditLog({ payload, action: 'competition_entry.delete', entityType: 'competition-entries', entityId: id, before, after: null, actorUserId: user.id })
   revalidatePath(page); revalidatePath('/workspaces/event-admin'); revalidatePath('/workspaces/scheduler'); redirect(`${page}?entryUpdated=1`)
 }

@@ -1,15 +1,16 @@
-import Link from 'next/link'
-import { Pencil, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import type { Where } from 'payload'
 
 import { AlertBanner } from '@/components/ui/alert-banner'
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CrudFormModal } from '@/components/ui/crud-modal'
+import { DataTableToolbar } from '@/components/ui/data-table-toolbar'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
+import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -73,14 +74,17 @@ export default async function SponsorsPage({ searchParams }: { searchParams?: Se
 
   const params = searchParams ? await searchParams : {}
   const editingId = get(params, 'edit')
+  const query = get(params, 'q')
   const sponsorError = get(params, 'sponsorError')
   const sponsorUpdated = get(params, 'sponsorUpdated')
+  const eventWhere = { event_id: { equals: activeEvent.id } }
+  const listWhere: Where = query ? { and: [eventWhere, { name: { contains: query } }] } : eventWhere
   const sponsors = await access.payload.find({
     collection: 'sponsors',
     depth: 1,
     limit: 200,
     sort: ['tier', 'display_order', 'name'],
-    where: { event_id: { equals: activeEvent.id } },
+    where: listWhere,
   })
   const docs = sponsors.docs as SponsorDoc[]
   const editing = docs.find((sponsor) => String(sponsor.id) === editingId)
@@ -145,22 +149,32 @@ export default async function SponsorsPage({ searchParams }: { searchParams?: Se
         </AlertBanner>
       ) : null}
 
-      <div className="mb-4 flex items-center justify-end">
-        <CrudFormModal
-          key={editingId || 'add'}
-          title={editing ? `Edit ${editing.name}` : 'Add sponsor'}
-          openDefault={Boolean(editing)}
-          closeHref={basePage}
-          trigger={
-            <Button size="sm">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add sponsor
-            </Button>
-          }
-        >
-          {form}
-        </CrudFormModal>
-      </div>
+      <DataTableToolbar
+        action={basePage}
+        searchName="q"
+        searchDefaultValue={query}
+        searchPlaceholder="Search by name..."
+        searchLabel="Search sponsors by name"
+        actions={
+          <>
+            <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{sponsors.totalDocs} sponsors</p>
+            <CrudFormModal
+              key={editingId || 'add'}
+              title={editing ? `Edit ${editing.name}` : 'Add sponsor'}
+              openDefault={Boolean(editing)}
+              closeHref={basePage}
+              trigger={
+                <Button size="sm">
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add sponsor
+                </Button>
+              }
+            >
+              {form}
+            </CrudFormModal>
+          </>
+        }
+      />
 
       {docs.length === 0 ? (
         <EmptyState>No sponsors added yet.</EmptyState>
@@ -175,41 +189,23 @@ export default async function SponsorsPage({ searchParams }: { searchParams?: Se
             </TableRow>
           </TableHeader>
           <TableBody>
-            {docs.map((sponsor) => {
-              const formId = `delete-sponsor-${sponsor.id}`
-              return (
-                <TableRow key={sponsor.id}>
-                  <TableCell className="font-bold">{sponsor.name}</TableCell>
-                  <TableCell>
-                    <StatusBadge tone={TIER_TONE[sponsor.tier] || 'neutral'}>{sponsor.tier}</StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-ink-soft">{sponsor.website_url || '—'}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button asChild size="sm" variant="ghost">
-                        <Link href={`${basePage}?edit=${sponsor.id}`}>
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          Edit
-                        </Link>
-                      </Button>
-                      <form id={formId} action={deleteSponsorAction}>
-                        <input type="hidden" name="id" value={String(sponsor.id)} />
-                        <ConfirmDialog
-                          trigger={
-                            <Button type="button" variant="destructive" size="sm">
-                              Delete
-                            </Button>
-                          }
-                          description={`Delete "${sponsor.name}"? This removes it from the public sponsor strip immediately.`}
-                          confirmLabel="Delete"
-                          confirmButtonProps={{ type: 'submit', form: formId }}
-                        />
-                      </form>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {docs.map((sponsor) => (
+              <TableRow key={sponsor.id}>
+                <TableCell className="font-bold">{sponsor.name}</TableCell>
+                <TableCell>
+                  <StatusBadge tone={TIER_TONE[sponsor.tier] || 'neutral'}>{sponsor.tier}</StatusBadge>
+                </TableCell>
+                <TableCell className="text-ink-soft">{sponsor.website_url || '—'}</TableCell>
+                <TableCell className="text-right">
+                  <RowActions
+                    editHref={`${basePage}?edit=${sponsor.id}`}
+                    deleteAction={deleteSponsorAction}
+                    deleteId={sponsor.id}
+                    deleteDescription={`Delete "${sponsor.name}"? This removes it from the public sponsor strip immediately.`}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       )}
