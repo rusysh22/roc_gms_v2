@@ -81,10 +81,12 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
   const facilityError = param(params, 'facilityError')
   const venueUpdated = param(params, 'venueUpdated')
   const courtUpdated = param(params, 'courtUpdated')
+  const query = param(params, 'q')
   const eventWhere = { event_id: { equals: activeEvent.id } }
+  const nameWhere = query ? { and: [eventWhere, { name: { contains: query } }] } : eventWhere
   const [venues, courts, sports] = await Promise.all([
-    access.payload.find({ collection: 'venues', depth: 0, limit: 200, sort: 'name', where: eventWhere }),
-    access.payload.find({ collection: 'courts', depth: 1, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'venues', depth: 0, limit: 200, sort: 'name', where: nameWhere }),
+    access.payload.find({ collection: 'courts', depth: 1, limit: 300, sort: 'name', where: nameWhere }),
     access.payload.find({ collection: 'sports', depth: 0, limit: 100, sort: 'name', where: eventWhere }),
   ])
   const venue = venues.docs.find((item) => String(item.id) === editVenue)
@@ -165,7 +167,19 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
         </AlertBanner>
       ) : null}
 
-      <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-sm" action={basePage}>
+          <Input
+            name="q"
+            defaultValue={query}
+            placeholder="Search venues & courts by name..."
+            aria-label="Search facilities by name"
+            className="min-w-0 flex-1"
+          />
+          <Button type="submit" variant="secondary">
+            Search
+          </Button>
+        </form>
         <ListIO menu="facilities" label="venues & courts" />
       </div>
 

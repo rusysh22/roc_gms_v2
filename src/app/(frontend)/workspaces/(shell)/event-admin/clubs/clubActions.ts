@@ -4,12 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { slugify } from '@/lib/slugify'
 import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/clubs'
 const text = (data: FormData, key: string) => typeof data.get(key) === 'string' ? String(data.get(key)).trim() : ''
-const slugify = (value: string) => value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80)
 const emailIsValid = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 export async function saveClubAction(formData: FormData): Promise<void> {

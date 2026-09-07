@@ -263,6 +263,81 @@ const entriesSheet: SheetSpec = {
   rowLabel: (row) => s(row, 'display_name'),
 }
 
+// --- Participants (players + teams + rosters) --------------------
+const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const
+const playersSheet: SheetSpec = {
+  collection: 'players',
+  sheetName: 'Players',
+  // identification_number is the stable key; a row without one always creates (names aren't unique
+  // enough to match on safely).
+  upsertKeyFields: ['identification_number'],
+  columns: [
+    idColumn,
+    { header: 'name', field: 'name', kind: 'text', required: true },
+    { header: 'identification_number', field: 'identification_number', kind: 'text', note: 'stable key - blank rows always create' },
+    { header: 'club', field: 'club_id', kind: 'relation', relation: { collection: 'clubs', labelField: 'name' } },
+    { header: 'email', field: 'email', kind: 'text' },
+    { header: 'phone', field: 'phone', kind: 'text' },
+    { header: 'gender', field: 'gender', kind: 'enum', enumValues: GENDERS },
+  ],
+  toData: (row) => ({
+    name: s(row, 'name'),
+    identification_number: s(row, 'identification_number') || undefined,
+    club_id: rel(row, 'club_id'),
+    email: s(row, 'email') || undefined,
+    phone: s(row, 'phone') || undefined,
+    gender: s(row, 'gender') || undefined,
+  }),
+  rowLabel: (row) => s(row, 'name'),
+}
+const teamsSheet: SheetSpec = {
+  collection: 'teams',
+  sheetName: 'Teams',
+  upsertKeyFields: ['slug'],
+  columns: [
+    idColumn,
+    { header: 'name', field: 'name', kind: 'text', required: true },
+    { header: 'slug', field: 'slug', kind: 'text', note: 'blank = generated from name' },
+    { header: 'club', field: 'club_id', kind: 'relation', relation: { collection: 'clubs', labelField: 'name' } },
+    { header: 'captain', field: 'captain_player_id', kind: 'relation', relation: { collection: 'players', labelField: 'name' } },
+    { header: 'contact_email', field: 'contact_email', kind: 'text' },
+    { header: 'description', field: 'description', kind: 'text' },
+  ],
+  toData: (row) => ({
+    name: s(row, 'name'),
+    slug: slugify(s(row, 'slug') || s(row, 'name')),
+    club_id: rel(row, 'club_id'),
+    captain_player_id: rel(row, 'captain_player_id'),
+    contact_email: s(row, 'contact_email') || undefined,
+    description: s(row, 'description') || undefined,
+  }),
+  rowLabel: (row) => s(row, 'name'),
+}
+const ROSTER_ROLES = ['player', 'captain', 'coach', 'manager', 'substitute'] as const
+const ROSTER_STATUS = ['active', 'pending', 'inactive', 'withdrawn'] as const
+const rostersSheet: SheetSpec = {
+  collection: 'rosters',
+  sheetName: 'Rosters',
+  // matched on the (team, player, category) triple; a row with no category always creates.
+  upsertKeyFields: ['team_id', 'player_id', 'category_id'],
+  columns: [
+    idColumn,
+    { header: 'team', field: 'team_id', kind: 'relation', required: true, relation: { collection: 'teams', labelField: 'name' } },
+    { header: 'player', field: 'player_id', kind: 'relation', required: true, relation: { collection: 'players', labelField: 'name' } },
+    { header: 'category', field: 'category_id', kind: 'relation', relation: { collection: 'competition-categories', labelField: 'name' } },
+    { header: 'role', field: 'role', kind: 'enum', enumValues: ROSTER_ROLES },
+    { header: 'status', field: 'status', kind: 'enum', enumValues: ROSTER_STATUS },
+  ],
+  toData: (row) => ({
+    team_id: rel(row, 'team_id'),
+    player_id: rel(row, 'player_id'),
+    category_id: rel(row, 'category_id'),
+    role: s(row, 'role') || 'player',
+    status: s(row, 'status') || 'active',
+  }),
+  rowLabel: (row) => `${row.rawLabels.player_id || '?'} → ${row.rawLabels.team_id || '?'}`,
+}
+
 // --- Menu registry ---------------------------------------------------------
 export const MENU_IO_SPECS: Record<string, MenuIoSpec> = {
   clubs: { menu: 'clubs', fileStem: 'clubs', allowedRoles: ROLES.draw, sheets: [clubsSheet] },
@@ -272,4 +347,12 @@ export const MENU_IO_SPECS: Record<string, MenuIoSpec> = {
   categories: { menu: 'categories', fileStem: 'categories', allowedRoles: ROLES.eventAdmin, sheets: [categoriesSheet] },
   facilities: { menu: 'facilities', fileStem: 'facilities', allowedRoles: ROLES.eventAdmin, sheets: [venuesSheet, courtsSheet] },
   entries: { menu: 'entries', fileStem: 'entries', allowedRoles: ROLES.draw, sheets: [entriesSheet] },
+  // Sheet order is the apply order: players must exist before teams reference a captain, teams
+  // before rosters.
+  participants: {
+    menu: 'participants',
+    fileStem: 'participants',
+    allowedRoles: ROLES.draw,
+    sheets: [playersSheet, teamsSheet, rostersSheet],
+  },
 }

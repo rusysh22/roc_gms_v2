@@ -4,20 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { slugify } from '@/lib/slugify'
 import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/sports'
 const text = (data: FormData, key: string) =>
   typeof data.get(key) === 'string' ? String(data.get(key)).trim() : ''
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80)
 const SPORT_TYPES = new Set(['court', 'field', 'table', 'board', 'esport', 'track', 'other'])
 
 export async function saveSportAction(formData: FormData): Promise<void> {

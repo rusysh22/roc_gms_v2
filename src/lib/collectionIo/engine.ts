@@ -277,6 +277,27 @@ const buildRelationIndex = async (
   return index
 }
 
+// Marker id for a forward reference during the dry run: a label that isn't in the DB yet but WILL
+// be created by an earlier sheet in the same workbook. The preview must not flag it as an error;
+// the value is never written (plan does no writes, and apply rebuilds the real index per sheet).
+const PENDING = '__pending__'
+
+const seedForwardReferences = (
+  index: Map<string, Map<string, string>>,
+  parsed: RawSheetRows[],
+) => {
+  for (const { sheet, rows } of parsed) {
+    const map = index.get(sheet.collection) ?? new Map<string, string>()
+    for (const raw of rows) {
+      for (const key of ['name', 'slug', 'display_name']) {
+        const v = str(raw.cells[key])
+        if (v && !map.has(normLabel(v))) map.set(normLabel(v), PENDING)
+      }
+    }
+    index.set(sheet.collection, map)
+  }
+}
+
 const resolveRow = (
   raw: { rowNumber: number; cells: Record<string, unknown> },
   sheet: SheetSpec,
@@ -363,6 +384,7 @@ export async function planMenuImport(
   parsed: RawSheetRows[],
 ): Promise<ImportPlan> {
   const relationIndex = await buildRelationIndex(payload, eventId, spec)
+  seedForwardReferences(relationIndex, parsed)
   const ctx: SheetContext = { payload, eventId, relationIndex }
   const rows: RowPlan[] = []
 
@@ -405,11 +427,17 @@ export async function applyMenuImport(
   spec: MenuIoSpec,
   parsed: RawSheetRows[],
 ): Promise<ImportSummary> {
-  const relationIndex = await buildRelationIndex(payload, eventId, spec)
+  let relationIndex = await buildRelationIndex(payload, eventId, spec)
   const ctx: SheetContext = { payload, eventId, relationIndex }
   const summary: ImportSummary = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] }
 
-  for (const { sheet, rows: rawRows } of parsed) {
+  for (const [sheetIndex, { sheet, rows: rawRows }] of parsed.entries()) {
+    // Rebuild the label->id index before every sheet after the first so a Roster row can reference
+    // a Team the same workbook just created, a Team its new captain Player, etc.
+    if (sheetIndex > 0) {
+      relationIndex = await buildRelationIndex(payload, eventId, spec)
+      ctx.relationIndex = relationIndex
+    }
     for (const raw of rawRows) {
       const { row, error } = resolveRow(raw, sheet, relationIndex)
       const label = sheet.rowLabel?.(row) || str(Object.values(row.values)[0]) || `Row ${row.rowNumber}`

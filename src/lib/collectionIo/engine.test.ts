@@ -46,6 +46,19 @@ describe('parseMenuWorkbook', () => {
     expect(sheet.rows).toEqual([])
   })
 
+  it('parses the 3-sheet participants menu in players -> teams -> rosters order', () => {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ name: 'Ana', identification_number: 'X1' }]), 'Players')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ name: 'Team A', captain: 'Ana' }]), 'Teams')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ team: 'Team A', player: 'Ana', role: 'captain' }]), 'Rosters')
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    const parsed = parseMenuWorkbook(buffer, MENU_IO_SPECS.participants)
+    expect(parsed.map((p) => p.sheet.sheetName)).toEqual(['Players', 'Teams', 'Rosters'])
+    expect(parsed[0].rows[0].cells).toMatchObject({ name: 'Ana', identification_number: 'X1' })
+    expect(parsed[1].rows[0].cells).toMatchObject({ name: 'Team A', captain_player_id: 'Ana' })
+    expect(parsed[2].rows[0].cells).toMatchObject({ team_id: 'Team A', player_id: 'Ana', role: 'captain' })
+  })
+
   it('handles a multi-sheet menu (facilities = venues + courts)', () => {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ name: 'Main Hall' }]), 'Venues')

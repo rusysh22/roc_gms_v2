@@ -8,6 +8,7 @@ import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -96,12 +97,16 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
   const params = searchParams ? await searchParams : {}
   const kind = get(params, 'kind')
   const edit = get(params, 'edit')
+  const query = get(params, 'q')
   const participantError = get(params, 'participantError')
   const anyUpdated = get(params, 'playerUpdated') || get(params, 'teamUpdated') || get(params, 'rosterUpdated')
   const eventWhere = { event_id: { equals: activeEvent.id } }
+  const nameWhere = query
+    ? { and: [eventWhere, { name: { contains: query } }] }
+    : eventWhere
   const [players, teams, rosters, clubs, categories] = await Promise.all([
-    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
-    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
+    access.payload.find({ collection: 'players', depth: 0, limit: 300, sort: 'name', where: nameWhere }),
+    access.payload.find({ collection: 'teams', depth: 0, limit: 300, sort: 'name', where: nameWhere }),
     access.payload.find({ collection: 'rosters', depth: 1, limit: 500, sort: '-createdAt', where: eventWhere }),
     access.payload.find({ collection: 'clubs', depth: 0, limit: 300, sort: 'name', where: eventWhere }),
     access.payload.find({ collection: 'competition-categories', depth: 0, limit: 100, sort: 'name', where: eventWhere }),
@@ -232,6 +237,22 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
           Saved.
         </AlertBanner>
       ) : null}
+
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <form className="flex min-w-0 flex-1 gap-2 sm:max-w-sm" action={basePage}>
+          <Input
+            name="q"
+            defaultValue={query}
+            placeholder="Search players & teams by name..."
+            aria-label="Search participants by name"
+            className="min-w-0 flex-1"
+          />
+          <Button type="submit" variant="secondary">
+            Search
+          </Button>
+        </form>
+        <ListIO menu="participants" label="players, teams & rosters" />
+      </div>
 
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-3">

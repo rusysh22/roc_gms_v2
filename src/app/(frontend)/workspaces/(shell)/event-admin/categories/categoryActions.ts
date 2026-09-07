@@ -4,20 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
 import { recordAuditLog } from '@/lib/audit'
+import { slugify } from '@/lib/slugify'
 import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/event-admin/categories'
 const text = (data: FormData, key: string) =>
   typeof data.get(key) === 'string' ? String(data.get(key)).trim() : ''
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80)
 const num = (value: string) => {
   if (!value) return undefined
   const parsed = Number(value)
