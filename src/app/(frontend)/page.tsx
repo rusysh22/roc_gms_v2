@@ -6,6 +6,7 @@ import {
   ClipboardList,
   GitBranch,
   LogIn,
+  MessageCircle,
   Radio,
   ShieldCheck,
   Share2,
@@ -16,6 +17,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 
 export const dynamic = 'force-dynamic'
+
+// "Request a demo" opens a WhatsApp chat with the sales number (082331565773 -> +62 international
+// form). The prefilled message gives the recipient context on where the request came from.
+const DEMO_WHATSAPP_URL =
+  'https://wa.me/6282331565773?text=' +
+  encodeURIComponent('Halo, saya ingin request demo InTourney.')
 
 // Explicit canonical for the marketing root (the layout default no longer pins one so inner pages
 // can own theirs). Title/description/OG are inherited from the root layout.
@@ -188,6 +195,12 @@ export default function MarketingHomePage() {
                   <LogIn className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
+              <Button asChild variant="ghost">
+                <a href={DEMO_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
+                  Request a demo
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
             </div>
             <p className="mt-4 text-xs text-ink-soft">
               New here? Walk through every step of the wizard before you create an account.{' '}
@@ -344,6 +357,15 @@ export default function MarketingHomePage() {
               Log in to an event
               <LogIn className="h-4 w-4" aria-hidden="true" />
             </Link>
+            <a
+              href={DEMO_WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-11 items-center gap-2 rounded-full border border-line/30 px-6 text-[0.95rem] font-semibold text-paper no-underline transition-colors hover:border-line/60"
+            >
+              Request a demo
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />
+            </a>
           </div>
         </div>
       </section>
