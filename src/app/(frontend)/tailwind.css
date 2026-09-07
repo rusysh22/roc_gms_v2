@@ -151,26 +151,29 @@
 }
 
 /* >=sm: same concept as the mobile sheet - the centred panel rises up from below into place,
- * with a soft decelerating glide (no bounce/overshoot). */
+ * with a soft decelerating glide (no bounce/overshoot). Centring is done by the element's
+ * `sm:-translate-x-1/2 sm:-translate-y-1/2` utilities, which Tailwind v4 emits as the CSS
+ * `translate:` property - so these keyframes must only touch `transform:` (the entrance offset),
+ * otherwise the two compose and the panel starts shoved up-and-left instead of just below centre. */
 @keyframes dialog-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 40px)) scale(0.98);
+    transform: translateY(40px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes dialog-out {
   from {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 24px)) scale(0.98);
+    transform: translateY(24px) scale(0.98);
   }
 }
 
