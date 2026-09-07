@@ -5,6 +5,14 @@ WORKDIR /app
 COPY package*.json ./
 COPY patches ./patches
 RUN npm ci --legacy-peer-deps
+# npm (issue npm/cli#4828) skips platform-specific optionalDependencies when the
+# lockfile was generated on a different OS/libc, so on this alpine/musl image the
+# native bindings for lightningcss and @tailwindcss/oxide are missing and the
+# build dies with "Cannot find module '../lightningcss.linux-x64-musl.node'".
+# Install the musl builds explicitly, pinned to the resolved lockfile versions.
+RUN npm install --no-save --legacy-peer-deps \
+      lightningcss-linux-x64-musl@1.32.0 \
+      "@tailwindcss/oxide-linux-x64-musl@4.3.2"
 
 COPY . .
 
