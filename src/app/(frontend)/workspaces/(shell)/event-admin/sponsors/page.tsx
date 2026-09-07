@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -155,6 +156,7 @@ export default async function SponsorsPage({ searchParams }: { searchParams?: Se
         searchDefaultValue={query}
         searchPlaceholder="Search by name..."
         searchLabel="Search sponsors by name"
+        io={<ListIO menu="sponsors" label="sponsors" />}
         actions={
           <>
             <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{sponsors.totalDocs} sponsors</p>

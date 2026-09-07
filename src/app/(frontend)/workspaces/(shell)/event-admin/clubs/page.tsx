@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -159,35 +160,38 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
         searchPlaceholder="Search by name..."
         searchLabel="Search clubs by name"
         io={
-          otherEvents.docs.length > 0 ? (
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="secondary">
-                  Copy from previous event
-                </Button>
-              </DialogTrigger>
-              <DialogContent
-                title="Copy participants from a previous event"
-                description="Copies clubs, teams, and players by name. Anything already in this event with a matching name is reused, not duplicated."
-              >
-                <form action={copyParticipantsFromEventAction} className="flex flex-col gap-4">
-                  <Field label="Source event">
-                    <Select name="sourceEventId" required defaultValue="">
-                      <option value="" disabled>
-                        Select an event
-                      </option>
-                      {otherEvents.docs.map((event) => (
-                        <option key={event.id} value={String(event.id)}>
-                          {event.name}
+          <>
+            <ListIO menu="clubs" label="clubs" />
+            {otherEvents.docs.length > 0 ? (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="secondary">
+                    Copy from previous event
+                  </Button>
+                </DialogTrigger>
+                <DialogContent
+                  title="Copy participants from a previous event"
+                  description="Copies clubs, teams, and players by name. Anything already in this event with a matching name is reused, not duplicated."
+                >
+                  <form action={copyParticipantsFromEventAction} className="flex flex-col gap-4">
+                    <Field label="Source event">
+                      <Select name="sourceEventId" required defaultValue="">
+                        <option value="" disabled>
+                          Select an event
                         </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <SubmitButton>Copy participants</SubmitButton>
-                </form>
-              </DialogContent>
-            </Dialog>
-          ) : null
+                        {otherEvents.docs.map((event) => (
+                          <option key={event.id} value={String(event.id)}>
+                            {event.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <SubmitButton>Copy participants</SubmitButton>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            ) : null}
+          </>
         }
         actions={
           <>

@@ -8,6 +8,7 @@ import { CrudFormModal } from '@/components/ui/crud-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -163,6 +164,10 @@ export default async function FacilitiesPage({ searchParams }: { searchParams?: 
           Saved.
         </AlertBanner>
       ) : null}
+
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+        <ListIO menu="facilities" label="venues & courts" />
+      </div>
 
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-3">

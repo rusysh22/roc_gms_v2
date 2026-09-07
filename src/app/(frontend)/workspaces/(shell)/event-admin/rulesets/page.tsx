@@ -11,6 +11,7 @@ import { DetailModal } from '@/components/ui/detail-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { RulesetFieldset } from '@/components/ui/RulesetFieldset'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -168,6 +169,7 @@ export default async function RulesetsPage({ searchParams }: { searchParams?: Se
         searchDefaultValue={query}
         searchPlaceholder="Search by name..."
         searchLabel="Search rulesets by name"
+        io={<ListIO menu="rulesets" label="rulesets" />}
         actions={
           <>
             <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{rulesets.totalDocs} rulesets</p>

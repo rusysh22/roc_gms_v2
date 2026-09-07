@@ -11,6 +11,7 @@ import { DetailModal } from '@/components/ui/detail-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -230,6 +231,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams?: 
             ))}
           </Select>
         }
+        io={<ListIO menu="categories" label="categories" />}
         actions={
           <>
             <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{categories.totalDocs} categories</p>

@@ -11,6 +11,7 @@ import { DetailModal } from '@/components/ui/detail-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { ListIO } from '@/components/ui/list-io'
 import { Pagination } from '@/components/ui/pagination'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
@@ -201,6 +202,7 @@ export default async function EntriesPage({ searchParams }: { searchParams?: Sea
             <option value="disqualified">Disqualified</option>
           </Select>
         }
+        io={<ListIO menu="entries" label="entries" />}
         actions={
           <>
             <p className="text-sm font-semibold text-ink-soft whitespace-nowrap">{entries.totalDocs} entries</p>
