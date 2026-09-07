@@ -26,12 +26,12 @@ const DialogContent = React.forwardRef<
         ref={ref}
         aria-describedby={description ? descriptionId : undefined}
         className={cn(
-          // Mobile: bottom sheet. >=sm: centred panel.
+          // Mobile: bottom sheet. >=sm: centred panel that also rises up from below on open.
           'fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[90svh] w-full flex-col gap-4 rounded-t-panel border border-line bg-paper p-6 pt-4 shadow-md outline-none',
           'sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:mx-0 sm:max-h-[85vh] sm:w-[92vw] sm:max-w-2xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-panel sm:pt-6',
           'will-change-transform',
           'data-[state=open]:animate-[sheet-in_280ms_cubic-bezier(0.32,0.72,0,1)] data-[state=closed]:animate-[sheet-out_200ms_ease-in]',
-          'sm:data-[state=open]:animate-[dialog-in_180ms_ease-out] sm:data-[state=closed]:animate-[dialog-out_130ms_ease-in]',
+          'sm:data-[state=open]:animate-[dialog-in_300ms_cubic-bezier(0.32,0.72,0,1)] sm:data-[state=closed]:animate-[dialog-out_200ms_ease-in]',
           className,
         )}
         {...props}

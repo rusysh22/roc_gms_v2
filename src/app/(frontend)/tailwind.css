@@ -106,7 +106,7 @@
 
 /* Modal chrome (src/components/ui/dialog.tsx): `overlay-in` fades the scrim. The panel animation is
  * viewport-aware: on mobile the dialog is a bottom sheet that slides up (`sheet-in`/`sheet-out`),
- * on >=sm it's centred and does a calm fade with a tiny rise, no bounce (`dialog-in`/`dialog-out`).
+ * on >=sm it's centred but rises up from below into place, same concept (`dialog-in`/`dialog-out`).
  * Applied via Tailwind `data-[state=open]:animate-[...]` / `data-[state=closed]:animate-[...]`
  * utilities on the Radix Overlay/Content, which flip `data-state` on open and close. */
 @keyframes overlay-in {
@@ -150,11 +150,12 @@
   }
 }
 
-/* >=sm: centred panel, calm fade + tiny rise, no overshoot. */
+/* >=sm: same concept as the mobile sheet - the centred panel rises up from below into place,
+ * with a soft decelerating glide (no bounce/overshoot). */
 @keyframes dialog-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 6px)) scale(0.98);
+    transform: translate(-50%, calc(-50% + 40px)) scale(0.98);
   }
   to {
     opacity: 1;
@@ -169,7 +170,7 @@
   }
   to {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 4px)) scale(0.98);
+    transform: translate(-50%, calc(-50% + 24px)) scale(0.98);
   }
 }
 
