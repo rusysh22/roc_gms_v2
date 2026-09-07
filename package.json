@@ -9,6 +9,7 @@
     "start": "next start",
     "payload": "payload",
     "seed": "payload run src/seed/index.ts",
+    "seed:ydc": "payload run src/scripts/populateYourDemoChampionship.ts",
     "seed:reset-matches": "payload run src/scripts/resetDemoMatchData.ts",
     "brackets:recalculate": "payload run src/scripts/recalculateBrackets.ts",
     "standings:recalculate": "payload run src/scripts/recalculateStandings.ts",
