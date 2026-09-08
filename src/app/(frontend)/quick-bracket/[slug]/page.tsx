@@ -147,9 +147,9 @@ export default async function QuickBracketResultPage({
               ) : isEditor ? (
                 <div className="mt-6 flex flex-col gap-4 rounded-panel border border-green/30 bg-mist p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink">
-                    You can enter results below - no need to sign up again on this device. Want
-                    multiple sports, categories, or a public event page? Upsize this into a full
-                    InTourney event any time.
+                    Click any match on the bracket below and use its Score tab to enter a result -
+                    no need to sign up again on this device. Want multiple sports, categories, or a
+                    public event page? Upsize this into a full InTourney event any time.
                   </p>
                   <UpsizeEventButton slug={slug} />
                 </div>
@@ -190,11 +190,13 @@ export default async function QuickBracketResultPage({
                   <DoubleEliminationBracketSections
                     bracketData={bracket.bracket_data}
                     timezone={DEFAULT_EVENT_TIMEZONE}
+                    quickBracketSlug={isEditor ? slug : undefined}
                   />
                 ) : (
                   <BracketTree
                     rounds={bracket.bracket_data.rounds}
                     champion={bracket.bracket_data.champion}
+                    quickBracketSlug={isEditor ? slug : undefined}
                   />
                 )}
               </div>

@@ -2,8 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { ArrowRight, Crown, MapPin, X } from 'lucide-react'
+import { ArrowRight, Calendar, Crown, MapPin, Trophy, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketMatchCard, BracketParticipant, BracketRound } from '@/lib/brackets'
@@ -11,6 +12,13 @@ import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
+// A shared, generic bracket renderer used across real events AND Quick Bracket Tournament - but
+// score editing only ever exists for the latter (real matches are edited from the Match Officer /
+// Scheduler workspace instead), so this import - and the `quickBracketSlug` prop below that gates
+// it - is deliberately Quick-Bracket-specific rather than a generic callback threaded in from
+// every caller. See QUICK_BRACKET_DETAIL_HREF/the "no public page" fallback below for the same
+// already-accepted pattern of this shared component knowing about Quick Bracket specifically.
+import { updateQuickBracketMatchAction } from '../quick-bracket/[slug]/quickBracketEditActions'
 
 // Rebuilt against the library's own default Match/theme rendering instead of fighting it with a
 // fully custom match component - the previous build reimplemented our whole card design on top of
@@ -350,6 +358,15 @@ const CustomMatch = ({
           <Dialog.Trigger asChild>
             <button
               type="button"
+              // react-svg-pan-zoom (the pan/pinch-zoom library wrapping this whole tree) attaches
+              // its own onTouchStart to the SVG root and calls preventDefault() unconditionally to
+              // start a pan gesture on ANY touch inside the canvas - including a tap that lands on
+              // this button, since it doesn't check the touch target. That both hijacks the tap
+              // (the button's click never fires on a real touchscreen) and throws a benign but
+              // noisy "Unable to preventDefault inside passive event listener" console warning.
+              // Stopping propagation here keeps the touch from ever reaching that ancestor handler,
+              // fixing both - pre-existing library behavior, not specific to this button's content.
+              onTouchStart={(event) => event.stopPropagation()}
               onClick={(event) => {
                 selectMatch(match)
                 onMatchClick?.({ match, topWon, bottomWon, event })
@@ -569,14 +586,325 @@ const ThirdPlaceCard = ({
   )
 }
 
+type MatchDetailTab = 'schedule' | 'venue' | 'score'
+
+const MATCH_DETAIL_TABS: Array<{ key: MatchDetailTab; label: string; icon: typeof Calendar }> = [
+  { key: 'schedule', label: 'Schedule', icon: Calendar },
+  { key: 'venue', label: 'Venue', icon: MapPin },
+  { key: 'score', label: 'Score', icon: Trophy },
+]
+
+// A numeric-looking resultText ("21", "0") is safe to drop straight into a score input; a
+// non-numeric one ("WO") isn't a score to edit, so the input starts blank instead.
+const prefillScore = (resultText: string | null | undefined) =>
+  resultText && !Number.isNaN(Number(resultText)) ? resultText : ''
+
+// The modal's content, split from BracketTree itself because it now carries real form state
+// (selected tab, in-progress score text) that must reset when a different match is opened but
+// persist while the *same* match's modal stays open across a save - the parent renders this with
+// `key={match.id}` so a match switch remounts it (fresh tab/inputs) while an in-place score update
+// doesn't (keeps whatever tab the organizer was on).
+const MatchDetailsPanel = ({
+  match,
+  isFinished,
+  isLive,
+  hasScore,
+  quickBracketSlug,
+  onMatchChange,
+}: {
+  match: GLootMatch
+  isFinished: boolean
+  isLive: boolean
+  hasScore: boolean
+  quickBracketSlug?: string
+  onMatchChange: (next: GLootMatch) => void
+}) => {
+  const router = useRouter()
+  const [tab, setTab] = useState<MatchDetailTab>('score')
+  const [scoreA, setScoreA] = useState(() => prefillScore(match.participantAResultText))
+  const [scoreB, setScoreB] = useState(() => prefillScore(match.participantBResultText))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Only a match with two real, non-walkover sides can ever be scored - a still-TBD side (or the
+  // auto-decided winner of a bye) has nothing to declare a winner over.
+  const bothSidesReal =
+    Boolean(match.participantAName) &&
+    match.participantAName !== 'TBD' &&
+    Boolean(match.participantBName) &&
+    match.participantBName !== 'TBD' &&
+    match.state !== 'WALK_OVER'
+  const canEditScore = Boolean(quickBracketSlug) && bothSidesReal
+
+  const handleSave = async (winnerSlot: 'a' | 'b') => {
+    if (!quickBracketSlug) return
+    setSaving(true)
+    setError(null)
+    const result = await updateQuickBracketMatchAction(quickBracketSlug, String(match.id), winnerSlot, scoreA, scoreB)
+    setSaving(false)
+    if (!result.ok) {
+      setError(result.reason)
+      return
+    }
+    // Optimistic local update so the modal reflects the save immediately - router.refresh() below
+    // still catches up the bracket tree (and whatever downstream match this one feeds) behind it.
+    onMatchChange({
+      ...match,
+      state: 'result_published',
+      participantAResultText: scoreA || match.participantAResultText,
+      participantBResultText: scoreB || match.participantBResultText,
+      participantAIsWinner: winnerSlot === 'a',
+      participantBIsWinner: winnerSlot === 'b',
+    })
+    router.refresh()
+  }
+
+  return (
+    <>
+      {match.roundName ? (
+        <p className="-mt-2 text-xs font-bold tracking-wide text-ink-soft uppercase">{match.roundName}</p>
+      ) : null}
+
+      <div className="flex border-b border-line" role="tablist">
+        {MATCH_DETAIL_TABS.map((item) => {
+          const Icon = item.icon
+          const isActive = tab === item.key
+          return (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setTab(item.key)}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2 text-xs font-bold transition-colors',
+                isActive
+                  ? 'border-brand-primary text-ink'
+                  : 'border-transparent text-ink-soft hover:border-line hover:text-ink',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'schedule' ? (
+        <div className="rounded-card bg-mist px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                {isFinished ? 'Result' : isLive ? 'Live now' : 'Status'}
+              </p>
+              <StatusBadge tone={getMatchStatusTone(match.state)} className="mt-1">
+                {match.state.replaceAll('_', ' ')}
+              </StatusBadge>
+            </div>
+            {match.startTime ? (
+              <div className="text-right">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                  {isFinished ? 'Played' : 'Scheduled'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-ink">{match.startTime}</p>
+              </div>
+            ) : null}
+          </div>
+          {!match.startTime ? <p className="mt-3 text-xs text-ink-soft">Not scheduled yet.</p> : null}
+        </div>
+      ) : null}
+
+      {tab === 'venue' ? (
+        <div className="rounded-card bg-mist px-4 py-4">
+          {match.venueLabel ? (
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Venue</p>
+                <p className="mt-0.5 truncate text-sm font-semibold text-ink">{match.venueLabel}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-ink-soft">No venue assigned yet.</p>
+          )}
+        </div>
+      ) : null}
+
+      {tab === 'score' ? (
+        <div className="rounded-card bg-mist px-4 py-4">
+          {canEditScore ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSave('a')}
+                  disabled={saving}
+                  className={cn(
+                    'min-w-0 flex-1 truncate rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50',
+                    match.participantAIsWinner
+                      ? 'border-green bg-green/10 text-ink'
+                      : 'border-line text-ink hover:border-green',
+                  )}
+                >
+                  {match.participantAName}
+                </button>
+                <input
+                  value={scoreA}
+                  onChange={(event) => setScoreA(event.target.value)}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="h-9 w-14 shrink-0 rounded-full border border-line bg-paper px-2 text-center text-sm text-ink focus-visible:border-green focus-visible:outline-none"
+                />
+                <span className="shrink-0 text-xs font-semibold text-ink-soft">vs</span>
+                <input
+                  value={scoreB}
+                  onChange={(event) => setScoreB(event.target.value)}
+                  placeholder="0"
+                  inputMode="numeric"
+                  className="h-9 w-14 shrink-0 rounded-full border border-line bg-paper px-2 text-center text-sm text-ink focus-visible:border-green focus-visible:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSave('b')}
+                  disabled={saving}
+                  className={cn(
+                    'min-w-0 flex-1 truncate rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50',
+                    match.participantBIsWinner
+                      ? 'border-green bg-green/10 text-ink'
+                      : 'border-line text-ink hover:border-green',
+                  )}
+                >
+                  {match.participantBName}
+                </button>
+              </div>
+              {error ? <p className="mt-2 text-xs font-semibold text-danger">{error}</p> : null}
+              {saving ? (
+                <p className="mt-2 text-xs text-ink-soft">Saving...</p>
+              ) : match.state === 'result_published' ? (
+                <p className="mt-2 text-xs font-bold text-green">Saved</p>
+              ) : (
+                <p className="mt-2 text-xs text-ink-soft">Click a team&apos;s name to record it as the winner.</p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={cn(
+                      'truncate text-sm',
+                      match.participantAIsWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
+                    )}
+                  >
+                    {match.participantAName || 'TBD'}
+                  </p>
+                  {match.participantASubLabel ? (
+                    <p className="truncate text-xs text-ink-soft">{match.participantASubLabel}</p>
+                  ) : null}
+                </div>
+                <div className="shrink-0 px-2 text-center">
+                  {hasScore ? (
+                    <span className="text-xl font-extrabold tabular-nums text-ink">
+                      {match.participantAResultText || '–'}
+                      <span className="mx-1.5 text-ink-soft">-</span>
+                      {match.participantBResultText || '–'}
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
+                      vs
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 text-right">
+                  <p
+                    className={cn(
+                      'truncate text-sm',
+                      match.participantBIsWinner ? 'font-extrabold text-ink' : 'font-semibold text-ink-soft',
+                    )}
+                  >
+                    {match.participantBName || 'TBD'}
+                  </p>
+                  {match.participantBSubLabel ? (
+                    <p className="truncate text-xs text-ink-soft">{match.participantBSubLabel}</p>
+                  ) : null}
+                </div>
+              </div>
+              {/* Set-by-set breakdown only earns its place when there's more than one set - with
+                  exactly one set, the aggregate score above already says the same thing. Each set
+                  gets its own chip with the set-winner's score bolded, matching the public match
+                  page. */}
+              {match.setScoreText && match.setScoreText.split(',').length > 1 ? (
+                <div className="mt-3 flex flex-wrap justify-center gap-2 border-t border-line pt-3">
+                  {match.setScoreText.split(',').map((set, index) => {
+                    const [rawA, rawB] = set.trim().split('-')
+                    const aScore = Number(rawA?.trim())
+                    const bScore = Number(rawB?.trim())
+                    const hasScores = !Number.isNaN(aScore) && !Number.isNaN(bScore)
+                    const aWonSet = hasScores && aScore > bScore
+                    const bWonSet = hasScores && bScore > aScore
+                    return (
+                      <div
+                        key={index}
+                        className="flex min-w-[4.25rem] flex-col items-center gap-0.5 rounded-card border border-line bg-paper px-3 py-1.5"
+                      >
+                        <span className="text-[0.6rem] font-bold uppercase tracking-wide text-ink-soft/70">
+                          Set {index + 1}
+                        </span>
+                        {hasScores ? (
+                          <span className="text-sm font-extrabold tabular-nums">
+                            <span className={aWonSet ? 'text-ink' : 'text-ink-soft'}>{rawA.trim()}</span>
+                            <span className="mx-1 text-ink-soft/50">–</span>
+                            <span className={bWonSet ? 'text-ink' : 'text-ink-soft'}>{rawB.trim()}</span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-extrabold tabular-nums text-ink">{set.trim()}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+              {!hasScore && !match.startTime ? (
+                <p className="mt-3 text-center text-xs text-ink-soft">
+                  Scores will appear here once the match begins.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {/* Real matches are only ever edited from the Match Officer / Scheduler workspace (a single
+          authorized mutation path per AUDIT_E2E MAT-01/PUB-03), so this link is the only way out
+          of the modal for them. Quick Bracket Tournament matches open this same modal (their
+          detail_href is a non-'/' sentinel so the trigger button above still shows) but have no
+          real page to link to - checking for a real path here (rather than bare truthiness) keeps
+          that case correctly showing the fallback line instead of a broken link. */}
+      {match.href?.startsWith('/') ? (
+        <Link href={match.href} className={cn(buttonVariants({ variant: 'primary' }), 'w-full')}>
+          View match details
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      ) : (
+        <p className="text-sm text-ink-soft">This match does not have a public page yet.</p>
+      )}
+    </>
+  )
+}
+
 export const BracketTree = ({
   rounds,
   champion,
   timezone = DEFAULT_EVENT_TIMEZONE,
+  quickBracketSlug,
 }: {
   rounds: BracketRound[]
   champion?: BracketChampion | null
   timezone?: string
+  // Presence alone enables the Match Details modal's Score tab as an editable score-entry form
+  // (calling updateQuickBracketMatchAction directly) instead of a read-only summary - only ever
+  // passed by the Quick Bracket result page, and only while the viewer is a signed-in editor.
+  quickBracketSlug?: string
 }) => {
   const [isMounted, setIsMounted] = useState(false)
   const [containerRef, containerWidth] = useContainerWidth()
@@ -636,152 +964,15 @@ export const BracketTree = ({
             </div>
 
             {selectedMatch ? (
-              <>
-                {selectedMatch.roundName ? (
-                  <p className="-mt-2 text-xs font-bold tracking-wide text-ink-soft uppercase">
-                    {selectedMatch.roundName}
-                  </p>
-                ) : null}
-
-                {/* The score (when the match has one) and a clear winner/loser distinction are
-                    the whole point of opening this modal - a visitor shouldn't have to click
-                    through to the full match page just to see who won and by what score. */}
-                <div className="rounded-card bg-mist px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          'truncate text-sm',
-                          selectedMatch.participantAIsWinner ?
-                            'font-extrabold text-ink'
-                          : 'font-semibold text-ink-soft',
-                        )}
-                      >
-                        {selectedMatch.participantAName || 'TBD'}
-                      </p>
-                      {selectedMatch.participantASubLabel ? (
-                        <p className="truncate text-xs text-ink-soft">{selectedMatch.participantASubLabel}</p>
-                      ) : null}
-                    </div>
-                    <div className="shrink-0 px-2 text-center">
-                      {hasScore ? (
-                        <span className="text-xl font-extrabold tabular-nums text-ink">
-                          {selectedMatch.participantAResultText || '–'}
-                          <span className="mx-1.5 text-ink-soft">-</span>
-                          {selectedMatch.participantBResultText || '–'}
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-line bg-paper px-2.5 py-1 text-[0.65rem] font-bold tracking-wide text-ink-soft uppercase">
-                          vs
-                        </span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 text-right">
-                      <p
-                        className={cn(
-                          'truncate text-sm',
-                          selectedMatch.participantBIsWinner ?
-                            'font-extrabold text-ink'
-                          : 'font-semibold text-ink-soft',
-                        )}
-                      >
-                        {selectedMatch.participantBName || 'TBD'}
-                      </p>
-                      {selectedMatch.participantBSubLabel ? (
-                        <p className="truncate text-xs text-ink-soft">{selectedMatch.participantBSubLabel}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                  {/* Set-by-set breakdown only earns its place when there's more than one set -
-                      with exactly one set, the aggregate score above already says the same thing.
-                      Each set gets its own chip (rather than a run-on "Set 1 21-15 Set 2 19-21"
-                      line) with the set-winner's score bolded, matching the public match page. */}
-                  {selectedMatch.setScoreText && selectedMatch.setScoreText.split(',').length > 1 ? (
-                    <div className="mt-3 flex flex-wrap justify-center gap-2 border-t border-line pt-3">
-                      {selectedMatch.setScoreText.split(',').map((set, index) => {
-                        const [rawA, rawB] = set.trim().split('-')
-                        const aScore = Number(rawA?.trim())
-                        const bScore = Number(rawB?.trim())
-                        const hasScores = !Number.isNaN(aScore) && !Number.isNaN(bScore)
-                        const aWonSet = hasScores && aScore > bScore
-                        const bWonSet = hasScores && bScore > aScore
-                        return (
-                          <div
-                            key={index}
-                            className="flex min-w-[4.25rem] flex-col items-center gap-0.5 rounded-card border border-line bg-paper px-3 py-1.5"
-                          >
-                            <span className="text-[0.6rem] font-bold uppercase tracking-wide text-ink-soft/70">
-                              Set {index + 1}
-                            </span>
-                            {hasScores ? (
-                              <span className="text-sm font-extrabold tabular-nums">
-                                <span className={aWonSet ? 'text-ink' : 'text-ink-soft'}>{rawA.trim()}</span>
-                                <span className="mx-1 text-ink-soft/50">–</span>
-                                <span className={bWonSet ? 'text-ink' : 'text-ink-soft'}>{rawB.trim()}</span>
-                              </span>
-                            ) : (
-                              <span className="text-sm font-extrabold tabular-nums text-ink">{set.trim()}</span>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                  {!hasScore && !selectedMatch.startTime ? (
-                    <p className="mt-3 text-center text-xs text-ink-soft">
-                      Scores will appear here once the match begins.
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-                      {isFinished ? 'Result' : isLive ? 'Live now' : 'Status'}
-                    </p>
-                    <StatusBadge tone={getMatchStatusTone(selectedMatch.state)} className="mt-1">
-                      {selectedMatch.state.replaceAll('_', ' ')}
-                    </StatusBadge>
-                  </div>
-                  {selectedMatch.startTime ? (
-                    <div className="text-right">
-                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-                        {isFinished ? 'Played' : 'Scheduled'}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-ink">{selectedMatch.startTime}</p>
-                    </div>
-                  ) : null}
-                </div>
-
-                {selectedMatch.venueLabel ? (
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Venue</p>
-                      <p className="mt-0.5 truncate text-sm font-semibold text-ink">{selectedMatch.venueLabel}</p>
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Score and schedule are only ever edited from the Match Officer / Scheduler
-                    workspace (a single authorized mutation path per AUDIT_E2E MAT-01/PUB-03) -
-                    this public bracket view is read-only and links out to the live match page.
-                    Quick Bracket Tournament matches open this same modal (their detail_href is a
-                    non-'/' sentinel so the trigger button above still shows) but have no real
-                    page to link to - checking for a real path here (rather than bare truthiness)
-                    keeps that case correctly showing the fallback line instead of a broken link. */}
-                {selectedMatch.href?.startsWith('/') ? (
-                  <Link
-                    href={selectedMatch.href}
-                    className={cn(buttonVariants({ variant: 'primary' }), 'w-full')}
-                  >
-                    View match details
-                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  </Link>
-                ) : (
-                  <p className="text-sm text-ink-soft">This match does not have a public page yet.</p>
-                )}
-              </>
+              <MatchDetailsPanel
+                key={selectedMatch.id}
+                match={selectedMatch}
+                isFinished={isFinished}
+                isLive={isLive}
+                hasScore={hasScore}
+                quickBracketSlug={quickBracketSlug}
+                onMatchChange={setSelectedMatch}
+              />
             ) : null}
           </Dialog.Content>
         </Dialog.Portal>
