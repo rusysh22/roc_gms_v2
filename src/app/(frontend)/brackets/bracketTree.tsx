@@ -663,15 +663,38 @@ export const BracketTree = ({
                     </div>
                   </div>
                   {/* Set-by-set breakdown only earns its place when there's more than one set -
-                      with exactly one set, the aggregate score above already says the same thing. */}
+                      with exactly one set, the aggregate score above already says the same thing.
+                      Each set gets its own chip (rather than a run-on "Set 1 21-15 Set 2 19-21"
+                      line) with the set-winner's score bolded, matching the public match page. */}
                   {selectedMatch.setScoreText && selectedMatch.setScoreText.split(',').length > 1 ? (
-                    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-line pt-3">
-                      {selectedMatch.setScoreText.split(',').map((set, index) => (
-                        <p key={index} className="text-xs text-ink-soft">
-                          <span className="font-semibold text-ink-soft/80">Set {index + 1}</span>{' '}
-                          <span className="font-bold tabular-nums text-ink">{set.trim()}</span>
-                        </p>
-                      ))}
+                    <div className="mt-3 flex flex-wrap justify-center gap-2 border-t border-line pt-3">
+                      {selectedMatch.setScoreText.split(',').map((set, index) => {
+                        const [rawA, rawB] = set.trim().split('-')
+                        const aScore = Number(rawA?.trim())
+                        const bScore = Number(rawB?.trim())
+                        const hasScores = !Number.isNaN(aScore) && !Number.isNaN(bScore)
+                        const aWonSet = hasScores && aScore > bScore
+                        const bWonSet = hasScores && bScore > aScore
+                        return (
+                          <div
+                            key={index}
+                            className="flex min-w-[4.25rem] flex-col items-center gap-0.5 rounded-card border border-line bg-paper px-3 py-1.5"
+                          >
+                            <span className="text-[0.6rem] font-bold uppercase tracking-wide text-ink-soft/70">
+                              Set {index + 1}
+                            </span>
+                            {hasScores ? (
+                              <span className="text-sm font-extrabold tabular-nums">
+                                <span className={aWonSet ? 'text-ink' : 'text-ink-soft'}>{rawA.trim()}</span>
+                                <span className="mx-1 text-ink-soft/50">–</span>
+                                <span className={bWonSet ? 'text-ink' : 'text-ink-soft'}>{rawB.trim()}</span>
+                              </span>
+                            ) : (
+                              <span className="text-sm font-extrabold tabular-nums text-ink">{set.trim()}</span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : null}
                   {!hasScore && !selectedMatch.startTime ? (

@@ -632,7 +632,7 @@ export default async function AdminMatchDetailPage({
         <Card className="flex flex-col gap-3 md:col-span-2">
           <CardTitle>Score Summary</CardTitle>
           <p className="text-sm text-ink-soft">{match.score_summary || 'Score summary not recorded yet.'}</p>
-          <MatchSetsTable sets={matchSets} />
+          <MatchSetsTable sets={matchSets} match={match} />
         </Card>
         </>
         ) : null}

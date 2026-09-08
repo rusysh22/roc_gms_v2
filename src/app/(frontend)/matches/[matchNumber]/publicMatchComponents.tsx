@@ -200,19 +200,35 @@ export const ScoreCard = ({
           one set, `score_summary` above already says the same thing, and repeating it here just
           duplicates the same two numbers a second time (the bug the redesign was meant to fix). */}
       {matchSets.length > 1 ? (
-        <div className="border-t border-line bg-mist/40 px-5 py-3">
-          <p className="mb-2 text-[0.65rem] font-bold uppercase tracking-wide text-ink-soft/70">
+        <div className="border-t border-line bg-mist/40 px-5 py-4">
+          <p className="mb-2.5 text-[0.65rem] font-bold uppercase tracking-wide text-ink-soft/70">
             Sets
           </p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {matchSets.map((set) => (
-              <p key={set.id} className="text-xs text-ink-soft">
-                <span className="font-semibold text-ink-soft/80">Set {set.set_number}</span>{' '}
-                <span className="font-bold tabular-nums text-ink">
-                  {set.participant_a_score ?? '-'}–{set.participant_b_score ?? '-'}
-                </span>
-              </p>
-            ))}
+          {/* Each set gets its own chip rather than a run-on "Set 1 21-15 Set 2 19-21" line - the
+              old layout made adjacent sets' numbers blend into scores at a glance. The set-winner's
+              score is bolded so a spectator can scan who took which set without doing the math. */}
+          <div className="flex flex-wrap gap-2">
+            {matchSets.map((set) => {
+              const aScore = set.participant_a_score
+              const bScore = set.participant_b_score
+              const aWonSet = aScore != null && bScore != null && aScore > bScore
+              const bWonSet = aScore != null && bScore != null && bScore > aScore
+              return (
+                <div
+                  key={set.id}
+                  className="flex min-w-[4.25rem] flex-col items-center gap-0.5 rounded-card border border-line bg-paper px-3 py-1.5"
+                >
+                  <span className="text-[0.6rem] font-bold uppercase tracking-wide text-ink-soft/70">
+                    Set {set.set_number}
+                  </span>
+                  <span className="text-sm font-extrabold tabular-nums">
+                    <span className={aWonSet ? 'text-ink' : 'text-ink-soft'}>{aScore ?? '-'}</span>
+                    <span className="mx-1 text-ink-soft/50">–</span>
+                    <span className={bWonSet ? 'text-ink' : 'text-ink-soft'}>{bScore ?? '-'}</span>
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       ) : notStartedYet ? (

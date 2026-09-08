@@ -340,34 +340,63 @@ export const MatchCard = ({
   </Card>
 )
 
-export const MatchSetsTable = ({ sets }: { sets: WorkspaceMatchSet[] }) => {
+// Chip-per-set layout matching the public match page (publicMatchComponents.tsx's ScoreCard) and
+// the bracket "Match Details" modal (brackets/bracketTree.tsx) - previously this was the odd one
+// out as a five-column table, which is more precise but harder to scan than a run of scores. The
+// "Score Input" card just above this one (in the match detail page) already exposes full per-set
+// winner names and notes in an editable form, so this recap only needs to be quickly scannable.
+export const MatchSetsTable = ({
+  sets,
+  match,
+}: {
+  sets: WorkspaceMatchSet[]
+  match: {
+    participant_a_entry_id?: EntryDoc | string | number | null
+    participant_b_entry_id?: EntryDoc | string | number | null
+  }
+}) => {
   if (sets.length === 0) {
     return <EmptyState>No match sets recorded yet.</EmptyState>
   }
 
+  const setsWithNotes = sets.filter((set) => set.notes)
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Set</TableHead>
-          <TableHead>Participant A</TableHead>
-          <TableHead>Participant B</TableHead>
-          <TableHead>Winner</TableHead>
-          <TableHead>Notes</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sets.map((set) => (
-          <TableRow key={set.id}>
-            <TableCell className="font-extrabold">{set.set_number}</TableCell>
-            <TableCell className="tabular-nums">{set.participant_a_score ?? '-'}</TableCell>
-            <TableCell className="tabular-nums">{set.participant_b_score ?? '-'}</TableCell>
-            <TableCell>{getRelationshipLabel(set.winner_entry_id, 'Not decided')}</TableCell>
-            <TableCell className="text-ink-soft">{set.notes || '-'}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {sets.map((set) => {
+          const side = getSetWinnerSide(match, set)
+          return (
+            <div
+              key={set.id}
+              className="flex min-w-[4.5rem] flex-col items-center gap-0.5 rounded-card border border-line bg-mist px-3 py-1.5"
+            >
+              <span className="text-[0.6rem] font-bold uppercase tracking-wide text-ink-soft/70">
+                Set {set.set_number}
+              </span>
+              <span className="text-sm font-extrabold tabular-nums">
+                <span className={side === 'a' ? 'text-ink' : 'text-ink-soft'}>
+                  {set.participant_a_score ?? '-'}
+                </span>
+                <span className="mx-1 text-ink-soft/50">–</span>
+                <span className={side === 'b' ? 'text-ink' : 'text-ink-soft'}>
+                  {set.participant_b_score ?? '-'}
+                </span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {setsWithNotes.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          {setsWithNotes.map((set) => (
+            <p key={set.id} className="text-xs text-ink-soft">
+              <span className="font-semibold text-ink-soft/80">Set {set.set_number}:</span> {set.notes}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
