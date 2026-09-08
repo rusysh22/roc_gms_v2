@@ -10,6 +10,8 @@ import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import {
   applyQuickDoubleEliminationResult,
   applyQuickSingleEliminationResult,
+  assignQuickDoubleEliminationParticipant,
+  assignQuickSingleEliminationParticipant,
 } from '@/lib/quickBracketAdvancement'
 import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 
@@ -126,6 +128,43 @@ export async function updateQuickBracketMatchAction(
     bracket.bracket_data.format === 'double_elimination'
       ? applyQuickDoubleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
       : applyQuickSingleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
+
+  if (outcome.error) return { ok: false, reason: outcome.error }
+
+  await payload.update({
+    collection: 'quick-brackets',
+    id: bracket.id,
+    data: { bracket_data: outcome.data },
+  })
+  revalidatePath(`/quick-bracket/${slug}`)
+  return { ok: true }
+}
+
+// Only meaningful for a "manual size" bracket (buildBlankEliminationRounds) where round 1 has no
+// real participants yet - see the comment on assignNameToRound0 in quickBracketAdvancement.ts for
+// why round 1 can't be scored at all until this runs. A "from participants" bracket already has
+// real ids on every round-1 slot, so its round 1 never shows up as nameable in the first place.
+export async function assignQuickBracketParticipantAction(
+  slug: string,
+  matchId: string,
+  slot: 'a' | 'b',
+  nameInput: string,
+): Promise<UpdateQuickBracketResult> {
+  const trimmed = nameInput.trim()
+  if (!trimmed) return { ok: false, reason: 'Team name cannot be empty.' }
+  if (trimmed.length > 120) return { ok: false, reason: 'Team name is too long.' }
+
+  const payload = await getPayload({ config })
+  const access = await assertEditorAccess(payload, slug)
+  if (!access.ok) return access
+
+  const { bracket } = access
+  if (!bracket.bracket_data) return { ok: false, reason: 'no_bracket_data' }
+
+  const outcome =
+    bracket.bracket_data.format === 'double_elimination'
+      ? assignQuickDoubleEliminationParticipant(bracket.bracket_data, { matchId, slot, name: trimmed })
+      : assignQuickSingleEliminationParticipant(bracket.bracket_data, { matchId, slot, name: trimmed })
 
   if (outcome.error) return { ok: false, reason: outcome.error }
 

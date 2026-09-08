@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { BracketMatchCard, BracketRound, SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
-import { updateQuickBracketMatchAction } from './quickBracketEditActions'
+import { assignQuickBracketParticipantAction, updateQuickBracketMatchAction } from './quickBracketEditActions'
 
 // The "run it live without signing up to a full event" piece of prd/design/
 // QUICK_BRACKET_TOURNAMENT_DESIGN.md section 11 - a flat "matches ready to score" list rendered
@@ -41,6 +41,18 @@ const buildSections = (
   return [{ title: 'Bracket', rounds: (bracketData as SingleEliminationBracketData).rounds }]
 }
 
+// Only round 1 (single elimination) / Winners Round 1 (double elimination) can ever be TBD-with-
+// no-id - every other round is always filled by the advancement engine, never named directly. A
+// "from participants" bracket already has real ids here, so this is only ever non-empty for a
+// "manual size" (blank) bracket - see assignNameToRound0 in quickBracketAdvancement.ts.
+const getRound0 = (
+  format: 'single_elimination' | 'double_elimination',
+  bracketData: SingleEliminationBracketData | DoubleEliminationBracketData,
+): BracketRound | undefined =>
+  format === 'double_elimination'
+    ? (bracketData as DoubleEliminationBracketData).winners_rounds[0]
+    : (bracketData as SingleEliminationBracketData).rounds[0]
+
 export function QuickBracketEditor({
   slug,
   format,
@@ -54,6 +66,9 @@ export function QuickBracketEditor({
   const [savingId, setSavingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [scores, setScores] = useState<Record<string, ScoreState>>({})
+  const [names, setNames] = useState<Record<string, string>>({})
+  const [savingNameKey, setSavingNameKey] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
 
   const sections = buildSections(format, bracketData)
   const playableMatches = sections.flatMap((section) =>
@@ -63,6 +78,11 @@ export function QuickBracketEditor({
         .map((match) => ({ match, roundName: round.name, sectionTitle: section.title })),
     ),
   )
+
+  const round0 = getRound0(format, bracketData)
+  const unnamedMatches = (round0?.matches ?? [])
+    .filter((match) => !match.participant_a.id || !match.participant_b.id)
+    .map((match) => ({ match, roundName: round0!.name }))
 
   const handleSave = async (matchId: string, winnerSlot: 'a' | 'b') => {
     setSavingId(matchId)
@@ -77,7 +97,23 @@ export function QuickBracketEditor({
     router.refresh()
   }
 
-  if (playableMatches.length === 0) {
+  const handleAssignName = async (matchId: string, slot: 'a' | 'b') => {
+    const key = `${matchId}:${slot}`
+    const value = (names[key] ?? '').trim()
+    if (!value) return
+    setSavingNameKey(key)
+    setNameError(null)
+    const result = await assignQuickBracketParticipantAction(slug, matchId, slot, value)
+    setSavingNameKey(null)
+    if (!result.ok) {
+      setNameError(result.reason)
+      return
+    }
+    setNames((prev) => ({ ...prev, [key]: '' }))
+    router.refresh()
+  }
+
+  if (playableMatches.length === 0 && unnamedMatches.length === 0) {
     return (
       <div className="mt-6 rounded-panel border border-line bg-mist p-4 text-sm text-ink-soft">
         No matches are ready to score yet - once both sides of a match are known, it shows up here.
@@ -93,39 +129,132 @@ export function QuickBracketEditor({
   }
 
   return (
-    <div className="mt-6 rounded-panel border border-line bg-paper p-4">
-      <p className="mb-3 text-sm font-bold text-ink">Enter results</p>
-      {error ? <p className="mb-3 text-xs font-semibold text-danger">{error}</p> : null}
-      <div className="flex flex-col gap-5">
-        {Array.from(bySectionTitle.entries()).map(([sectionTitle, items]) => (
-          <div key={sectionTitle}>
-            {sections.length > 1 ? (
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">{sectionTitle}</p>
-            ) : null}
-            <div className="flex flex-col gap-2">
-              {items.map(({ match, roundName }) => (
-                <MatchResultRow
-                  key={match.id}
+    <div className="mt-6 flex flex-col gap-4">
+      {unnamedMatches.length > 0 ? (
+        <div className="rounded-panel border border-line bg-paper p-4">
+          <p className="mb-1 text-sm font-bold text-ink">Name your teams</p>
+          <p className="mb-3 text-xs text-ink-soft">
+            This bracket was generated with a blank slot count - name each side below before you
+            can enter its result.
+          </p>
+          {nameError ? <p className="mb-3 text-xs font-semibold text-danger">{nameError}</p> : null}
+          <div className="flex flex-col gap-2">
+            {unnamedMatches.map(({ match, roundName }) => (
+              <div
+                key={match.id}
+                className="flex flex-wrap items-center gap-2 rounded-card border border-line p-3"
+              >
+                <span className="w-28 shrink-0 text-xs font-semibold text-ink-soft">{roundName}</span>
+                <NameSlot
                   match={match}
-                  roundName={roundName}
-                  saving={savingId === String(match.id)}
-                  score={
-                    scores[String(match.id)] ?? {
-                      a: match.participant_a.score?.toString() ?? '',
-                      b: match.participant_b.score?.toString() ?? '',
-                    }
-                  }
-                  onScoreChange={(next) =>
-                    setScores((prev) => ({ ...prev, [String(match.id)]: next }))
-                  }
-                  onSave={(slot) => handleSave(String(match.id), slot)}
+                  slot="a"
+                  value={names[`${match.id}:a`] ?? ''}
+                  saving={savingNameKey === `${match.id}:a`}
+                  onChange={(value) => setNames((prev) => ({ ...prev, [`${match.id}:a`]: value }))}
+                  onSave={() => handleAssignName(String(match.id), 'a')}
                 />
-              ))}
-            </div>
+                <span className="text-xs font-semibold text-ink-soft">vs</span>
+                <NameSlot
+                  match={match}
+                  slot="b"
+                  value={names[`${match.id}:b`] ?? ''}
+                  saving={savingNameKey === `${match.id}:b`}
+                  onChange={(value) => setNames((prev) => ({ ...prev, [`${match.id}:b`]: value }))}
+                  onSave={() => handleAssignName(String(match.id), 'b')}
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : null}
+
+      {playableMatches.length > 0 ? (
+        <div className="rounded-panel border border-line bg-paper p-4">
+          <p className="mb-3 text-sm font-bold text-ink">Enter results</p>
+          {error ? <p className="mb-3 text-xs font-semibold text-danger">{error}</p> : null}
+          <div className="flex flex-col gap-5">
+            {Array.from(bySectionTitle.entries()).map(([sectionTitle, items]) => (
+              <div key={sectionTitle}>
+                {sections.length > 1 ? (
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">{sectionTitle}</p>
+                ) : null}
+                <div className="flex flex-col gap-2">
+                  {items.map(({ match, roundName }) => (
+                    <MatchResultRow
+                      key={match.id}
+                      match={match}
+                      roundName={roundName}
+                      saving={savingId === String(match.id)}
+                      score={
+                        scores[String(match.id)] ?? {
+                          a: match.participant_a.score?.toString() ?? '',
+                          b: match.participant_b.score?.toString() ?? '',
+                        }
+                      }
+                      onScoreChange={(next) =>
+                        setScores((prev) => ({ ...prev, [String(match.id)]: next }))
+                      }
+                      onSave={(slot) => handleSave(String(match.id), slot)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+const NameSlot = ({
+  match,
+  slot,
+  value,
+  saving,
+  onChange,
+  onSave,
+}: {
+  match: BracketMatchCard
+  slot: 'a' | 'b'
+  value: string
+  saving: boolean
+  onChange: (value: string) => void
+  onSave: () => void
+}) => {
+  const participant = slot === 'a' ? match.participant_a : match.participant_b
+  if (participant.id) {
+    return (
+      <span className="rounded-full border border-green/40 bg-green/10 px-3 py-1 text-sm font-semibold text-ink">
+        {participant.label}
+      </span>
+    )
+  }
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            onSave()
+          }
+        }}
+        placeholder="Team name"
+        maxLength={120}
+        className="h-8 w-36 rounded-full border border-line bg-paper px-3 text-xs text-ink focus-visible:border-green focus-visible:outline-none"
+      />
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving || !value.trim()}
+        className="rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-ink transition-colors hover:border-green disabled:opacity-50"
+      >
+        {saving ? 'Saving...' : 'Save'}
+      </button>
+    </span>
   )
 }
 

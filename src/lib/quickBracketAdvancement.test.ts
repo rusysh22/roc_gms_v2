@@ -5,7 +5,12 @@ import {
   buildQuickDoubleEliminationBracket,
   buildQuickSingleEliminationBracket,
 } from './quickBracketGeneration'
-import { applyQuickDoubleEliminationResult, applyQuickSingleEliminationResult } from './quickBracketAdvancement'
+import {
+  applyQuickDoubleEliminationResult,
+  applyQuickSingleEliminationResult,
+  assignQuickDoubleEliminationParticipant,
+  assignQuickSingleEliminationParticipant,
+} from './quickBracketAdvancement'
 
 const entries = (count: number): MatchGenerationEntry[] =>
   Array.from({ length: count }, (_, index) => ({
@@ -138,5 +143,73 @@ describe('applyQuickDoubleEliminationResult', () => {
     result = applyQuickDoubleEliminationResult(result.data, { matchId: 'grand-final', winnerSlot: 'b' })
     expect(result.data.champion.status).toBe('decided')
     expect(result.data.champion.label).toBe('P2')
+  })
+})
+
+describe('assignQuickSingleEliminationParticipant', () => {
+  it('names a blank round-1 slot, and unlocks scoring only once both sides are named', () => {
+    const bracket = buildQuickSingleEliminationBracket({ mode: 'manual_size', bracketSize: 4 }, { thirdPlace: false })
+
+    // Nothing to score yet - both sides of sf-0 are still TBD.
+    expect(applyQuickSingleEliminationResult(bracket, { matchId: 'sf-0', winnerSlot: 'a' }).error).toBe(
+      'Cannot set a winner for an empty slot.',
+    )
+
+    let result = assignQuickSingleEliminationParticipant(bracket, { matchId: 'sf-0', slot: 'a', name: 'Alpha' })
+    expect(result.error).toBeUndefined()
+    const halfNamed = findMatch(result.data.rounds, 'sf-0') as any
+    expect(halfNamed.participant_a.id).toBe('sf-0-a')
+    expect(halfNamed.participant_a.label).toBe('Alpha')
+    expect(halfNamed.participant_a.isPlaceholder).toBe(false)
+    expect(halfNamed.detail_href).not.toBe('')
+
+    // Still only one side named - still can't score it.
+    expect(applyQuickSingleEliminationResult(result.data, { matchId: 'sf-0', winnerSlot: 'a' }).error).toBe(
+      'Cannot set a winner for an empty slot.',
+    )
+
+    result = assignQuickSingleEliminationParticipant(result.data, { matchId: 'sf-0', slot: 'b', name: 'Beta' })
+    expect(result.error).toBeUndefined()
+
+    // Both sides named now - scoring works exactly like a "from participants" bracket.
+    const scored = applyQuickSingleEliminationResult(result.data, { matchId: 'sf-0', winnerSlot: 'a' })
+    expect(scored.error).toBeUndefined()
+    const final = findMatch(scored.data.rounds, 'final-0') as any
+    expect(final.participant_a.label).toBe('Alpha')
+  })
+
+  it('rejects naming a slot that already has a team', () => {
+    const bracket = buildQuickSingleEliminationBracket({ mode: 'manual_size', bracketSize: 4 }, { thirdPlace: false })
+    const result = assignQuickSingleEliminationParticipant(bracket, { matchId: 'sf-0', slot: 'a', name: 'Alpha' })
+    const conflict = assignQuickSingleEliminationParticipant(result.data, {
+      matchId: 'sf-0',
+      slot: 'a',
+      name: 'Someone else',
+    })
+    expect(conflict.error).toBe('This slot already has a team name.')
+  })
+
+  it('rejects an unknown match id', () => {
+    const bracket = buildQuickSingleEliminationBracket({ mode: 'manual_size', bracketSize: 4 }, { thirdPlace: false })
+    const result = assignQuickSingleEliminationParticipant(bracket, { matchId: 'nope', slot: 'a', name: 'Alpha' })
+    expect(result.error).toBe('Match not found.')
+  })
+
+  it('never lets a downstream round (e.g. the Final) be named directly', () => {
+    const bracket = buildQuickSingleEliminationBracket({ mode: 'manual_size', bracketSize: 4 }, { thirdPlace: false })
+    const result = assignQuickSingleEliminationParticipant(bracket, { matchId: 'final-0', slot: 'a', name: 'Alpha' })
+    expect(result.error).toBe('Match not found.')
+  })
+})
+
+describe('assignQuickDoubleEliminationParticipant', () => {
+  it('names a blank Winners Round 1 slot without touching the rest of the bracket', () => {
+    const bracket = buildQuickDoubleEliminationBracket({ mode: 'manual_size', bracketSize: 4 })
+    const result = assignQuickDoubleEliminationParticipant(bracket, { matchId: 'wsf-0', slot: 'a', name: 'Alpha' })
+    expect(result.error).toBeUndefined()
+    const match = findMatch(result.data.winners_rounds, 'wsf-0') as any
+    expect(match.participant_a.id).toBe('wsf-0-a')
+    expect(match.participant_a.label).toBe('Alpha')
+    expect(result.data.grand_final?.participant_a.id).toBeUndefined()
   })
 })

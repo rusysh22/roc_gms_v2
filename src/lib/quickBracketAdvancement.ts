@@ -53,7 +53,11 @@ const applyResult = (
 ): { winner: BracketParticipant; loser: BracketParticipant } | null => {
   const winner = winnerSlot === 'a' ? match.participant_a : match.participant_b
   const loser = winnerSlot === 'a' ? match.participant_b : match.participant_a
-  if (!winner.id) {
+  // Both sides need a real id, not just the winner - a "manual size" bracket can now sit with one
+  // side named and the other still TBD (see assignNameToRound0), and that half-named state must
+  // never be scoreable even if called directly (the UI's own "both ids present" filter is only the
+  // first line of defense, not the only one).
+  if (!winner.id || !loser.id) {
     return null
   }
   match.status = 'result_published'
@@ -127,6 +131,64 @@ const fillSlot = (match: BracketMatchCard, slot: 'a' | 'b', participant: Bracket
   if (!match.detail_href) {
     match.detail_href = QUICK_BRACKET_DETAIL_HREF
   }
+}
+
+export type AssignParticipantNameInput = { matchId: string; slot: 'a' | 'b'; name: string }
+
+// The "manual size" generation mode (buildBlankEliminationRounds in quickBracketGeneration.ts)
+// produces a bracket where every slot - including round 1 - is TBD with no `id` at all, unlike
+// "from participants" mode where round 1 already carries real ids. Without this, a manual-size
+// bracket has no way to ever become scoreable: applyResult above rejects any match where a side
+// has no `id`, so round 1 (and everything downstream) stays permanently blank. This assigns a
+// synthetic id (deterministic from the match+slot, so re-reading the same bracket never collides)
+// to a still-TBD round 1 slot, which is enough for the rest of the advancement engine - and
+// BracketTree's existing TBD/partial-match rendering - to treat it like a real participant.
+const assignNameToRound0 = (
+  round0: BracketRound | undefined,
+  input: AssignParticipantNameInput,
+): { error?: string } => {
+  if (!round0) {
+    return { error: 'This bracket has no first round to name.' }
+  }
+  const match = round0.matches.find((candidate) => String(candidate.id) === input.matchId)
+  if (!match) {
+    return { error: 'Match not found.' }
+  }
+  const target = input.slot === 'a' ? match.participant_a : match.participant_b
+  if (target.id) {
+    return { error: 'This slot already has a team name.' }
+  }
+  fillSlot(match, input.slot, {
+    id: `${match.id}-${input.slot}`,
+    label: input.name,
+    isWinner: false,
+    isPlaceholder: false,
+  })
+  return {}
+}
+
+export const assignQuickSingleEliminationParticipant = (
+  data: SingleEliminationBracketData,
+  input: AssignParticipantNameInput,
+): QuickMatchResultOutcome<SingleEliminationBracketData> => {
+  const rounds = data.rounds.map(cloneRound)
+  const outcome = assignNameToRound0(rounds[0], input)
+  if (outcome.error) {
+    return { data, error: outcome.error }
+  }
+  return { data: { ...data, rounds } }
+}
+
+export const assignQuickDoubleEliminationParticipant = (
+  data: DoubleEliminationBracketData,
+  input: AssignParticipantNameInput,
+): QuickMatchResultOutcome<DoubleEliminationBracketData> => {
+  const winnersRounds = data.winners_rounds.map(cloneRound)
+  const outcome = assignNameToRound0(winnersRounds[0], input)
+  if (outcome.error) {
+    return { data, error: outcome.error }
+  }
+  return { data: { ...data, winners_rounds: winnersRounds } }
 }
 
 export const applyQuickSingleEliminationResult = (

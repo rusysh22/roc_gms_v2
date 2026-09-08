@@ -498,21 +498,41 @@ const ChampionBanner = ({ champion }: { champion?: BracketChampion | null }) => 
 const ThirdPlaceCard = ({
   match,
   semifinalRound,
+  timezone,
 }: {
   match: BracketMatchCard
   semifinalRound?: BracketRound
+  timezone: string
 }) => {
+  const selectMatch = React.useContext(BracketDialogContext)
+  // Reuses the same per-match transform every other card goes through (bye detection, score
+  // fallback, detail_href) instead of reimplementing it here - a single-match "round" is a valid
+  // input since the function only ever looks at its own round's name/matches.
+  const glootMatch = transformToGLootData([{ name: 'Bronze Final', order: 0, matches: [match] }], timezone)[0]
   const semifinalMatches = semifinalRound?.matches ?? []
-  const rows: Array<{ participant: BracketParticipant; sourceIndex: number }> = [
-    { participant: match.participant_a, sourceIndex: 0 },
-    { participant: match.participant_b, sourceIndex: 1 },
+  const rows: Array<{ participant: BracketParticipant; sourceIndex: 0 | 1; resultText?: string }> = [
+    { participant: match.participant_a, sourceIndex: 0, resultText: glootMatch.participantAResultText },
+    { participant: match.participant_b, sourceIndex: 1, resultText: glootMatch.participantBResultText },
   ]
 
   return (
     <div className="mt-4 rounded-panel border border-line bg-paper p-4">
-      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">3rd Place Match</p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">3rd Place Match</p>
+        {glootMatch.href ? (
+          <Dialog.Trigger asChild>
+            <button
+              type="button"
+              onClick={() => selectMatch(glootMatch)}
+              className="text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
+            >
+              Match Details
+            </button>
+          </Dialog.Trigger>
+        ) : null}
+      </div>
       <div className="max-w-xs overflow-hidden rounded-card border border-line">
-        {rows.map(({ participant, sourceIndex }) => {
+        {rows.map(({ participant, sourceIndex, resultText }) => {
           const isEmpty = !participant.id
           const feederMatch = semifinalMatches[sourceIndex]
           const label = isEmpty
@@ -525,12 +545,22 @@ const ThirdPlaceCard = ({
             <div
               key={sourceIndex}
               className={cn(
-                'flex items-center justify-between px-3 py-2 text-sm',
+                'flex items-center justify-between gap-2 px-3 py-2 text-sm',
                 sourceIndex === 0 && 'border-b border-line',
                 isEmpty ? 'italic text-ink-soft' : participant.isWinner ? 'bg-green/10 font-bold text-ink' : 'text-ink-soft',
               )}
             >
               <span className="truncate">{label}</span>
+              {!isEmpty && resultText ? (
+                <span
+                  className={cn(
+                    'shrink-0 tabular-nums',
+                    participant.isWinner ? 'font-bold text-ink' : 'text-ink-soft',
+                  )}
+                >
+                  {resultText}
+                </span>
+              ) : null}
             </div>
           )
         })}
@@ -808,7 +838,7 @@ export const BracketTree = ({
         )}
       </div>
       {bronzeRound?.matches[0] ? (
-        <ThirdPlaceCard match={bronzeRound.matches[0]} semifinalRound={semifinalRound} />
+        <ThirdPlaceCard match={bronzeRound.matches[0]} semifinalRound={semifinalRound} timezone={timezone} />
       ) : null}
     </div>
     </BracketDialogContext.Provider>
