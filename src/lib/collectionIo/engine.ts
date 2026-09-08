@@ -298,6 +298,17 @@ const seedForwardReferences = (
   }
 }
 
+// Human label for a row in the preview: the spec's own `rowLabel`, else the first non-`id` column
+// that has a value (a relation column falls back to its raw label string), else "Row N".
+const defaultRowLabel = (row: ResolvedRow, sheet: SheetSpec): string => {
+  for (const col of sheet.columns) {
+    if (col.kind === 'id') continue
+    const value = str(row.values[col.field]) || str(row.rawLabels[col.field])
+    if (value) return value
+  }
+  return `Row ${row.rowNumber}`
+}
+
 const resolveRow = (
   raw: { rowNumber: number; cells: Record<string, unknown> },
   sheet: SheetSpec,
@@ -391,7 +402,7 @@ export async function planMenuImport(
   for (const { sheet, rows: rawRows } of parsed) {
     for (const raw of rawRows) {
       const { row, error } = resolveRow(raw, sheet, relationIndex)
-      const label = sheet.rowLabel?.(row) || str(Object.values(row.values)[0]) || `Row ${row.rowNumber}`
+      const label = sheet.rowLabel?.(row) || defaultRowLabel(row, sheet)
       if (error) {
         rows.push({ sheet: sheet.sheetName, rowNumber: row.rowNumber, label, action: 'error', reason: error })
         continue
@@ -440,7 +451,7 @@ export async function applyMenuImport(
     }
     for (const raw of rawRows) {
       const { row, error } = resolveRow(raw, sheet, relationIndex)
-      const label = sheet.rowLabel?.(row) || str(Object.values(row.values)[0]) || `Row ${row.rowNumber}`
+      const label = sheet.rowLabel?.(row) || defaultRowLabel(row, sheet)
       const fail = (reason: string) => {
         summary.failed += 1
         summary.errors.push({ sheet: sheet.sheetName, rowNumber: row.rowNumber, label, reason })

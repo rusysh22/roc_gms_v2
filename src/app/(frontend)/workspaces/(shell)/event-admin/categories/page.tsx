@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListIO } from '@/components/ui/list-io'
+import { Pagination } from '@/components/ui/pagination'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -74,6 +75,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams?: 
   const viewId = get(params, 'view')
   const query = get(params, 'q')
   const sportFilter = get(params, 'sport')
+  const page = Math.max(1, Number(get(params, 'page')) || 1)
   const categoryError = get(params, 'categoryError')
   const categoryUpdated = get(params, 'categoryUpdated')
   const eventWhere = { event_id: { equals: activeEvent.id } }
@@ -86,7 +88,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams?: 
   }
 
   const [categories, sports, rulesets, entries] = await Promise.all([
-    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 300, sort: 'name', where: listWhere }),
+    access.payload.find({ collection: 'competition-categories', depth: 0, limit: 50, page, sort: 'name', where: listWhere }),
     access.payload.find({ collection: 'sports', depth: 0, limit: 500, sort: 'name', where: eventWhere }),
     access.payload.find({ collection: 'rulesets', depth: 0, limit: 500, sort: 'name', where: eventWhere }),
     access.payload.find({ collection: 'competition-entries', depth: 0, limit: 5000, where: eventWhere }),
@@ -319,6 +321,22 @@ export default async function CategoriesPage({ searchParams }: { searchParams?: 
           </TableBody>
         </Table>
       )}
+      {categories.docs.length > 0 ? (
+        <Pagination
+          page={categories.page || 1}
+          totalPages={categories.totalPages || 1}
+          hasPrevPage={Boolean(categories.hasPrevPage)}
+          hasNextPage={Boolean(categories.hasNextPage)}
+          totalDocs={categories.totalDocs}
+          buildHref={(targetPage) => {
+            const url = new URLSearchParams()
+            if (query) url.set('q', query)
+            if (sportFilter) url.set('sport', sportFilter)
+            url.set('page', String(targetPage))
+            return `${basePage}?${url.toString()}`
+          }}
+        />
+      ) : null}
     </>
   )
 }

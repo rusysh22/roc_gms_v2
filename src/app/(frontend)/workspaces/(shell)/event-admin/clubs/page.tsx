@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListIO } from '@/components/ui/list-io'
+import { Pagination } from '@/components/ui/pagination'
 import { RowActions } from '@/components/ui/row-actions'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -64,6 +65,7 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
   const params = searchParams ? await searchParams : {}
   const query = get(params, 'q')
   const editingId = get(params, 'edit')
+  const page = Math.max(1, Number(get(params, 'page')) || 1)
   const clubError = get(params, 'clubError')
   const clubUpdated = get(params, 'clubUpdated')
   const copyError = get(params, 'copyError')
@@ -73,7 +75,7 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
     ? { and: [eventWhere, { or: [{ name: { contains: query } }, { slug: { contains: query } }] }] }
     : eventWhere
   const [clubs, otherEvents, editingDoc] = await Promise.all([
-    access.payload.find({ collection: 'clubs', depth: 0, limit: 200, sort: 'name', where: listWhere }),
+    access.payload.find({ collection: 'clubs', depth: 0, limit: 50, page, sort: 'name', where: listWhere }),
     access.payload.find({
       collection: 'events',
       depth: 0,
@@ -245,6 +247,21 @@ export default async function ClubsPage({ searchParams }: { searchParams?: Searc
           </TableBody>
         </Table>
       )}
+      {clubs.docs.length > 0 ? (
+        <Pagination
+          page={clubs.page || 1}
+          totalPages={clubs.totalPages || 1}
+          hasPrevPage={Boolean(clubs.hasPrevPage)}
+          hasNextPage={Boolean(clubs.hasNextPage)}
+          totalDocs={clubs.totalDocs}
+          buildHref={(targetPage) => {
+            const url = new URLSearchParams()
+            if (query) url.set('q', query)
+            url.set('page', String(targetPage))
+            return `${basePage}?${url.toString()}`
+          }}
+        />
+      ) : null}
     </>
   )
 }

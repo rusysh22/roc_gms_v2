@@ -189,12 +189,6 @@ export default function MarketingHomePage() {
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
-              <Button asChild variant="secondary">
-                <Link href="/login">
-                  Log in
-                  <LogIn className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              </Button>
               <Button asChild variant="ghost">
                 <a href={DEMO_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                   Request a demo

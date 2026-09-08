@@ -7,11 +7,16 @@ sidebar:
 
 
 Instead of adding sports, categories, and participants one form at a time, you can prepare
-**one Excel workbook** and upload it. The importer creates everything in the right order and ties it
-all to the active event.
+an **Excel workbook** and upload it. There are two ways in:
 
-You reach the importer from the wizard's **Clubs / Teams / Players** step (step 5), in the
-**"Import event data from Excel"** card.
+| Where | Scope | Best for |
+|---|---|---|
+| **New Event wizard**, *Clubs / Teams / Players* step | One workbook covering Sports → Rulesets → Categories → Clubs → Teams → Players → Pairs | First-time setup — everything in one file, created in dependency order. |
+| **Event Admin list pages** (Sports, Categories, Rulesets, Clubs, Participants, Facilities, Sponsors, Entries) — the **Export** / **Import** buttons above each table | Just that one menu's data | Bulk-editing data that already exists, or topping up one list later. |
+
+Both use the same **export → edit → preview → confirm** flow. The rest of this page describes the
+wizard workbook in detail; the [per-list import](#per-list-import-on-the-list-pages) section at the
+end covers what is different about the list-page version.
 
 ## The two templates
 
@@ -170,3 +175,28 @@ freely.
 
 Every import writes one summary entry plus per-record entries to the event's **History** (step 10),
 and the result banner shows how many rows were created, updated, skipped, and registered.
+
+## Per-list import on the list pages
+
+Every list page in **Event Admin** (Sports, Categories, Rulesets, Clubs, Participants, Facilities,
+Sponsors, Entries) has **Export** and **Import** buttons above its table.
+
+1. **Export** downloads an `.xlsx` **already filled with that list's current rows**, with the right
+   column headers and dropdowns for every relationship and enum column. Each row carries a hidden
+   `id` column — leave it alone.
+2. Edit values, and/or add new rows at the bottom.
+3. **Import** the file. You get the same dry-run **preview** (a row-by-row list of *create* /
+   *update* / *error*), and nothing is written until you click **Confirm import**.
+
+Differences from the wizard workbook:
+
+- **One menu at a time.** The Participants and Facilities workbooks have more than one sheet
+  (Players + Teams + Rosters; Venues + Courts) and are applied in that order, but you cannot, say,
+  add a Sport from the Categories import — import Sports first.
+- **Matching (upsert) key.** Clubs, Teams, Sports, Rulesets use the URL **slug**; Categories use
+  **sport + name**; Players use **identification\_number** (a player with no ID number is always
+  created, never matched); Sponsors, Venues, Courts and Entries match only on the hidden **id** —
+  so a row you type from scratch with a blank `id` is always a new record.
+- **Relationship columns take a name, not an id.** Pick from the dropdown. An unknown name is
+  reported as a per-row error and that row is skipped; the rest still import.
+- Records already in the event but **absent from your file are never deleted**.

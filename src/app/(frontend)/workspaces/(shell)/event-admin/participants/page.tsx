@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
 import { ComboboxField } from '@/components/ui/combobox'
 import { CrudFormModal } from '@/components/ui/crud-modal'
+import { DetailModal } from '@/components/ui/detail-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -114,6 +115,10 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
   const player = kind === 'player' ? players.docs.find((x) => String(x.id) === edit) : undefined
   const team = kind === 'team' ? teams.docs.find((x) => String(x.id) === edit) : undefined
   const roster = kind === 'roster' ? rosters.docs.find((x) => String(x.id) === edit) : undefined
+  const view = get(params, 'view')
+  const viewPlayer = kind === 'player' && view ? players.docs.find((x) => String(x.id) === view) : undefined
+  const viewTeam = kind === 'team' && view ? teams.docs.find((x) => String(x.id) === view) : undefined
+  const viewRoster = kind === 'roster' && view ? rosters.docs.find((x) => String(x.id) === view) : undefined
 
   const playerForm = (
     <form action={savePlayerAction} className="grid gap-4">
@@ -254,6 +259,52 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
         <ListIO menu="participants" label="players, teams & rosters" />
       </div>
 
+      {viewPlayer ? (
+        <DetailModal
+          key={`view-player-${view}`}
+          title={viewPlayer.name}
+          openDefault
+          closeHref={basePage}
+          items={[
+            { label: 'Club', value: nameOf(viewPlayer.club_id) },
+            { label: 'ID number', value: viewPlayer.identification_number || '—' },
+            { label: 'Email', value: viewPlayer.email || '—' },
+            { label: 'Phone', value: viewPlayer.phone || '—' },
+            { label: 'Gender', value: viewPlayer.gender || '—' },
+          ]}
+        />
+      ) : null}
+      {viewTeam ? (
+        <DetailModal
+          key={`view-team-${view}`}
+          title={viewTeam.name}
+          openDefault
+          closeHref={basePage}
+          items={[
+            { label: 'Club', value: nameOf(viewTeam.club_id) },
+            { label: 'Captain', value: nameOf(viewTeam.captain_player_id) },
+            { label: 'Contact email', value: viewTeam.contact_email || '—' },
+            { label: 'Slug', value: viewTeam.slug || '—' },
+            { label: 'Description', value: viewTeam.description || '—' },
+          ]}
+        />
+      ) : null}
+      {viewRoster ? (
+        <DetailModal
+          key={`view-roster-${view}`}
+          title={`${nameOf(viewRoster.player_id)} → ${nameOf(viewRoster.team_id)}`}
+          openDefault
+          closeHref={basePage}
+          items={[
+            { label: 'Team', value: nameOf(viewRoster.team_id) },
+            { label: 'Player', value: nameOf(viewRoster.player_id) },
+            { label: 'Category', value: nameOf(viewRoster.category_id) },
+            { label: 'Role', value: String(viewRoster.role).replaceAll('_', ' ') },
+            { label: 'Status', value: viewRoster.status },
+          ]}
+        />
+      ) : null}
+
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-extrabold text-ink">Players ({players.totalDocs})</h2>
@@ -292,6 +343,7 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                   <TableCell className="text-ink-soft">{x.email || '—'}</TableCell>
                   <TableCell className="text-right">
                     <RowActions
+                      viewHref={`${basePage}?kind=player&view=${x.id}`}
                       editHref={`${basePage}?kind=player&edit=${x.id}`}
                       deleteAction={deletePlayerAction}
                       deleteId={x.id}
@@ -343,6 +395,7 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                   <TableCell className="text-ink-soft">{nameOf(x.captain_player_id)}</TableCell>
                   <TableCell className="text-right">
                     <RowActions
+                      viewHref={`${basePage}?kind=team&view=${x.id}`}
                       editHref={`${basePage}?kind=team&edit=${x.id}`}
                       deleteAction={deleteTeamAction}
                       deleteId={x.id}
@@ -398,6 +451,7 @@ export default async function ParticipantsPage({ searchParams }: { searchParams?
                   </TableCell>
                   <TableCell className="text-right">
                     <RowActions
+                      viewHref={`${basePage}?kind=roster&view=${x.id}`}
                       editHref={`${basePage}?kind=roster&edit=${x.id}`}
                       deleteAction={deleteRosterAction}
                       deleteId={x.id}
