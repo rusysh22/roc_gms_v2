@@ -18,6 +18,7 @@ import { DocumentationAssets } from './src/collections/DocumentationAssets'
 import { Events } from './src/collections/Events'
 import { EventMemberships } from './src/collections/EventMemberships'
 import { Groups } from './src/collections/Groups'
+import { Licenses } from './src/collections/Licenses'
 import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
 import { MedalRecords } from './src/collections/MedalRecords'
@@ -108,6 +109,7 @@ export default buildConfig({
     Venues,
     Courts,
     Sponsors,
+    Licenses,
   ],
   db: postgresAdapter({
     pool: {

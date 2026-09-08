@@ -7,6 +7,7 @@ import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import type { UserRole } from '@/access/roles'
 import { buttonVariants } from '@/components/ui/button'
+import { checkSubscription } from '@/lib/berlanggan/subscriptionGate'
 
 type WorkspaceUser = {
   id: string | number
@@ -57,6 +58,12 @@ export const hasWorkspaceRole = (
   return Boolean(user.roles?.some((role) => allowedRoles.includes(role)))
 }
 
+// super_admin is InTourney's internal/operator role (only a super_admin can grant super_admin -
+// see Users.ts), not a customer-facing tier - it bypasses the subscription check entirely so the
+// operator always has a way in to fix someone else's billing issue even if their own license
+// lapses.
+const isSuperAdminUser = (user: WorkspaceUser) => Boolean(user.roles?.includes('super_admin'))
+
 // Tournament organizers sign in through the InTourney-branded frontend login, not Payload's raw
 // /admin/login screen - that admin console login stays reserved for system/super-admin use.
 const getLoginUrl = (returnTo: string) => `/login?redirect=${encodeURIComponent(returnTo)}`
@@ -93,6 +100,15 @@ export const requireWorkspaceAccess = async ({
     redirect(getLoginUrl(returnTo))
   }
 
+  // Billing takes priority over the role check: a blocked-and-unauthorized user is routed to
+  // /subscribe (the actionable message), not the unrelated "Access restricted" role card.
+  if (!isSuperAdminUser(user)) {
+    const subscription = await checkSubscription(payload, user.id)
+    if (!subscription.ok) {
+      redirect(`/subscribe?reason=${subscription.reason}&redirect=${encodeURIComponent(returnTo)}`)
+    }
+  }
+
   if (!hasWorkspaceRole(user, allowedRoles)) {
     return {
       authorized: false,
@@ -122,6 +138,13 @@ export const assertWorkspaceActionAccess = async ({
 
   if (!user) {
     redirect(getLoginUrl(returnTo))
+  }
+
+  if (!isSuperAdminUser(user)) {
+    const subscription = await checkSubscription(payload, user.id)
+    if (!subscription.ok) {
+      redirect(`/subscribe?reason=${subscription.reason}&redirect=${encodeURIComponent(returnTo)}`)
+    }
   }
 
   if (!hasWorkspaceRole(user, allowedRoles)) {
