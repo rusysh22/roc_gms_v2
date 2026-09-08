@@ -18,7 +18,7 @@ import {
   type QuickBracketSource,
 } from '@/lib/quickBracketGeneration'
 import { checkQuickBracketRateLimit } from '@/lib/quickBracketRateLimit'
-import { QUICK_BRACKET_OWNER_COOKIE } from '@/lib/quickBracketCookies'
+import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 import { verifyQuickBracketTurnstileToken } from '@/lib/quickBracketTurnstile'
 
 const NEW_QUICK_BRACKET_PAGE = '/quick-bracket/new'
@@ -155,7 +155,7 @@ export async function createQuickBracketAction(formData: FormData): Promise<void
   })
 
   const cookieStore = await cookies()
-  cookieStore.set(QUICK_BRACKET_OWNER_COOKIE, ownerToken, {
+  cookieStore.set(quickBracketOwnerCookieName(slug), ownerToken, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

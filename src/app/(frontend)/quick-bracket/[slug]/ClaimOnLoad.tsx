@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
@@ -23,11 +23,20 @@ const ERROR_MESSAGES: Record<string, string> = {
 export function ClaimOnLoad({ slug }: { slug: string }) {
   const router = useRouter()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // React StrictMode (on in this app's next.config.mjs) intentionally mounts every effect twice in
+  // dev - a `cancelled`-in-cleanup flag only stops the FIRST run's result from updating state, it
+  // doesn't stop the second run from actually firing the mutation again. Since claiming is a
+  // one-shot server mutation (the action itself rejects a second attempt once status flips to
+  // 'claimed'), that second call "wins" the race with a `not_active` failure and stomps the first
+  // call's real success. A ref survives the mount/cleanup/remount cycle within one component
+  // instance, so it reliably makes the actual network call fire only once.
+  const hasStartedRef = useRef(false)
 
   useEffect(() => {
-    let cancelled = false
+    if (hasStartedRef.current) return
+    hasStartedRef.current = true
+
     claimQuickBracketAction(slug).then((result) => {
-      if (cancelled) return
       if (result.ok) {
         router.push(
           `/workspaces/event-admin/new-event?eventId=${result.eventId}&step=event&claimed=1`,
@@ -37,9 +46,6 @@ export function ClaimOnLoad({ slug }: { slug: string }) {
       }
       setErrorMessage(ERROR_MESSAGES[result.reason] || ERROR_MESSAGES.failed)
     })
-    return () => {
-      cancelled = true
-    }
   }, [slug, router])
 
   if (errorMessage) {

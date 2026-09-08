@@ -10,7 +10,7 @@ import {
   recalculateDoubleEliminationBracket,
 } from '@/lib/doubleElimination'
 import { createSingleEliminationBracketMatches, type MatchGenerationEntry } from '@/lib/matchGeneration'
-import { QUICK_BRACKET_OWNER_COOKIE } from '@/lib/quickBracketCookies'
+import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 import { DEFAULT_EVENT_TIMEZONE, type EventTimezone } from '@/lib/timezone'
 import { ACTIVE_EVENT_COOKIE } from '../../workspaces/activeEvent'
 
@@ -71,7 +71,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
   }
 
   const cookieStore = await cookies()
-  const ownerToken = cookieStore.get(QUICK_BRACKET_OWNER_COOKIE)?.value
+  const ownerToken = cookieStore.get(quickBracketOwnerCookieName(slug))?.value
 
   const found = await payload.find({
     collection: 'quick-brackets',
@@ -188,36 +188,56 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
         entries.push({ id: entry.id, display_name: participant.name, seed_number: participant.seed })
       }
 
+      // Matches.match_number is UNIQUE GLOBALLY (no per-event scoping) - every claimed quick
+      // bracket creates a category with the same fixed slug ('bracket'), so prefixing with that
+      // slug alone would collide across every single quick-bracket claim ever made on this server
+      // (confirmed the hard way: every match create failed silently - createSingleEliminationBracketMatches
+      // swallows per-match errors into failedCount rather than throwing). event.slug is guaranteed
+      // globally unique (findAvailableEventSlug above), so prefix with that instead.
       let sequence = 1
       const nextMatchNumber = (prefix: string) =>
-        `${category.slug}-${prefix}-${String(sequence++).padStart(3, '0')}`
+        `${event.slug}-${prefix}-${String(sequence++).padStart(3, '0')}`
+
+      const generationResult =
+        bracket.format === 'single_elimination'
+          ? await createSingleEliminationBracketMatches({
+              payload,
+              eventId: event.id,
+              eventSlug: event.slug,
+              sportId: sport.id,
+              categoryId: category.id,
+              categorySlug: category.slug,
+              stageId: stage.id,
+              entries,
+              thirdPlacePolicy: bracket.third_place ? 'match' : 'none',
+              nextMatchNumber,
+            })
+          : await createDoubleEliminationBracketMatches({
+              payload,
+              eventId: event.id,
+              eventSlug: event.slug,
+              sportId: sport.id,
+              categoryId: category.id,
+              categorySlug: category.slug,
+              stageId: stage.id,
+              entries,
+              nextMatchNumber,
+            })
+
+      // Both generators swallow per-match create errors into failedCount rather than throwing
+      // (so one bad match doesn't abort the rest) - which also means a systemic failure (as found
+      // during testing: a match_number collision) fails EVERY match silently unless logged here.
+      if (generationResult.failedCount > 0) {
+        payload.logger.error(
+          `Quick bracket claim for event ${event.id}: ${generationResult.failedCount} of ${
+            generationResult.failedCount + generationResult.createdCount
+          } matches failed to create.`,
+        )
+      }
 
       if (bracket.format === 'single_elimination') {
-        await createSingleEliminationBracketMatches({
-          payload,
-          eventId: event.id,
-          eventSlug: event.slug,
-          sportId: sport.id,
-          categoryId: category.id,
-          categorySlug: category.slug,
-          stageId: stage.id,
-          entries,
-          thirdPlacePolicy: bracket.third_place ? 'match' : 'none',
-          nextMatchNumber,
-        })
         await recalculateSingleEliminationBracket(payload, { stageId: stage.id })
       } else {
-        await createDoubleEliminationBracketMatches({
-          payload,
-          eventId: event.id,
-          eventSlug: event.slug,
-          sportId: sport.id,
-          categoryId: category.id,
-          categorySlug: category.slug,
-          stageId: stage.id,
-          entries,
-          nextMatchNumber,
-        })
         await recalculateDoubleEliminationBracket(payload, { stageId: stage.id })
       }
     }

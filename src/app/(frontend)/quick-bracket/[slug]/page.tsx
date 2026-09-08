@@ -9,12 +9,12 @@ import type { SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 import { Card } from '@/components/ui/card'
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { ShareButtons } from '@/components/share-buttons'
 import { BracketTree } from '../../brackets/bracketTree'
 import { DoubleEliminationBracketSections } from '../../brackets/doubleEliminationSections'
 import { getCurrentPublicUser } from '../../getCurrentPublicUser'
-import { QUICK_BRACKET_OWNER_COOKIE } from '@/lib/quickBracketCookies'
+import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 import { ClaimOnLoad } from './ClaimOnLoad'
 
 export const dynamic = 'force-dynamic'
@@ -60,7 +60,7 @@ export default async function QuickBracketResultPage({
   // who opens a shared link still gets a growth CTA, just not one that would let them take
   // ownership of someone else's tournament. See claimQuickBracketAction.ts for the server-side
   // enforcement of the same rule (this check is UX only, not the security boundary).
-  const ownerToken = (await cookies()).get(QUICK_BRACKET_OWNER_COOKIE)?.value
+  const ownerToken = (await cookies()).get(quickBracketOwnerCookieName(slug))?.value
   const isOwner = Boolean(ownerToken && ownerToken === bracket.owner_token)
   const claimRedirect = `/quick-bracket/${slug}?claim=1`
   const user = await getCurrentPublicUser()
@@ -145,17 +145,18 @@ export default async function QuickBracketResultPage({
                         Sign in
                       </Link>
                     ) : null}
-                    <Link
-                      href={
-                        isOwner
-                          ? `/register?redirect=${encodeURIComponent(claimRedirect)}`
-                          : '/register'
-                      }
-                      className={buttonVariants({ variant: 'primary' })}
-                    >
-                      {isOwner ? 'Sign up to run this live' : 'Create your own'}
-                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                    </Link>
+                    <Button asChild>
+                      <Link
+                        href={
+                          isOwner
+                            ? `/register?redirect=${encodeURIComponent(claimRedirect)}`
+                            : '/register'
+                        }
+                      >
+                        {isOwner ? 'Sign up to run this live' : 'Create your own'}
+                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               )}
