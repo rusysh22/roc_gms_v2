@@ -48,16 +48,33 @@ const formatMatchDate = (value: string | undefined, timezone: string) => {
   }).format(new Date(value))
 }
 
-// Local (browser-timezone) <input type="datetime-local"> value from an ISO string - same helper as
-// RescheduleMatchDialog.tsx's own toDateTimeLocalValue. Quick Bracket has no per-event timezone
-// concept to preserve (unlike the real scheduler), so round-tripping through the browser's local
-// zone is an accepted simplification for this guest tool.
+// Quick Bracket always displays match times in DEFAULT_EVENT_TIMEZONE (Asia/Jakarta - see
+// formatMatchDate's `timezone` prop, which this component never lets vary), so the editable
+// <input type="datetime-local"> must round-trip through that SAME fixed zone - not the viewer's
+// browser timezone - or a value typed and saved by an organizer outside WIB would silently
+// re-display as a different wall-clock time than what they entered. Indonesia has no DST, so a
+// fixed +07:00 offset is exact (unlike RescheduleMatchDialog.tsx's own toDateTimeLocalValue, which
+// intentionally uses the browser's local zone because the real scheduler's event can be in any
+// timezone and that dialog runs entirely client-side against the organizer's own wall clock).
+const JAKARTA_UTC_OFFSET = '+07:00'
+
 const toDateTimeLocalValue = (iso?: string) => {
   if (!iso) return ''
-  const date = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso))
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
 }
+
+const fromDateTimeLocalValue = (value: string): string | null =>
+  value ? new Date(`${value}:00${JAKARTA_UTC_OFFSET}`).toISOString() : null
 
 type GLootParticipant = {
   id: string
@@ -702,7 +719,7 @@ const MatchDetailsPanel = ({
     if (!quickBracketSlug) return
     setSavingSchedule(true)
     setScheduleError(null)
-    const iso = scheduleValue ? new Date(scheduleValue).toISOString() : null
+    const iso = fromDateTimeLocalValue(scheduleValue)
     const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
       scheduledStartAt: iso,
     })
