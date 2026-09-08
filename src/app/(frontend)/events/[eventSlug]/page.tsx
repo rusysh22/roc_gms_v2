@@ -6,22 +6,16 @@ import {
   Calendar,
   ChevronRight,
   Clock,
-  CircleDot,
-  Crown,
-  Gamepad2,
-  Goal,
   MapPin,
   Sparkles,
-  Table2,
-  Timer,
   Trophy,
-  type LucideIcon,
 } from 'lucide-react'
 
 import type { Metadata } from 'next'
 
 import config from '@payload-config'
 import { buildShareMetadata, getAbsolutePublicUrl } from '@/lib/shareMetadata'
+import { getSportIcon } from '@/lib/sportIcons'
 import { AutoRefresh } from '@/components/auto-refresh'
 import { Countdown } from '@/components/countdown'
 import { Button } from '@/components/ui/button'
@@ -115,16 +109,6 @@ type ScheduledMatch = {
 
 const LIVE_STATUSES = ['ongoing', 'paused']
 const UPCOMING_STATUSES = ['scheduled', 'published', 'ready_to_start', 'check_in_open']
-
-const SPORT_ICONS: Record<string, LucideIcon> = {
-  court: CircleDot,
-  field: Goal,
-  table: Table2,
-  board: Crown,
-  esport: Gamepad2,
-  track: Timer,
-  other: Trophy,
-}
 
 const formatMatchTime = (value: string | null | undefined, tz: string) => {
   if (!value) {
@@ -600,7 +584,7 @@ export default async function EventHomePage({
                   links - a sport with one category jumps straight there, otherwise to the sport
                   browser. Simpler to scan, and there's nothing left to click "wrong". */}
               {sports.map((sport) => {
-                const Icon = SPORT_ICONS[sport.sport_type] || Trophy
+                const Icon = getSportIcon(sport)
                 const sportCategories = categoriesBySport.get(String(sport.id)) || []
                 const primaryCategoryHref =
                   sportCategories.length === 1 ?

@@ -1,36 +1,17 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
-import {
-  ChevronRight,
-  CircleDot,
-  Crown,
-  Gamepad2,
-  Goal,
-  Table2,
-  Timer,
-  Trophy,
-  type LucideIcon,
-} from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 
 import config from '@payload-config'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { getSportIcon } from '@/lib/sportIcons'
 import { formatStatus } from '../../../workspaces/workspaceComponents'
 import { getSportCategories, type CategoryDoc, type SportDoc } from '../../../sports/publicSportData'
 import { getPublicEventBySlug } from '../../publicEvents'
 
 export const dynamic = 'force-dynamic'
-
-const SPORT_ICONS: Record<string, LucideIcon> = {
-  court: CircleDot,
-  field: Goal,
-  table: Table2,
-  board: Crown,
-  esport: Gamepad2,
-  track: Timer,
-  other: Trophy,
-}
 
 const getSportId = (sport: SportDoc | string | number | null | undefined) =>
   sport && typeof sport === 'object' ? String(sport.id) : String(sport || '')
@@ -79,7 +60,7 @@ export default async function PublicSportsPage({
           ) : (
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               {sports.map((sport) => {
-                const Icon = SPORT_ICONS[sport.sport_type || 'other'] || Trophy
+                const Icon = getSportIcon(sport)
                 const sportCategories = categoriesBySport.get(String(sport.id)) || []
 
                 return (
