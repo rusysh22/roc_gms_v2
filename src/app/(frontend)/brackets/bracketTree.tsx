@@ -6,7 +6,7 @@ import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-br
 import { ArrowRight, Crown, MapPin, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
-import type { BracketChampion, BracketRound } from '@/lib/brackets'
+import type { BracketChampion, BracketMatchCard, BracketParticipant, BracketRound } from '@/lib/brackets'
 import { StatusBadge, getMatchStatusTone } from '@/components/ui/status-badge'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -136,8 +136,10 @@ const normalizeBracketRounds = (rounds: BracketRound[]) => {
   })
 }
 
-const transformToGLootData = (rounds: BracketRound[], timezone: string): GLootMatch[] => {
-  const displayRounds = normalizeBracketRounds(rounds)
+// Takes already-normalized rounds (see normalizeBracketRounds) so BracketTree can compute the
+// same displayRounds once and reuse it for the round-header names and the round-jump dropdown,
+// instead of this function silently normalizing its own private copy.
+const transformToGLootData = (displayRounds: BracketRound[], timezone: string): GLootMatch[] => {
   const numRounds = displayRounds.length
   const flattened: GLootMatch[] = []
 
@@ -324,6 +326,18 @@ const CustomMatch = ({
   const matchDecided = Boolean(topWon || bottomWon)
   const topColor = getPartyColor(topParty, topWon, matchDecided)
   const bottomColor = getPartyColor(bottomParty, bottomWon, matchDecided)
+  // A row with no real participant yet - either a genuine "not decided" TBD slot, or the empty
+  // side of a bye/walkover - reads as visually "empty, not broken" (dashed border, no fill, italic
+  // label) instead of a normal solid match box. Distinguishing "no game needed" (Bye) from "not
+  // decided yet" (TBD) matters: a wall of identical-looking half-filled boxes is exactly what
+  // looked broken/cluttered for a bracket with many byes (7/9/12/13-participant brackets).
+  const isTopEmpty = !topParty?.id
+  const isBottomEmpty = !bottomParty?.id
+  const emptyLabel = match.state === 'WALK_OVER' ? 'Bye' : 'TBD'
+  const emptyRowStyle = {
+    background: 'transparent',
+    border: '1px dashed #3A4055',
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', fontFamily: 'inherit' }}>
@@ -359,11 +373,12 @@ const CustomMatch = ({
             borderBottom: 'none',
             borderTopLeftRadius: 3,
             borderTopRightRadius: 3,
+            ...(isTopEmpty ? emptyRowStyle : {}),
           }}
         >
-          <div style={{ color: topColor, fontWeight: topWon ? 700 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {topParty?.name}
-            {topParty?.subLabel ? (
+          <div style={{ color: topColor, fontWeight: topWon ? 700 : 400, fontStyle: isTopEmpty ? 'italic' : 'normal', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {isTopEmpty ? emptyLabel : topParty?.name}
+            {!isTopEmpty && topParty?.subLabel ? (
               <span style={{ marginLeft: 6, fontSize: '0.7rem', fontWeight: 400, opacity: 0.65 }}>
                 {topParty.subLabel}
               </span>
@@ -386,11 +401,12 @@ const CustomMatch = ({
             borderRightWidth: 4,
             borderBottomLeftRadius: 3,
             borderBottomRightRadius: 3,
+            ...(isBottomEmpty ? emptyRowStyle : {}),
           }}
         >
-          <div style={{ color: bottomColor, fontWeight: bottomWon ? 700 : 400, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {bottomParty?.name}
-            {bottomParty?.subLabel ? (
+          <div style={{ color: bottomColor, fontWeight: bottomWon ? 700 : 400, fontStyle: isBottomEmpty ? 'italic' : 'normal', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {isBottomEmpty ? emptyLabel : bottomParty?.name}
+            {!isBottomEmpty && bottomParty?.subLabel ? (
               <span style={{ marginLeft: 6, fontSize: '0.7rem', fontWeight: 400, opacity: 0.65 }}>
                 {bottomParty.subLabel}
               </span>
@@ -467,6 +483,59 @@ const ChampionBanner = ({ champion }: { champion?: BracketChampion | null }) => 
   )
 }
 
+// MSG-01's Bronze Final (3rd place match) is fed by the two SEMIFINAL LOSERS, not by two
+// round-N winners like every other match in the tree - splicing it into the same column flow
+// g-loot renders (see withBronzeFinal in quickBracketGeneration.ts, and getRoundOrder in
+// brackets.ts placing it between semifinal/final for the DB-backed cache) breaks g-loot's
+// "every column exactly halves the previous one" assumption. Rendered here as its own detached
+// card instead, matching how Challonge treats a 3rd place match: a separate box, not part of the
+// championship column flow. `Loser of <match>` is shown in place of a bare "TBD" wherever the
+// semifinal that feeds a slot hasn't been played yet - identical in spirit to Challonge's own
+// "Loses from N" placeholder.
+const ThirdPlaceCard = ({
+  match,
+  semifinalRound,
+}: {
+  match: BracketMatchCard
+  semifinalRound?: BracketRound
+}) => {
+  const semifinalMatches = semifinalRound?.matches ?? []
+  const rows: Array<{ participant: BracketParticipant; sourceIndex: number }> = [
+    { participant: match.participant_a, sourceIndex: 0 },
+    { participant: match.participant_b, sourceIndex: 1 },
+  ]
+
+  return (
+    <div className="mt-4 rounded-panel border border-line bg-paper p-4">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">3rd Place Match</p>
+      <div className="max-w-xs overflow-hidden rounded-card border border-line">
+        {rows.map(({ participant, sourceIndex }) => {
+          const isEmpty = !participant.id
+          const feederMatch = semifinalMatches[sourceIndex]
+          const label = isEmpty
+            ? feederMatch
+              ? `Loser of ${feederMatch.match_number}`
+              : 'TBD'
+            : participant.label
+
+          return (
+            <div
+              key={sourceIndex}
+              className={cn(
+                'flex items-center justify-between px-3 py-2 text-sm',
+                sourceIndex === 0 && 'border-b border-line',
+                isEmpty ? 'italic text-ink-soft' : participant.isWinner ? 'bg-green/10 font-bold text-ink' : 'text-ink-soft',
+              )}
+            >
+              <span className="truncate">{label}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export const BracketTree = ({
   rounds,
   champion,
@@ -479,6 +548,7 @@ export const BracketTree = ({
   const [isMounted, setIsMounted] = useState(false)
   const [containerRef, containerWidth] = useContainerWidth()
   const [selectedMatch, setSelectedMatch] = useState<GLootMatch | null>(null)
+  const [selectedRoundIndex, setSelectedRoundIndex] = useState(0)
 
   useEffect(() => {
     setIsMounted(true)
@@ -488,7 +558,15 @@ export const BracketTree = ({
     return null
   }
 
-  const matches = transformToGLootData(rounds, timezone)
+  const bronzeRoundIndex = rounds.findIndex((round) => round.name.toLowerCase().includes('bronze'))
+  const bronzeRound = bronzeRoundIndex >= 0 ? rounds[bronzeRoundIndex] : null
+  const mainRounds = bronzeRound ? rounds.filter((_, index) => index !== bronzeRoundIndex) : rounds
+
+  const displayRounds = normalizeBracketRounds(mainRounds)
+  const roundNamesByColumn = displayRounds.map((round) => round.name)
+  const semifinalRound = displayRounds[displayRounds.length - 2]
+
+  const matches = transformToGLootData(displayRounds, timezone)
   const isFinished = Boolean(selectedMatch && RESULT_STATUSES.has(selectedMatch.state))
   const isLive = Boolean(selectedMatch && LIVE_STATUSES.has(selectedMatch.state))
   const hasScore = Boolean(
@@ -647,11 +725,48 @@ export const BracketTree = ({
             ) : null}
           </Dialog.Content>
         </Dialog.Portal>
+      {displayRounds.length > 1 ? (
+        <div className="mb-3 flex items-center justify-end gap-2">
+          <label htmlFor="bracket-round-jump" className="text-xs font-semibold text-ink-soft">
+            Jump to round
+          </label>
+          <select
+            id="bracket-round-jump"
+            value={selectedRoundIndex}
+            onChange={(event) => setSelectedRoundIndex(Number(event.target.value))}
+            className="h-8 rounded-full border border-line bg-paper px-3 text-xs font-semibold text-ink focus-visible:border-green focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green/20"
+          >
+            {displayRounds.map((round, index) => (
+              <option key={`${round.name}-${index}`} value={index}>
+                {round.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div ref={containerRef} className="overflow-hidden rounded-panel border border-line">
         {isMounted && containerWidth > 0 ? (
           <SingleEliminationBracket
+            // Forces SVGViewer (g-loot's pan/zoom wrapper) to remount when the selected round
+            // changes - its initial-pan effect only ever runs once per mount (see
+            // node_modules/@g-loot/react-tournament-brackets's svg-viewer.js), so a plain prop
+            // change on an already-mounted instance would silently do nothing.
+            key={selectedRoundIndex}
             matches={matches}
             matchComponent={CustomMatch}
+            currentRound={String(selectedRoundIndex)}
+            options={{
+              style: {
+                roundHeader: {
+                  // Overrides g-loot's own default header text ("Round 1" / "Semi-final" /
+                  // "Final", hardcoded by column position) with the names this app actually
+                  // computes (Round of 16 / Quarterfinal / Semifinal / Final - see
+                  // roundNameForRemaining in matchGeneration.ts). columnIndex here is 1-based.
+                  roundTextGenerator: (columnIndex: number) =>
+                    roundNamesByColumn[columnIndex - 1] || `Round ${columnIndex}`,
+                },
+              },
+            }}
             svgWrapper={({ children, ...props }: React.ComponentProps<typeof SVGViewer>) => (
               <SVGViewer {...props} width={containerWidth} height={600}>
                 {children}
@@ -662,6 +777,9 @@ export const BracketTree = ({
           <div className="h-[600px] w-full animate-pulse bg-mist" />
         )}
       </div>
+      {bronzeRound?.matches[0] ? (
+        <ThirdPlaceCard match={bronzeRound.matches[0]} semifinalRound={semifinalRound} />
+      ) : null}
     </div>
     </BracketDialogContext.Provider>
     </Dialog.Root>
