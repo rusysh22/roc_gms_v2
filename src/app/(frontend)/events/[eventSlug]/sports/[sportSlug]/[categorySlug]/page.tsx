@@ -13,7 +13,7 @@ import { StatusBadge, getMatchStatusTone, type StatusTone } from '@/components/u
 import { ArticleCard, CompactAnnouncementList } from '../../../../../contentComponents'
 import { getRelatedPublicArticles, getScopedPublicAnnouncements } from '../../../../../contentData'
 import { BracketTree } from '../../../../../brackets/bracketTree'
-import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
+import { DoubleEliminationBracketSections } from '../../../../../brackets/doubleEliminationSections'
 import { resolveEventTimezone } from '@/lib/timezone'
 import {
   formatDateLabel,
@@ -294,54 +294,6 @@ const CategoryStandings = ({
           )}
         </div>
       ))}
-    </div>
-  )
-}
-
-// Mirrors DoubleEliminationBracketSections in events/[eventSlug]/brackets/page.tsx and
-// DoubleEliminationBracketView in the wizard - same "three stacked BracketTree sections" approach
-// kept consistent across all three double-elimination bracket renderers rather than building a
-// shared component for what's currently three call sites.
-const DoubleEliminationBracketSections = ({
-  bracketData,
-  timezone,
-}: {
-  bracketData: DoubleEliminationBracketData
-  timezone: string
-}) => {
-  const { grand_final: grandFinal, grand_final_reset: grandFinalReset } = bracketData
-  const grandFinalRounds =
-    grandFinal ?
-      [
-        {
-          name: 'Grand Final',
-          order: 0,
-          matches: [
-            grandFinal,
-            ...(grandFinalReset && grandFinalReset.status !== 'cancelled' ? [grandFinalReset] : []),
-          ],
-        },
-      ]
-    : []
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="mb-2 text-sm font-extrabold text-ink">Winners bracket</h3>
-        <BracketTree rounds={bracketData.winners_rounds} champion={null} timezone={timezone} />
-      </div>
-      {bracketData.losers_rounds.length > 0 ? (
-        <div>
-          <h3 className="mb-2 text-sm font-extrabold text-ink">Losers bracket</h3>
-          <BracketTree rounds={bracketData.losers_rounds} champion={null} timezone={timezone} />
-        </div>
-      ) : null}
-      {grandFinalRounds.length > 0 ? (
-        <div>
-          <h3 className="mb-2 text-sm font-extrabold text-ink">Grand final</h3>
-          <BracketTree rounds={grandFinalRounds} champion={bracketData.champion} timezone={timezone} />
-        </div>
-      ) : null}
     </div>
   )
 }

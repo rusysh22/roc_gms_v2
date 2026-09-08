@@ -575,7 +575,10 @@ const buildBracketMatchCard = (match: BracketMatch, matchSets: BracketMatchSet[]
   }
 }
 
-const detectDoubleEliminationChampion = (
+// Exported (originally private to this module's own bracket-cache builder below) so the no-login
+// Quick Bracket Tournament generator (src/lib/quickBracketGeneration.ts) can reuse the exact same
+// champion-detection rule for its own in-memory (never-persisted) grand final card.
+export const detectDoubleEliminationChampion = (
   grandFinal: BracketMatchCard | null,
   grandFinalReset: BracketMatchCard | null,
 ): BracketChampion => {

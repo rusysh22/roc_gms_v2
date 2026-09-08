@@ -23,6 +23,7 @@ import { MatchSets } from './src/collections/MatchSets'
 import { MedalRecords } from './src/collections/MedalRecords'
 import { Media } from './src/collections/Media'
 import { Players } from './src/collections/Players'
+import { QuickBrackets } from './src/collections/QuickBrackets'
 import { RegistrationSubmissions } from './src/collections/RegistrationSubmissions'
 import { Rosters } from './src/collections/Rosters'
 import { Rulesets } from './src/collections/Rulesets'
@@ -90,6 +91,7 @@ export default buildConfig({
     MatchSets,
     Standings,
     Brackets,
+    QuickBrackets,
     MedalRecords,
     Media,
     Articles,

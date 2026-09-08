@@ -10,6 +10,7 @@ import {
   Radio,
   ShieldCheck,
   Share2,
+  Zap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -189,6 +190,12 @@ export default function MarketingHomePage() {
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
+              <Button asChild variant="secondary">
+                <Link href="/quick-bracket/new">
+                  Quick Create Bracket Tournament
+                  <Zap className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
               <Button asChild variant="ghost">
                 <a href={DEMO_WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                   Request a demo
@@ -197,7 +204,7 @@ export default function MarketingHomePage() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-ink-soft">
-              New here? Walk through every step of the wizard before you create an account.{' '}
+              Just need a bracket right now? Quick Create needs no account - just names and a format.{' '}
               <Link href="#features" className="font-bold text-green underline-offset-2 hover:underline">
                 See what runs it
               </Link>
