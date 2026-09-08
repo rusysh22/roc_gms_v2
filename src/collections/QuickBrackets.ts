@@ -102,7 +102,21 @@ export const QuickBrackets: CollectionConfig = {
       name: 'owner_token',
       type: 'text',
       index: true,
-      admin: { hidden: true, description: 'Matched against a cookie for the "your guest brackets" list only - not a write credential.' },
+      admin: {
+        hidden: true,
+        description:
+          'Matched against a cookie to authorize attaching owner_user_id (the first time the creator signs in) - not a standing write credential once owner_user_id is set.',
+      },
+    },
+    {
+      name: 'owner_user_id',
+      type: 'relationship',
+      relationTo: 'users',
+      index: true,
+      admin: {
+        description:
+          'Set once, the first time the creator signs in/up on this bracket (verified via owner_token cookie). From then on, this account - not the original browser - can edit results/settings from any device. See prd/design/QUICK_BRACKET_TOURNAMENT_DESIGN.md section 11.',
+      },
     },
     {
       name: 'creator_ip',
@@ -117,7 +131,7 @@ export const QuickBrackets: CollectionConfig = {
       index: true,
       options: [
         { label: 'Active', value: 'active' },
-        { label: 'Claimed', value: 'claimed' },
+        { label: 'Upgraded to event', value: 'claimed' },
         { label: 'Expired', value: 'expired' },
       ],
     },
@@ -125,7 +139,7 @@ export const QuickBrackets: CollectionConfig = {
       name: 'claimed_event_id',
       type: 'relationship',
       relationTo: 'events',
-      admin: { description: 'Set by the Phase 2 claim-to-real-event flow.' },
+      admin: { description: 'Set by the "Upsize your event" upgrade-to-real-event flow.' },
     },
     {
       name: 'expires_at',

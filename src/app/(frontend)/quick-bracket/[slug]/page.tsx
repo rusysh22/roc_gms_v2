@@ -2,20 +2,21 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
-import { ArrowRight } from 'lucide-react'
 
 import config from '@payload-config'
 import type { SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { ShareButtons } from '@/components/share-buttons'
 import { BracketTree } from '../../brackets/bracketTree'
 import { DoubleEliminationBracketSections } from '../../brackets/doubleEliminationSections'
 import { getCurrentPublicUser } from '../../getCurrentPublicUser'
 import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
-import { ClaimOnLoad } from './ClaimOnLoad'
+import { EditorAccessOnLoad } from './EditorAccessOnLoad'
+import { QuickBracketEditor } from './QuickBracketEditor'
+import { RenameBracketControl } from './RenameBracketControl'
+import { UpsizeEventButton } from './UpsizeEventButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,14 @@ type QuickBracketDoc = {
   status: 'active' | 'claimed' | 'expired'
   expires_at: string
   owner_token?: string | null
+  owner_user_id?: (string | number) | { id: string | number } | null
   bracket_data?: SingleEliminationBracketData | DoubleEliminationBracketData | null
+}
+
+const resolveOwnerUserId = (bracket: QuickBracketDoc): string | number | null => {
+  const raw = bracket.owner_user_id
+  if (!raw) return null
+  return typeof raw === 'object' ? raw.id : raw
 }
 
 export default async function QuickBracketResultPage({
@@ -56,15 +64,19 @@ export default async function QuickBracketResultPage({
     notFound()
   }
 
-  // Only the browser that created this guest bracket sees the "claim it" CTA/flow - anyone else
-  // who opens a shared link still gets a growth CTA, just not one that would let them take
-  // ownership of someone else's tournament. See claimQuickBracketAction.ts for the server-side
-  // enforcement of the same rule (this check is UX only, not the security boundary).
+  // Sign in/up unlocks EDITOR access (prd/design/QUICK_BRACKET_TOURNAMENT_DESIGN.md section 11) -
+  // it does not create a real event. Two ownership signals: `isBrowserOwner` (the owner_token
+  // cookie, present the moment the bracket was created - true even signed out) authorizes
+  // *attaching* an account; `isEditor` (owner_user_id matches the signed-in user) is what actually
+  // unlocks the edit UI below, and works from any device once attached.
   const ownerToken = (await cookies()).get(quickBracketOwnerCookieName(slug))?.value
-  const isOwner = Boolean(ownerToken && ownerToken === bracket.owner_token)
-  const claimRedirect = `/quick-bracket/${slug}?claim=1`
+  const isBrowserOwner = Boolean(ownerToken && ownerToken === bracket.owner_token)
+  const editorRedirect = `/quick-bracket/${slug}?claim=1`
   const user = await getCurrentPublicUser()
-  const shouldAutoClaimNow = claim === '1' && isOwner && Boolean(user) && bracket.status === 'active'
+  const ownerUserId = resolveOwnerUserId(bracket)
+  const isEditor = Boolean(user && ownerUserId && String(ownerUserId) === String(user.id))
+  const shouldAttachEditorNow =
+    claim === '1' && isBrowserOwner && Boolean(user) && !isEditor && bracket.status === 'active'
 
   // Checked here even before the cleanup script (src/scripts/cleanupExpiredQuickBrackets.ts) has
   // run for this row - degrades gracefully with no cron dependency for correctness, only for
@@ -82,9 +94,12 @@ export default async function QuickBracketResultPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
-                Guest tournament
+                {isEditor ? 'Your guest tournament' : 'Guest tournament'}
               </p>
-              <h1 className="text-3xl font-extrabold sm:text-4xl">{bracket.name}</h1>
+              <div className="flex items-center gap-1">
+                <h1 className="text-3xl font-extrabold sm:text-4xl">{bracket.name}</h1>
+                {isEditor ? <RenameBracketControl slug={slug} name={bracket.name} /> : null}
+              </div>
             </div>
             {!isExpired ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-blue/40 bg-blue/5 px-3 py-1 text-xs font-semibold text-blue">
@@ -93,7 +108,7 @@ export default async function QuickBracketResultPage({
             ) : null}
           </div>
 
-          {shouldAutoClaimNow ? <ClaimOnLoad slug={slug} /> : null}
+          {shouldAttachEditorNow ? <EditorAccessOnLoad slug={slug} /> : null}
 
           {isExpired ? (
             <Card className="mt-8 text-sm text-ink-soft">
@@ -125,38 +140,45 @@ export default async function QuickBracketResultPage({
               {bracket.status === 'claimed' ? (
                 <div className="mt-6 rounded-panel border border-line bg-mist p-4">
                   <p className="text-sm text-ink-soft">
-                    This tournament has already been claimed and is now running as a full InTourney
-                    event.
+                    This tournament has already been upgraded and is now running as a full
+                    InTourney event.
                   </p>
+                </div>
+              ) : isEditor ? (
+                <div className="mt-6 flex flex-col gap-4 rounded-panel border border-green/30 bg-mist p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-ink">
+                    You can enter results below - no need to sign up again on this device. Want
+                    multiple sports, categories, or a public event page? Upsize this into a full
+                    InTourney event any time.
+                  </p>
+                  <UpsizeEventButton slug={slug} />
                 </div>
               ) : (
                 <div className="mt-6 flex flex-col gap-4 rounded-panel border border-green/30 bg-mist p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-ink">
-                    {isOwner
-                      ? 'This is a preview - no scores can be entered yet. Sign up to run this live, keep this bracket permanently, and unlock every other tournament format.'
+                    {isBrowserOwner
+                      ? 'This is a preview - sign in to edit results directly on this page, from any device.'
                       : 'Like this bracket? Create your own free tournament on InTourney - no account needed to try it.'}
                   </p>
                   <div className="flex shrink-0 items-center gap-4">
-                    {isOwner ? (
+                    {isBrowserOwner ? (
                       <Link
-                        href={`/login?redirect=${encodeURIComponent(claimRedirect)}`}
+                        href={`/login?redirect=${encodeURIComponent(editorRedirect)}`}
                         className="text-sm font-bold text-ink-soft hover:text-ink"
                       >
                         Sign in
                       </Link>
                     ) : null}
-                    <Button asChild>
-                      <Link
-                        href={
-                          isOwner
-                            ? `/register?redirect=${encodeURIComponent(claimRedirect)}`
-                            : '/register'
-                        }
-                      >
-                        {isOwner ? 'Sign up to run this live' : 'Create your own'}
-                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                      </Link>
-                    </Button>
+                    <Link
+                      href={
+                        isBrowserOwner
+                          ? `/register?redirect=${encodeURIComponent(editorRedirect)}`
+                          : '/register'
+                      }
+                      className="inline-flex h-11 items-center gap-2 rounded-full bg-green px-6 text-[0.95rem] font-semibold text-paper no-underline transition-colors hover:bg-green/90"
+                    >
+                      {isBrowserOwner ? 'Sign up to edit' : 'Create your own'}
+                    </Link>
                   </div>
                 </div>
               )}
@@ -176,6 +198,10 @@ export default async function QuickBracketResultPage({
                   />
                 )}
               </div>
+
+              {isEditor && bracket.bracket_data ? (
+                <QuickBracketEditor slug={slug} format={bracket.format} bracketData={bracket.bracket_data} />
+              ) : null}
             </>
           )}
         </div>

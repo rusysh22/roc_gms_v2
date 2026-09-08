@@ -3,6 +3,7 @@
 Owner: Rusydani
 Status: **SPEC — not started**
 Created: 2026-09-08
+Revised: 2026-09-08 — Phase 2 redesigned (see §11)
 Relates to: `prd/redesign/guest-wizard-and-auth-redesign.md` (the *other* no-login surface — full
 event wizard, still requires sign-in to persist), `prd/decision-log.md`, `src/lib/matchGeneration.ts`,
 `src/lib/doubleElimination.ts`, `src/app/(frontend)/brackets/bracketTree.tsx`
@@ -307,6 +308,42 @@ extending rather than reinventing (aurora-blob hero, bracket-connector motif, gr
   this is an intentionally separate, unrelated system (see the callout at the top of this doc).
 - Redis-backed rate limiting is out of scope (matches existing precedent - not introduced here even
   though it would improve robustness, to avoid this feature being the reason infra work happens).
+
+## 11. Phase 2 redesign (2026-09-08) — sign-in unlocks editing, "upgrade" is a separate opt-in
+
+**Why:** the originally-built Phase 2 made "sign up" and "convert into a full multi-sport Event"
+the same action — the only way to ever run a quick bracket live was to immediately become a full
+Event with real Sports/Categories/Stages/Entries/Matches. Feedback: that's "the next level" (small
+→ big, free → paid) and shouldn't be forced on someone who just wants to score a quick bracket.
+Quick Bracket should stand on its own as a self-contained, lightweight live tool; converting to a
+full Event is a distinct, explicit upsell ("Upsize your event" / "Host your big tournament"), not
+a requirement.
+
+**New model:**
+- **Sign in / sign up = editor access**, not event creation. `quick-brackets` gets an
+  `owner_user_id` field (relationship → users). The first time a signed-in user opens their own
+  guest-created bracket (verified via the existing `owner_token` cookie, same anti-hijack check as
+  before), the account is attached as `owner_user_id` - from then on that account can edit from any
+  device (not just the original browser), since ownership is account-based, not cookie-based.
+- **Editing happens directly on `/quick-bracket/[slug]`**: once `owner_user_id` matches the signed-in
+  viewer, an "Enter results" panel appears below the (still read-only, still g-loot-rendered)
+  bracket visual - one row per playable match (both slots have a real participant), click a name to
+  record them as the winner, optional score text. Updates `quick-brackets.bracket_data` in place via
+  a small self-contained advancement engine (`src/lib/quickBracketAdvancement.ts`) that mirrors
+  `winnerAdvancement.ts`/`attemptDoubleEliminationAdvancement`'s routing rules but operates on the
+  bracket's own JSON blob directly - no `matches`/`stages`/`events` rows involved at all.
+- Settings editing is scoped down to **rename only** for this pass (toggling third place / split
+  participants / reseeding after results may already exist needs more careful design - deferred).
+- **"Upsize your event"**: the original claim flow (materializes a real Events → Sports →
+  CompetitionCategories → Stages → CompetitionEntries → Matches chain) is kept almost as-is,
+  renamed `upgradeQuickBracketToEventAction`, and re-triggered as an explicit button the owner
+  clicks from inside edit mode - never automatic on sign-up. No pricing/paywall gating is added
+  here (nothing like that exists in the app yet); that's an explicitly separate, later conversation
+  per the stakeholder.
+- **Known gap, deferred**: match results already entered on the quick bracket are NOT currently
+  carried over into the real `Matches` rows when upgrading - the upgraded event starts fresh/unplayed.
+  Flagged as a fast-follow, not built this pass (mapping quick-bracket match ids to newly-created
+  real match ids reliably is real work of its own).
 
 ## 10. Verification checklist
 

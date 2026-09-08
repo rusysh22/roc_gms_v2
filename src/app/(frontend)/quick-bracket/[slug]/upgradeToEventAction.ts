@@ -14,14 +14,17 @@ import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 import { DEFAULT_EVENT_TIMEZONE, type EventTimezone } from '@/lib/timezone'
 import { ACTIVE_EVENT_COOKIE } from '../../workspaces/activeEvent'
 
-// Phase 2 of prd/design/QUICK_BRACKET_TOURNAMENT_DESIGN.md: converts a guest quick-bracket into a
-// real Events/Sports/CompetitionCategories/Stages/(CompetitionEntries/Matches) chain, owned by the
-// account that just signed up/logged in. Called from ClaimOnLoad.tsx as a direct client->server
-// action invocation (not a <form action>) so it can run right after auth completes, on the
-// `/quick-bracket/[slug]?claim=1` redirect target that register/login already land on via their
-// existing `?redirect=` plumbing - no changes needed to RegisterForm/LoginPanel/Google SSO.
+// "Upsize your event" (prd/design/QUICK_BRACKET_TOURNAMENT_DESIGN.md section 11) - converts a
+// quick-bracket into a real Events/Sports/CompetitionCategories/Stages/(CompetitionEntries/
+// Matches) chain, owned by the signed-in account. Renamed from the original "claim" action: this
+// is now an explicit, owner-triggered button click from inside edit mode, never automatic on
+// sign-up (see quickBracketEditActions.ts's attachQuickBracketEditorAction for what sign-up
+// actually unlocks - editing in place, not this).
+//
+// Known gap: any match results already entered on the quick bracket are NOT carried over - the
+// upgraded event's matches start fresh/unplayed. Flagged as a deferred fast-follow, not built here.
 
-export type ClaimQuickBracketResult =
+export type UpgradeToEventResult =
   | { ok: true; eventId: string | number }
   | { ok: false; reason: 'not_signed_in' | 'not_found' | 'not_active' | 'expired' | 'not_owner' | 'failed' }
 
@@ -33,8 +36,15 @@ type QuickBracketDoc = {
   bracket_size_mode: 'from_participants' | 'manual_size'
   participants?: { name: string; seed: number }[] | null
   owner_token?: string | null
+  owner_user_id?: (string | number) | { id: string | number } | null
   status: 'active' | 'claimed' | 'expired'
   expires_at: string
+}
+
+const resolveOwnerUserId = (bracket: QuickBracketDoc): string | number | null => {
+  const raw = bracket.owner_user_id
+  if (!raw) return null
+  return typeof raw === 'object' ? raw.id : raw
 }
 
 const slugify = (value: string) =>
@@ -62,16 +72,13 @@ const findAvailableEventSlug = async (payload: Payload, base: string): Promise<s
   return `${base}-${Date.now()}`
 }
 
-export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickBracketResult> {
+export async function upgradeQuickBracketToEventAction(slug: string): Promise<UpgradeToEventResult> {
   const payload = await getPayload({ config })
   const headersList = await headers()
   const { user } = await payload.auth({ headers: headersList })
   if (!user) {
     return { ok: false, reason: 'not_signed_in' }
   }
-
-  const cookieStore = await cookies()
-  const ownerToken = cookieStore.get(quickBracketOwnerCookieName(slug))?.value
 
   const found = await payload.find({
     collection: 'quick-brackets',
@@ -89,11 +96,22 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
   if (new Date(bracket.expires_at).getTime() < Date.now()) {
     return { ok: false, reason: 'expired' }
   }
-  // Only the browser that created this guest bracket can claim it - otherwise anyone who receives
-  // a shared link could sign up and take ownership of someone else's tournament. Matches
-  // wizardAccess.ts's verifyAnonDraft token-matching pattern for the anonymous event draft flow.
-  if (!ownerToken || ownerToken !== bracket.owner_token) {
-    return { ok: false, reason: 'not_owner' }
+
+  // Editor access (owner_user_id, attached by attachQuickBracketEditorAction) is the normal path
+  // - the "Upsize" button only ever renders for that user. The owner_token cookie check stays as
+  // a fallback for a not-yet-attached bracket, mirroring wizardAccess.ts's verifyAnonDraft
+  // token-matching pattern for the anonymous event draft flow.
+  const existingOwnerId = resolveOwnerUserId(bracket)
+  if (existingOwnerId) {
+    if (String(existingOwnerId) !== String(user.id)) {
+      return { ok: false, reason: 'not_owner' }
+    }
+  } else {
+    const cookieStore = await cookies()
+    const ownerToken = cookieStore.get(quickBracketOwnerCookieName(slug))?.value
+    if (!ownerToken || ownerToken !== bracket.owner_token) {
+      return { ok: false, reason: 'not_owner' }
+    }
   }
 
   try {
@@ -105,7 +123,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
       name: bracket.name,
       slug: eventSlug,
       // Placeholder dates - the organizer fixes these on the wizard's Event step, which is
-      // exactly where the claim redirects them next.
+      // exactly where the upgrade redirects them next.
       event_start_at: now.toISOString(),
       event_end_at: oneWeekLater.toISOString(),
       timezone: DEFAULT_EVENT_TIMEZONE as EventTimezone,
@@ -123,7 +141,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
         data: { event_id: Number(event.id), user_id: Number(user.id) },
       })
     } catch (error) {
-      payload.logger.error(`Failed to enrol claimer as member of event ${event.id}: ${error}`)
+      payload.logger.error(`Failed to enrol upgrader as member of event ${event.id}: ${error}`)
     }
 
     const sport = await payload.create({
@@ -188,12 +206,13 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
         entries.push({ id: entry.id, display_name: participant.name, seed_number: participant.seed })
       }
 
-      // Matches.match_number is UNIQUE GLOBALLY (no per-event scoping) - every claimed quick
+      // Matches.match_number is UNIQUE GLOBALLY (no per-event scoping) - every upgraded quick
       // bracket creates a category with the same fixed slug ('bracket'), so prefixing with that
-      // slug alone would collide across every single quick-bracket claim ever made on this server
-      // (confirmed the hard way: every match create failed silently - createSingleEliminationBracketMatches
-      // swallows per-match errors into failedCount rather than throwing). event.slug is guaranteed
-      // globally unique (findAvailableEventSlug above), so prefix with that instead.
+      // slug alone would collide across every single quick-bracket upgrade ever made on this
+      // server (confirmed the hard way: every match create failed silently -
+      // createSingleEliminationBracketMatches swallows per-match errors into failedCount rather
+      // than throwing). event.slug is guaranteed globally unique (findAvailableEventSlug above),
+      // so prefix with that instead.
       let sequence = 1
       const nextMatchNumber = (prefix: string) =>
         `${event.slug}-${prefix}-${String(sequence++).padStart(3, '0')}`
@@ -229,7 +248,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
       // during testing: a match_number collision) fails EVERY match silently unless logged here.
       if (generationResult.failedCount > 0) {
         payload.logger.error(
-          `Quick bracket claim for event ${event.id}: ${generationResult.failedCount} of ${
+          `Quick bracket upgrade for event ${event.id}: ${generationResult.failedCount} of ${
             generationResult.failedCount + generationResult.createdCount
           } matches failed to create.`,
         )
@@ -248,6 +267,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
       data: { status: 'claimed', claimed_event_id: Number(event.id) },
     })
 
+    const cookieStore = await cookies()
     cookieStore.set(ACTIVE_EVENT_COOKIE, String(event.id), {
       httpOnly: true,
       sameSite: 'lax',
@@ -257,7 +277,7 @@ export async function claimQuickBracketAction(slug: string): Promise<ClaimQuickB
 
     return { ok: true, eventId: event.id }
   } catch (error) {
-    payload.logger.error(`Failed to claim quick bracket ${bracket.id}: ${error}`)
+    payload.logger.error(`Failed to upgrade quick bracket ${bracket.id}: ${error}`)
     return { ok: false, reason: 'failed' }
   }
 }
