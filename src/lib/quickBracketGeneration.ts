@@ -54,6 +54,15 @@ const participantFromEntry = (
   }
 }
 
+// No real `/matches/[matchNumber]` page exists for a guest bracket's matches - a non-'/' sentinel
+// (rather than an empty string) still unlocks BracketTree's "Match Details" trigger button and
+// details modal (both matter now that matches carry real winners/scores from live editing), while
+// the modal's own "View match details" external-link section checks for a leading '/' and falls
+// back to "This match does not have a public page yet." instead of navigating anywhere broken.
+// Exported so quickBracketAdvancement.ts's fillSlot can set the same sentinel once a previously
+// blank downstream match (Final, a losers-bracket slot, ...) receives its first real participant.
+export const QUICK_BRACKET_DETAIL_HREF = 'quick-bracket-match'
+
 const buildMatchCard = ({
   id,
   matchNumber,
@@ -72,10 +81,10 @@ const buildMatchCard = ({
   id,
   match_number: matchNumber,
   round_name: roundName,
-  // No detail page exists for a guest bracket's matches - an empty href keeps BracketTree's
-  // "Match Details" link from rendering at all (see bracketTree.tsx's `match.href` check), which
-  // is the correct guest-mode behavior since nothing here is ever actually played.
-  detail_href: '',
+  // Only worth a details modal once at least one side is real - a fully TBD-vs-TBD slot (a blank
+  // bracket, or a round not reached yet) has nothing to show, so it keeps the empty href that
+  // suppresses BracketTree's "Match Details" trigger entirely.
+  detail_href: participantA.id || participantB.id ? QUICK_BRACKET_DETAIL_HREF : '',
   status: isBye ? 'walkover' : 'ready_for_scheduling',
   winner_entry_id: isBye ? (participantA.isWinner ? participantA.id : participantB.id) : undefined,
   score_summary: isBye ? 'Bye' : undefined,

@@ -51,6 +51,12 @@ export type BracketParticipant = {
   seed?: number
   isWinner: boolean
   isPlaceholder: boolean
+  // Quick Bracket Tournament only (src/lib/quickBracketAdvancement.ts) - a raw per-side score
+  // number entered directly by the guest organizer. Production matches show a score via
+  // set_score/match-sets instead (parseSetsWon in bracketTree.tsx) and never set this; it exists
+  // as a fallback source for BracketTree's compact-card result text and details modal when no
+  // structured set_score is present.
+  score?: number
 }
 
 export type BracketMatchCard = {

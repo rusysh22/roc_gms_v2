@@ -103,7 +103,8 @@ export async function updateQuickBracketMatchAction(
   slug: string,
   matchId: string,
   winnerSlot: 'a' | 'b',
-  scoreSummary: string,
+  scoreAInput: string,
+  scoreBInput: string,
 ): Promise<UpdateQuickBracketResult> {
   const payload = await getPayload({ config })
   const access = await assertEditorAccess(payload, slug)
@@ -112,11 +113,19 @@ export async function updateQuickBracketMatchAction(
   const { bracket } = access
   if (!bracket.bracket_data) return { ok: false, reason: 'no_bracket_data' }
 
-  const trimmedScore = scoreSummary.trim() || undefined
+  const parseScore = (value: string): number | undefined => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  const scoreA = parseScore(scoreAInput)
+  const scoreB = parseScore(scoreBInput)
+
   const outcome =
     bracket.bracket_data.format === 'double_elimination'
-      ? applyQuickDoubleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreSummary: trimmedScore })
-      : applyQuickSingleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreSummary: trimmedScore })
+      ? applyQuickDoubleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
+      : applyQuickSingleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
 
   if (outcome.error) return { ok: false, reason: outcome.error }
 

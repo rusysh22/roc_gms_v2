@@ -7,6 +7,7 @@ import {
   detectSingleEliminationChampion,
 } from './brackets'
 import { type DoubleEliminationBracketData, buildLosersBracketPlan } from './doubleElimination'
+import { QUICK_BRACKET_DETAIL_HREF } from './quickBracketGeneration'
 
 // Live scoring for a Quick Bracket Tournament (prd/design/QUICK_BRACKET_TOURNAMENT_DESIGN.md
 // section 11) - a self-contained advancement engine that mirrors the rules in
@@ -24,7 +25,11 @@ import { type DoubleEliminationBracketData, buildLosersBracketPlan } from './dou
 export type QuickMatchResultInput = {
   matchId: string
   winnerSlot: 'a' | 'b'
-  scoreSummary?: string
+  // Raw per-side numbers the organizer typed (e.g. games/points won) - independent of winnerSlot,
+  // so scoreA always lands on participant_a regardless of who won. Both optional: a winner can be
+  // recorded with no score at all.
+  scoreA?: number
+  scoreB?: number
 }
 
 export type QuickMatchResultOutcome<T> = { data: T; error?: string }
@@ -43,7 +48,8 @@ const cloneRound = (round: BracketRound): BracketRound => ({
 const applyResult = (
   match: BracketMatchCard,
   winnerSlot: 'a' | 'b',
-  scoreSummary?: string,
+  scoreA?: number,
+  scoreB?: number,
 ): { winner: BracketParticipant; loser: BracketParticipant } | null => {
   const winner = winnerSlot === 'a' ? match.participant_a : match.participant_b
   const loser = winnerSlot === 'a' ? match.participant_b : match.participant_a
@@ -52,7 +58,8 @@ const applyResult = (
   }
   match.status = 'result_published'
   match.winner_entry_id = winner.id
-  match.score_summary = scoreSummary
+  match.participant_a.score = scoreA
+  match.participant_b.score = scoreB
   match.participant_a.isWinner = String(match.participant_a.id ?? '') === String(winner.id)
   match.participant_b.isWinner = String(match.participant_b.id ?? '') === String(winner.id)
   return { winner, loser }
@@ -113,6 +120,13 @@ const fillSlot = (match: BracketMatchCard, slot: 'a' | 'b', participant: Bracket
   target.seed = participant.seed
   target.isPlaceholder = false
   target.isWinner = false
+  // This downstream match (Final, a losers-bracket slot, the grand final, ...) was generated
+  // blank (both sides TBD, detail_href '' so BracketTree shows no "Match Details" trigger on an
+  // empty box) - now that it has a real side, it's worth a trigger even before the other side
+  // fills in, matching how a match with only one real side already renders elsewhere.
+  if (!match.detail_href) {
+    match.detail_href = QUICK_BRACKET_DETAIL_HREF
+  }
 }
 
 export const applyQuickSingleEliminationResult = (
@@ -142,7 +156,7 @@ export const applyQuickSingleEliminationResult = (
   }
 
   const match = rounds[targetRoundIndex].matches[targetMatchIndex]
-  const outcome = applyResult(match, input.winnerSlot, input.scoreSummary)
+  const outcome = applyResult(match, input.winnerSlot, input.scoreA, input.scoreB)
   if (!outcome) {
     return { data, error: 'Cannot set a winner for an empty slot.' }
   }
@@ -205,7 +219,7 @@ export const applyQuickDoubleEliminationResult = (
 
   if (location.section === 'wb') {
     const match = winnersRounds[location.roundIndex].matches[location.matchIndex]
-    const outcome = applyResult(match, input.winnerSlot, input.scoreSummary)
+    const outcome = applyResult(match, input.winnerSlot, input.scoreA, input.scoreB)
     if (!outcome) return { data, error: 'Cannot set a winner for an empty slot.' }
     const { winner, loser } = outcome
 
@@ -247,7 +261,7 @@ export const applyQuickDoubleEliminationResult = (
     }
   } else if (location.section === 'lb') {
     const match = losersRounds[location.roundIndex].matches[location.matchIndex]
-    const outcome = applyResult(match, input.winnerSlot, input.scoreSummary)
+    const outcome = applyResult(match, input.winnerSlot, input.scoreA, input.scoreB)
     if (!outcome) return { data, error: 'Cannot set a winner for an empty slot.' }
     const { winner } = outcome
 
@@ -281,7 +295,7 @@ export const applyQuickDoubleEliminationResult = (
     // generate a grand_final_reset card) - whichever side wins the grand final is champion
     // outright, including a losers-bracket finalist who "should" force a reset in strict
     // double-elimination rules. An accepted simplification for a quick, no-login tool.
-    const outcome = applyResult(grandFinal, input.winnerSlot, input.scoreSummary)
+    const outcome = applyResult(grandFinal, input.winnerSlot, input.scoreA, input.scoreB)
     if (!outcome) return { data, error: 'Cannot set a winner for an empty slot.' }
   }
 

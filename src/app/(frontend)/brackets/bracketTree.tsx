@@ -216,9 +216,12 @@ const transformToGLootData = (displayRounds: BracketRound[], timezone: string): 
 
       const setsWon = parseSetsWon(realMatch.set_score)
       const participants: GLootParticipant[] = []
+      // Quick Bracket Tournament matches have no structured set_score (no per-set entry, just a
+      // simple per-side number) - fall back to BracketParticipant.score, which only quick-bracket
+      // data ever sets, so this changes nothing for production matches.
       const sides = [
-        { participant: realMatch.participant_a, score: setsWon?.[0] },
-        { participant: realMatch.participant_b, score: setsWon?.[1] },
+        { participant: realMatch.participant_a, score: setsWon?.[0] ?? realMatch.participant_a.score },
+        { participant: realMatch.participant_b, score: setsWon?.[1] ?? realMatch.participant_b.score },
       ]
       const resultTextFor = (side: (typeof sides)[number]) => {
         const isWalkoverWinner = realMatch.status === 'walkover' && side.participant.isWinner
@@ -709,8 +712,12 @@ export const BracketTree = ({
 
                 {/* Score and schedule are only ever edited from the Match Officer / Scheduler
                     workspace (a single authorized mutation path per AUDIT_E2E MAT-01/PUB-03) -
-                    this public bracket view is read-only and links out to the live match page. */}
-                {selectedMatch.href ? (
+                    this public bracket view is read-only and links out to the live match page.
+                    Quick Bracket Tournament matches open this same modal (their detail_href is a
+                    non-'/' sentinel so the trigger button above still shows) but have no real
+                    page to link to - checking for a real path here (rather than bare truthiness)
+                    keeps that case correctly showing the fallback line instead of a broken link. */}
+                {selectedMatch.href?.startsWith('/') ? (
                   <Link
                     href={selectedMatch.href}
                     className={cn(buttonVariants({ variant: 'primary' }), 'w-full')}

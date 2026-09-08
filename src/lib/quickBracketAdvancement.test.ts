@@ -71,6 +71,30 @@ describe('applyQuickSingleEliminationResult', () => {
     const result = applyQuickSingleEliminationResult(bracket, { matchId: 'sf-0', winnerSlot: 'a' })
     expect(result.error).toBe('Cannot set a winner for an empty slot.')
   })
+
+  it('records per-side scores independent of who won, and unlocks a details href downstream', () => {
+    const bracket = buildQuickSingleEliminationBracket(
+      { mode: 'from_participants', entries: entries(4) },
+      { thirdPlace: false },
+    )
+    expect((findMatch(bracket.rounds, 'final-0') as any).detail_href).toBe('')
+
+    const result = applyQuickSingleEliminationResult(bracket, {
+      matchId: 'sf-0',
+      winnerSlot: 'b',
+      scoreA: 19,
+      scoreB: 21,
+    })
+    const sf0 = findMatch(result.data.rounds, 'sf-0') as any
+    expect(sf0.participant_a.score).toBe(19)
+    expect(sf0.participant_b.score).toBe(21)
+    expect(sf0.participant_b.isWinner).toBe(true)
+
+    // The Final was generated blank (no real page to link to yet) - now that sf-0's winner has
+    // filled one of its slots, it should be worth a "Match Details" trigger.
+    const final = findMatch(result.data.rounds, 'final-0') as any
+    expect(final.detail_href).not.toBe('')
+  })
 })
 
 describe('applyQuickDoubleEliminationResult', () => {

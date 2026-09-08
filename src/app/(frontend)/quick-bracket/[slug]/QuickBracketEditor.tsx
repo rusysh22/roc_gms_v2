@@ -14,8 +14,14 @@ import { updateQuickBracketMatchAction } from './quickBracketEditActions'
 // itself clickable-editable. Simpler and lower-risk than teaching BracketTree's dialog about an
 // edit mode, at the cost of not being able to click a node directly on the tree - an acceptable
 // trade for a first cut of live scoring on a shared, already-complex rendering component.
+//
+// One number per side (not a single freeform "score" string) - these numbers flow straight into
+// BracketParticipant.score (see src/lib/brackets.ts), which BracketTree's compact match card and
+// details modal already know how to display, matching how a real per-side result reads everywhere
+// else in the app.
 
 type Section = { title: string; rounds: BracketRound[] }
+type ScoreState = { a: string; b: string }
 
 const buildSections = (
   format: 'single_elimination' | 'double_elimination',
@@ -47,7 +53,7 @@ export function QuickBracketEditor({
   const router = useRouter()
   const [savingId, setSavingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [scores, setScores] = useState<Record<string, string>>({})
+  const [scores, setScores] = useState<Record<string, ScoreState>>({})
 
   const sections = buildSections(format, bracketData)
   const playableMatches = sections.flatMap((section) =>
@@ -61,7 +67,8 @@ export function QuickBracketEditor({
   const handleSave = async (matchId: string, winnerSlot: 'a' | 'b') => {
     setSavingId(matchId)
     setError(null)
-    const result = await updateQuickBracketMatchAction(slug, matchId, winnerSlot, scores[matchId] || '')
+    const current = scores[matchId] || { a: '', b: '' }
+    const result = await updateQuickBracketMatchAction(slug, matchId, winnerSlot, current.a, current.b)
     setSavingId(null)
     if (!result.ok) {
       setError(result.reason)
@@ -102,8 +109,15 @@ export function QuickBracketEditor({
                   match={match}
                   roundName={roundName}
                   saving={savingId === String(match.id)}
-                  score={scores[String(match.id)] ?? match.score_summary ?? ''}
-                  onScoreChange={(value) => setScores((prev) => ({ ...prev, [String(match.id)]: value }))}
+                  score={
+                    scores[String(match.id)] ?? {
+                      a: match.participant_a.score?.toString() ?? '',
+                      b: match.participant_b.score?.toString() ?? '',
+                    }
+                  }
+                  onScoreChange={(next) =>
+                    setScores((prev) => ({ ...prev, [String(match.id)]: next }))
+                  }
                   onSave={(slot) => handleSave(String(match.id), slot)}
                 />
               ))}
@@ -126,8 +140,8 @@ const MatchResultRow = ({
   match: BracketMatchCard
   roundName: string
   saving: boolean
-  score: string
-  onScoreChange: (value: string) => void
+  score: ScoreState
+  onScoreChange: (score: ScoreState) => void
   onSave: (slot: 'a' | 'b') => void
 }) => {
   const decided = match.status === 'result_published'
@@ -135,6 +149,7 @@ const MatchResultRow = ({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-card border border-line p-3">
       <span className="w-28 shrink-0 text-xs font-semibold text-ink-soft">{roundName}</span>
+
       <button
         type="button"
         onClick={() => onSave('a')}
@@ -148,7 +163,23 @@ const MatchResultRow = ({
       >
         {match.participant_a.label}
       </button>
+      <input
+        value={score.a}
+        onChange={(event) => onScoreChange({ ...score, a: event.target.value })}
+        placeholder="0"
+        inputMode="numeric"
+        className="h-8 w-14 rounded-full border border-line bg-paper px-2 text-center text-xs text-ink focus-visible:border-green focus-visible:outline-none"
+      />
+
       <span className="text-xs font-semibold text-ink-soft">vs</span>
+
+      <input
+        value={score.b}
+        onChange={(event) => onScoreChange({ ...score, b: event.target.value })}
+        placeholder="0"
+        inputMode="numeric"
+        className="h-8 w-14 rounded-full border border-line bg-paper px-2 text-center text-xs text-ink focus-visible:border-green focus-visible:outline-none"
+      />
       <button
         type="button"
         onClick={() => onSave('b')}
@@ -162,12 +193,7 @@ const MatchResultRow = ({
       >
         {match.participant_b.label}
       </button>
-      <input
-        value={score}
-        onChange={(event) => onScoreChange(event.target.value)}
-        placeholder="Score (optional)"
-        className="h-8 w-32 rounded-full border border-line bg-paper px-3 text-xs text-ink focus-visible:border-green focus-visible:outline-none"
-      />
+
       {decided ? <span className="text-xs font-bold text-green">Saved</span> : null}
       {saving ? <span className="text-xs text-ink-soft">Saving...</span> : null}
     </div>
