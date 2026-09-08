@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Clock,
   MapPin,
-  Sparkles,
   Trophy,
 } from 'lucide-react'
 
@@ -348,20 +347,9 @@ export default async function EventHomePage({
 
         <div className="relative mx-auto flex w-full max-w-5xl flex-col items-start gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-              {logoImage?.url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions
-                <img
-                  src={logoImage.url}
-                  alt=""
-                  className="h-4 w-4 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
-              )}
-              {event.name}
-            </p>
-
+            {/* No more "event name" eyebrow pill here - the header nav now carries the event's own
+                logo + name (see PublicChrome/HeaderBrand), so this heading no longer needs to
+                repeat that identity right above itself. */}
             <EditableRegion
               state={editState}
               label="Hero tagline"

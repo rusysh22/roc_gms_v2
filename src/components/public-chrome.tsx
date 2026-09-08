@@ -150,6 +150,74 @@ function NavCta({
   )
 }
 
+type EventBranding = { name: string; logoUrl: string | null }
+
+// The header nav is rendered once, by the root layout, above the /events/[eventSlug] route tree -
+// it has no server-side access to that route's own already-fetched event data, only the URL (via
+// usePathname below). A small client-side fetch of just {name, logoUrl} (see the branding route
+// handler) is simpler here than threading event data down through a Context provider that would
+// need to live *above* this component in the tree to be visible to it, which the route structure
+// doesn't allow. Brief consequence: the generic InTourney mark shows for an instant on a cold load
+// of an event page before this resolves - an acceptable trade for "the header becomes the event's
+// own branding" without a bigger restructure.
+function useEventBranding(eventSlug: string | null): EventBranding | null {
+  const [branding, setBranding] = React.useState<EventBranding | null>(null)
+
+  React.useEffect(() => {
+    if (!eventSlug) {
+      setBranding(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/public/events/${eventSlug}/branding`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: EventBranding | null) => {
+        if (!cancelled) setBranding(data)
+      })
+      .catch(() => {
+        if (!cancelled) setBranding(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventSlug])
+
+  return branding
+}
+
+// Replaces the generic InTourney mark with the event's own uploaded logo + name once resolved, so
+// an event's public pages read as that event's own site rather than a page inside InTourney's -
+// falls back to the InTourney icon mark (not the full horizontal lockup) if the event has no logo
+// uploaded, since a bare name with no mark at all reads as unstyled rather than "this event's own
+// brand, just text-only". The name truncates rather than wrapping/overflowing - the floating pill
+// navbar has limited width to share with the nav links and CTA next to it.
+function HeaderBrand({ branding, fallback }: { branding: EventBranding | null; fallback: React.ReactNode }) {
+  if (!branding) {
+    return fallback
+  }
+
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {branding.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- Payload upload URL has runtime dimensions
+        <img
+          src={branding.logoUrl}
+          alt=""
+          className="h-7 w-7 shrink-0 rounded-full border border-line object-cover"
+        />
+      ) : (
+        <BrandLogo variant="icon" height={22} className="shrink-0" />
+      )}
+      <span
+        className="min-w-0 max-w-[9rem] truncate sm:max-w-[14rem] md:max-w-xs"
+        title={branding.name}
+      >
+        {branding.name}
+      </span>
+    </span>
+  )
+}
+
 export interface PublicChromeProps {
   brand: React.ReactNode
   user: PublicNavUser | null
@@ -164,6 +232,7 @@ export function PublicChrome({ brand, user, googleSsoEnabled, children }: Public
     !CHROME_EXCLUDED_PREFIXES.some((prefix) => pathname?.startsWith(prefix)) &&
     !CHROME_EXCLUDED_SUFFIXES.some((suffix) => pathname?.endsWith(suffix))
   const eventSlug = pathname?.match(EVENT_SLUG_PATTERN)?.[1] || null
+  const eventBranding = useEventBranding(eventSlug)
   const navItems = buildNavItems(eventSlug)
   const homeHref = navItems[0].href
   // Schedule and Standings share a pathname (Standings is a `?tab=` query variant of the same
@@ -191,7 +260,8 @@ export function PublicChrome({ brand, user, googleSsoEnabled, children }: Public
   return (
     <div className="flex min-h-svh flex-col font-sans">
       <NavBar
-        brand={brand}
+        brand={<HeaderBrand branding={eventSlug ? eventBranding : null} fallback={brand} />}
+        brandHref={homeHref}
         items={navItems}
         activeHref={activeHref}
         cta={<NavCta user={user} googleSsoEnabled={googleSsoEnabled} />}

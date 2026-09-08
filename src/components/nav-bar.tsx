@@ -14,6 +14,7 @@ export interface NavItem {
 
 export interface NavBarProps {
   brand: React.ReactNode
+  brandHref?: string
   items: NavItem[]
   activeHref?: string
   cta?: React.ReactNode
@@ -24,7 +25,7 @@ export interface NavBarProps {
 // rounded-full capsule, sticky while scrolling, active item marked by a contrasting pill inside
 // it. Not wired into any layout yet (that is redesign phase R1) - this only needs to compile and
 // be ready to consume.
-export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps) {
+export function NavBar({ brand, brandHref = '/', items, activeHref, cta, className }: NavBarProps) {
   const [scrolled, setScrolled] = React.useState(false)
   const [open, setOpen] = React.useState(false)
 
@@ -92,8 +93,8 @@ export function NavBar({ brand, items, activeHref, cta, className }: NavBarProps
         )}
       >
         <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2 pl-2 text-sm font-extrabold whitespace-nowrap text-ink no-underline"
+          href={brandHref}
+          className="flex min-w-0 shrink items-center gap-2 pl-2 text-sm font-extrabold text-ink no-underline"
         >
           {brand}
         </Link>
