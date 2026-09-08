@@ -70,6 +70,18 @@ export default async function RegisterPage({
           <RegisterForm redirectTo={redirectTo} />
         </div>
 
+        <p className="mt-5 text-center text-xs text-ink-soft">
+          Dengan membuat akun, Anda menyetujui{' '}
+          <Link href="/terms" className="font-semibold text-ink underline underline-offset-2">
+            Syarat & Ketentuan
+          </Link>{' '}
+          dan{' '}
+          <Link href="/privacy" className="font-semibold text-ink underline underline-offset-2">
+            Kebijakan Privasi
+          </Link>{' '}
+          kami.
+        </p>
+
         <p className="mt-8 text-center text-xs text-ink-soft">
           Already have an account?{' '}
           <Link

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import Script from 'next/script'
 import { useSearchParams } from 'next/navigation'
 import { Lock, Shuffle } from 'lucide-react'
@@ -314,6 +315,17 @@ export const QuickBracketForm = () => {
         <SubmitButton size="default" className="self-start" pendingLabel="Generating bracket...">
           Generate bracket
         </SubmitButton>
+        <p className="text-xs text-ink-soft">
+          By generating a bracket, you agree to our{' '}
+          <Link href="/terms" className="font-semibold text-ink underline underline-offset-2">
+            Terms
+          </Link>{' '}
+          and{' '}
+          <Link href="/privacy" className="font-semibold text-ink underline underline-offset-2">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
 
       <div className="lg:sticky lg:top-24">

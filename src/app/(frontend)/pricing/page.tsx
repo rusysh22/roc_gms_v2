@@ -84,6 +84,11 @@ export default async function PricingPage() {
           </p>
         </div>
 
+        <p className="mx-auto mt-6 max-w-xl text-center text-xs text-ink-soft">
+          Checkout and billing are handled by our payment partner, Berlanggan (berlanggan.web.id).
+          See our <Link href="/terms" className="font-semibold text-ink underline underline-offset-2">Terms</Link> for details.
+        </p>
+
         <div className="mx-auto mt-10 max-w-5xl">
           {!config ? (
             <Card className="mx-auto max-w-md text-center">

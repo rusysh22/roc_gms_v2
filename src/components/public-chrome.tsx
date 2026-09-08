@@ -6,7 +6,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ChevronDown, LogOut } from 'lucide-react'
 
 import { NavBar, type NavItem } from '@/components/nav-bar'
-import { Footer } from '@/components/footer'
+import { Footer, type FooterLink } from '@/components/footer'
 import { BrandLogo } from '@/components/brand-logo'
 import { LoginDialog } from '@/components/auth/login-dialog'
 import type { PublicNavUser } from '@/app/(frontend)/getCurrentPublicUser'
@@ -34,6 +34,15 @@ const CHROME_EXCLUDED_PREFIXES = [
 // the page and look unfinished on a poster meant to go up at a venue entrance.
 const CHROME_EXCLUDED_SUFFIXES = ['/display', '/poster']
 const EVENT_SLUG_PATTERN = /^\/events\/([^/]+)/
+
+// Company/legal footer row - same on every event and marketing page, so it's not event-scoped like
+// buildNavItems above.
+const FOOTER_LEGAL_LINKS: FooterLink[] = [
+  { label: 'About Us', href: '/about' },
+  { label: 'Terms of Service', href: '/terms' },
+  { label: 'Privacy Policy', href: '/privacy' },
+  { label: 'Contact Us', href: '/contact' },
+]
 
 // Nav items are event-scoped (see src/app/(frontend)/events/[eventSlug]/) - public visitors have
 // no session, so the current event slug is read straight off the URL and every non-Home link is
@@ -272,6 +281,7 @@ export function PublicChrome({ brand, user, googleSsoEnabled, children }: Public
         brandName="InTourney"
         tagline="Hosting your Tournament's"
         links={navItems}
+        legalLinks={FOOTER_LEGAL_LINKS}
       />
     </div>
   )

@@ -91,6 +91,15 @@ export default async function SubscribePage({
               <Link href="/pricing">View plans</Link>
             </Button>
           </div>
+
+          <p className="mt-6 text-xs text-ink-soft">
+            Payment is processed by our third-party billing partner, Berlanggan (berlanggan.web.id)
+            - see the &quot;Berlangganan &amp; Pembayaran&quot; section of our{' '}
+            <Link href="/terms" className="font-semibold text-ink underline underline-offset-2">
+              Terms of Service
+            </Link>
+            .
+          </p>
         </div>
       </section>
     </main>
