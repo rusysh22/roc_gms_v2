@@ -18,7 +18,10 @@ import { DEFAULT_EVENT_TIMEZONE } from '@/lib/timezone'
 // it - is deliberately Quick-Bracket-specific rather than a generic callback threaded in from
 // every caller. See QUICK_BRACKET_DETAIL_HREF/the "no public page" fallback below for the same
 // already-accepted pattern of this shared component knowing about Quick Bracket specifically.
-import { updateQuickBracketMatchAction } from '../quick-bracket/[slug]/quickBracketEditActions'
+import {
+  updateQuickBracketMatchAction,
+  updateQuickBracketMatchScheduleAction,
+} from '../quick-bracket/[slug]/quickBracketEditActions'
 
 // Rebuilt against the library's own default Match/theme rendering instead of fighting it with a
 // fully custom match component - the previous build reimplemented our whole card design on top of
@@ -45,6 +48,17 @@ const formatMatchDate = (value: string | undefined, timezone: string) => {
   }).format(new Date(value))
 }
 
+// Local (browser-timezone) <input type="datetime-local"> value from an ISO string - same helper as
+// RescheduleMatchDialog.tsx's own toDateTimeLocalValue. Quick Bracket has no per-event timezone
+// concept to preserve (unlike the real scheduler), so round-tripping through the browser's local
+// zone is an accepted simplification for this guest tool.
+const toDateTimeLocalValue = (iso?: string) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 type GLootParticipant = {
   id: string
   name: string
@@ -60,6 +74,11 @@ type GLootMatch = {
   nextMatchId: string | null
   tournamentRoundText: string
   startTime: string
+  // Unformatted ISO, alongside the already-formatted `startTime` display string above - the Match
+  // Details modal's editable Schedule tab needs the raw value to prefill/reset its
+  // <input type="datetime-local">, which `startTime` (locale/timezone-formatted for display) can't
+  // round-trip back into an input value.
+  scheduledStartAtRaw?: string
   state: string
   href?: string
   roundName?: string
@@ -196,6 +215,7 @@ const transformToGLootData = (displayRounds: BracketRound[], timezone: string): 
           nextMatchId,
           tournamentRoundText: String(r + 1),
           startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
+          scheduledStartAtRaw: realMatch.scheduled_start_at,
           state: 'WALK_OVER',
           href: realMatch.detail_href,
           roundName: round?.name,
@@ -263,6 +283,7 @@ const transformToGLootData = (displayRounds: BracketRound[], timezone: string): 
         nextMatchId,
         tournamentRoundText: String(r + 1),
         startTime: formatMatchDate(realMatch.scheduled_start_at, timezone),
+        scheduledStartAtRaw: realMatch.scheduled_start_at,
         state: realMatch.status,
         href: realMatch.detail_href,
         roundName: round?.name,
@@ -610,6 +631,7 @@ const MatchDetailsPanel = ({
   isLive,
   hasScore,
   quickBracketSlug,
+  timezone,
   onMatchChange,
 }: {
   match: GLootMatch
@@ -617,6 +639,7 @@ const MatchDetailsPanel = ({
   isLive: boolean
   hasScore: boolean
   quickBracketSlug?: string
+  timezone: string
   onMatchChange: (next: GLootMatch) => void
 }) => {
   const router = useRouter()
@@ -625,6 +648,16 @@ const MatchDetailsPanel = ({
   const [scoreB, setScoreB] = useState(() => prefillScore(match.participantBResultText))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [scheduleValue, setScheduleValue] = useState(() => toDateTimeLocalValue(match.scheduledStartAtRaw))
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
+  const [venueValue, setVenueValue] = useState(() => match.venueLabel ?? '')
+  const [savingVenue, setSavingVenue] = useState(false)
+  const [venueError, setVenueError] = useState<string | null>(null)
+
+  // Presence of quickBracketSlug alone gates Schedule/Venue editing - unlike scoring (below), a
+  // time or venue can be set on a match before both sides are even known.
+  const isEditor = Boolean(quickBracketSlug)
 
   // Only a match with two real, non-walkover sides can ever be scored - a still-TBD side (or the
   // auto-decided winner of a bye) has nothing to declare a winner over.
@@ -634,7 +667,7 @@ const MatchDetailsPanel = ({
     Boolean(match.participantBName) &&
     match.participantBName !== 'TBD' &&
     match.state !== 'WALK_OVER'
-  const canEditScore = Boolean(quickBracketSlug) && bothSidesReal
+  const canEditScore = isEditor && bothSidesReal
 
   const handleSave = async (winnerSlot: 'a' | 'b') => {
     if (!quickBracketSlug) return
@@ -657,6 +690,60 @@ const MatchDetailsPanel = ({
       participantBIsWinner: winnerSlot === 'b',
     })
     router.refresh()
+  }
+
+  const handleCancelScore = () => {
+    setScoreA(prefillScore(match.participantAResultText))
+    setScoreB(prefillScore(match.participantBResultText))
+    setError(null)
+  }
+
+  const handleSaveSchedule = async () => {
+    if (!quickBracketSlug) return
+    setSavingSchedule(true)
+    setScheduleError(null)
+    const iso = scheduleValue ? new Date(scheduleValue).toISOString() : null
+    const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
+      scheduledStartAt: iso,
+    })
+    setSavingSchedule(false)
+    if (!result.ok) {
+      setScheduleError(result.reason)
+      return
+    }
+    onMatchChange({
+      ...match,
+      startTime: iso ? formatMatchDate(iso, timezone) : '',
+      scheduledStartAtRaw: iso ?? undefined,
+    })
+    router.refresh()
+  }
+
+  const handleCancelSchedule = () => {
+    setScheduleValue(toDateTimeLocalValue(match.scheduledStartAtRaw))
+    setScheduleError(null)
+  }
+
+  const handleSaveVenue = async () => {
+    if (!quickBracketSlug) return
+    setSavingVenue(true)
+    setVenueError(null)
+    const trimmed = venueValue.trim()
+    const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
+      venueLabel: trimmed || null,
+    })
+    setSavingVenue(false)
+    if (!result.ok) {
+      setVenueError(result.reason)
+      return
+    }
+    onMatchChange({ ...match, venueLabel: trimmed || undefined })
+    router.refresh()
+  }
+
+  const handleCancelVenue = () => {
+    setVenueValue(match.venueLabel ?? '')
+    setVenueError(null)
   }
 
   return (
@@ -701,7 +788,7 @@ const MatchDetailsPanel = ({
                 {match.state.replaceAll('_', ' ')}
               </StatusBadge>
             </div>
-            {match.startTime ? (
+            {!isEditor && match.startTime ? (
               <div className="text-right">
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
                   {isFinished ? 'Played' : 'Scheduled'}
@@ -710,22 +797,91 @@ const MatchDetailsPanel = ({
               </div>
             ) : null}
           </div>
-          {!match.startTime ? <p className="mt-3 text-xs text-ink-soft">Not scheduled yet.</p> : null}
+          {!isEditor && !match.startTime ? <p className="mt-3 text-xs text-ink-soft">Not scheduled yet.</p> : null}
+          {isEditor ? (
+            <div className="mt-3">
+              <label htmlFor="qb-schedule-input" className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                Match time
+              </label>
+              <input
+                id="qb-schedule-input"
+                type="datetime-local"
+                value={scheduleValue}
+                onChange={(event) => setScheduleValue(event.target.value)}
+                className="mt-1.5 h-10 w-full rounded-card border border-line bg-paper px-3 text-sm text-ink focus-visible:border-green focus-visible:outline-none"
+              />
+              {scheduleError ? <p className="mt-2 text-xs font-semibold text-danger">{scheduleError}</p> : null}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveSchedule}
+                  disabled={savingSchedule}
+                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
+                >
+                  {savingSchedule ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelSchedule}
+                  disabled={savingSchedule}
+                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {tab === 'venue' ? (
         <div className="rounded-card bg-mist px-4 py-4">
-          {match.venueLabel ? (
-            <div className="flex items-start gap-2">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Venue</p>
-                <p className="mt-0.5 truncate text-sm font-semibold text-ink">{match.venueLabel}</p>
+          {!isEditor ? (
+            match.venueLabel ? (
+              <div className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Venue</p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-ink">{match.venueLabel}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-soft">No venue assigned yet.</p>
+            )
+          ) : (
+            <div>
+              <label htmlFor="qb-venue-input" className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+                Venue
+              </label>
+              <input
+                id="qb-venue-input"
+                type="text"
+                value={venueValue}
+                onChange={(event) => setVenueValue(event.target.value)}
+                placeholder="e.g. Court 2, Main Hall"
+                maxLength={120}
+                className="mt-1.5 h-10 w-full rounded-card border border-line bg-paper px-3 text-sm text-ink focus-visible:border-green focus-visible:outline-none"
+              />
+              {venueError ? <p className="mt-2 text-xs font-semibold text-danger">{venueError}</p> : null}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveVenue}
+                  disabled={savingVenue}
+                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
+                >
+                  {savingVenue ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelVenue}
+                  disabled={savingVenue}
+                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-          ) : (
-            <p className="text-xs text-ink-soft">No venue assigned yet.</p>
           )}
         </div>
       ) : null}
@@ -785,6 +941,16 @@ const MatchDetailsPanel = ({
               ) : (
                 <p className="mt-2 text-xs text-ink-soft">Click a team&apos;s name to record it as the winner.</p>
               )}
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={handleCancelScore}
+                  disabled={saving}
+                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+                >
+                  Cancel
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -971,6 +1137,7 @@ export const BracketTree = ({
                 isLive={isLive}
                 hasScore={hasScore}
                 quickBracketSlug={quickBracketSlug}
+                timezone={timezone}
                 onMatchChange={setSelectedMatch}
               />
             ) : null}

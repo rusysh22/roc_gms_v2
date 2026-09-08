@@ -9,9 +9,12 @@ import type { SingleEliminationBracketData } from '@/lib/brackets'
 import type { DoubleEliminationBracketData } from '@/lib/doubleElimination'
 import {
   applyQuickDoubleEliminationResult,
+  applyQuickDoubleEliminationSchedule,
   applyQuickSingleEliminationResult,
+  applyQuickSingleEliminationSchedule,
   assignQuickDoubleEliminationParticipant,
   assignQuickSingleEliminationParticipant,
+  type QuickMatchScheduleInput,
 } from '@/lib/quickBracketAdvancement'
 import { quickBracketOwnerCookieName } from '@/lib/quickBracketCookies'
 
@@ -128,6 +131,38 @@ export async function updateQuickBracketMatchAction(
     bracket.bracket_data.format === 'double_elimination'
       ? applyQuickDoubleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
       : applyQuickSingleEliminationResult(bracket.bracket_data, { matchId, winnerSlot, scoreA, scoreB })
+
+  if (outcome.error) return { ok: false, reason: outcome.error }
+
+  await payload.update({
+    collection: 'quick-brackets',
+    id: bracket.id,
+    data: { bracket_data: outcome.data },
+  })
+  revalidatePath(`/quick-bracket/${slug}`)
+  return { ok: true }
+}
+
+// Powers the Match Details modal's Schedule and Venue tabs (bracketTree.tsx's MatchDetailsPanel) -
+// each tab sends only the one field it owns (`scheduledStartAt` or `venueLabel`), leaving the
+// other `undefined` so a Venue save can never accidentally clear a time someone already set, and
+// vice versa. `null` clears a field, matching the "Cancel" affordance's need for a real "unset".
+export async function updateQuickBracketMatchScheduleAction(
+  slug: string,
+  matchId: string,
+  input: Pick<QuickMatchScheduleInput, 'scheduledStartAt' | 'venueLabel'>,
+): Promise<UpdateQuickBracketResult> {
+  const payload = await getPayload({ config })
+  const access = await assertEditorAccess(payload, slug)
+  if (!access.ok) return access
+
+  const { bracket } = access
+  if (!bracket.bracket_data) return { ok: false, reason: 'no_bracket_data' }
+
+  const outcome =
+    bracket.bracket_data.format === 'double_elimination'
+      ? applyQuickDoubleEliminationSchedule(bracket.bracket_data, { matchId, ...input })
+      : applyQuickSingleEliminationSchedule(bracket.bracket_data, { matchId, ...input })
 
   if (outcome.error) return { ok: false, reason: outcome.error }
 

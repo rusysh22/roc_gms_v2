@@ -133,6 +133,76 @@ const fillSlot = (match: BracketMatchCard, slot: 'a' | 'b', participant: Bracket
   }
 }
 
+export type QuickMatchScheduleInput = {
+  matchId: string
+  // `undefined` leaves the field untouched, `null`/'' clears it, a value sets it - lets the Save
+  // action send just the one field the organizer edited (Schedule tab vs. Venue tab) without
+  // clobbering the other.
+  scheduledStartAt?: string | null
+  venueLabel?: string | null
+}
+
+const applyScheduleToMatch = (match: BracketMatchCard, input: QuickMatchScheduleInput) => {
+  if (input.scheduledStartAt !== undefined) {
+    match.scheduled_start_at = input.scheduledStartAt || undefined
+  }
+  if (input.venueLabel !== undefined) {
+    match.venue_label = input.venueLabel || undefined
+  }
+}
+
+// Schedule/venue edits never affect winner advancement, so unlike applyQuick*Result above these
+// just locate the match card (in whichever section it lives in) and mutate it in place - no
+// downstream fillSlot/champion recomputation needed.
+export const applyQuickSingleEliminationSchedule = (
+  data: SingleEliminationBracketData,
+  input: QuickMatchScheduleInput,
+): QuickMatchResultOutcome<SingleEliminationBracketData> => {
+  const rounds = data.rounds.map(cloneRound)
+  for (const round of rounds) {
+    const match = round.matches.find((candidate) => String(candidate.id) === input.matchId)
+    if (match) {
+      applyScheduleToMatch(match, input)
+      return { data: { ...data, rounds } }
+    }
+  }
+  return { data, error: 'Match not found.' }
+}
+
+export const applyQuickDoubleEliminationSchedule = (
+  data: DoubleEliminationBracketData,
+  input: QuickMatchScheduleInput,
+): QuickMatchResultOutcome<DoubleEliminationBracketData> => {
+  const winnersRounds = data.winners_rounds.map(cloneRound)
+  const losersRounds = data.losers_rounds.map(cloneRound)
+  const grandFinal = data.grand_final ? cloneMatch(data.grand_final) : null
+  const grandFinalReset = data.grand_final_reset ? cloneMatch(data.grand_final_reset) : null
+
+  for (const round of winnersRounds) {
+    const match = round.matches.find((candidate) => String(candidate.id) === input.matchId)
+    if (match) {
+      applyScheduleToMatch(match, input)
+      return { data: { ...data, winners_rounds: winnersRounds } }
+    }
+  }
+  for (const round of losersRounds) {
+    const match = round.matches.find((candidate) => String(candidate.id) === input.matchId)
+    if (match) {
+      applyScheduleToMatch(match, input)
+      return { data: { ...data, losers_rounds: losersRounds } }
+    }
+  }
+  if (grandFinal && String(grandFinal.id) === input.matchId) {
+    applyScheduleToMatch(grandFinal, input)
+    return { data: { ...data, grand_final: grandFinal } }
+  }
+  if (grandFinalReset && String(grandFinalReset.id) === input.matchId) {
+    applyScheduleToMatch(grandFinalReset, input)
+    return { data: { ...data, grand_final_reset: grandFinalReset } }
+  }
+  return { data, error: 'Match not found.' }
+}
+
 export type AssignParticipantNameInput = { matchId: string; slot: 'a' | 'b'; name: string }
 
 // The "manual size" generation mode (buildBlankEliminationRounds in quickBracketGeneration.ts)
