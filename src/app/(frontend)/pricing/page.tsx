@@ -28,8 +28,36 @@ const INTERVAL_LABEL: Record<PlanDto['interval'], string> = {
   yearly: '/yr',
 }
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(price)
+const formatPrice = (price: number | string) =>
+  new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(
+    Number(price),
+  )
+
+// Berlanggan sends a bullet either as a full sentence ("SLA reports and audit log export") or as a
+// SCREAMING_SNAKE entitlement key ("MAX_EVENTS"); only the latter wants underscore-flattening. A
+// value of "true"/true/"" means "show the label alone", anything else appends ": <value>".
+const formatFeatureLabel = (key: string, value: unknown): string => {
+  const label = /^[A-Z0-9_]+$/.test(key) ? key.replaceAll('_', ' ').toLowerCase() : key
+  const shown = label.charAt(0).toUpperCase() + label.slice(1)
+  const v = typeof value === 'string' ? value.trim() : value
+  if (v === true || v === 'true' || v === '' || v == null) return shown
+  return `${shown}: ${String(v)}`
+}
+
+// Normalises Berlanggan's `features` (dict or list) into an ordered label list, dropping anything
+// already covered by an entitlement of the same key so a plan never shows a bullet twice.
+const planFeatureLabels = (plan: PlanDto): string[] => {
+  const entitlementKeys = new Set(Object.keys(plan.entitlements ?? {}))
+  if (Array.isArray(plan.features)) {
+    return plan.features.filter((f): f is string => typeof f === 'string' && f.trim() !== '')
+  }
+  if (plan.features && typeof plan.features === 'object') {
+    return Object.entries(plan.features)
+      .filter(([key]) => !entitlementKeys.has(key))
+      .map(([key, value]) => formatFeatureLabel(key, value))
+  }
+  return []
+}
 
 // A simple included/not-included row, shared by the Free card (fully hardcoded, since Quick
 // Bracket isn't a real Berlanggan product to fetch) and every paid card (as a baseline fact that's
@@ -101,6 +129,9 @@ const BASELINE_PAID_FEATURE = 'Full Event Management workspace access'
 
 const PlanCard = ({ plan, baseUrl }: { plan: PlanDto; baseUrl: string }) => {
   const entitlementEntries = Object.entries(plan.entitlements ?? {})
+  const featureLabels = planFeatureLabels(plan)
+  const strikePrice =
+    plan.sale_price != null && Number(plan.sale_price) > Number(plan.price) ? plan.sale_price : null
 
   return (
     <Card className="flex flex-col gap-4">
@@ -109,16 +140,23 @@ const PlanCard = ({ plan, baseUrl }: { plan: PlanDto; baseUrl: string }) => {
         <p className="mt-2 text-3xl font-extrabold text-ink">
           {formatPrice(plan.price)}
           <span className="ml-1 text-sm font-semibold text-ink-soft">{INTERVAL_LABEL[plan.interval]}</span>
+          {strikePrice ? (
+            <span className="ml-2 text-sm font-semibold text-ink-soft/70 line-through">
+              {formatPrice(strikePrice)}
+            </span>
+          ) : null}
         </p>
+        {plan.description ? (
+          <CardDescription className="mt-2 whitespace-pre-line">{plan.description}</CardDescription>
+        ) : null}
       </div>
       <ul className="flex flex-col gap-2 text-sm text-ink-soft">
         <FeatureRow label={BASELINE_PAID_FEATURE} included />
+        {featureLabels.map((label) => (
+          <FeatureRow key={`f-${label}`} included label={label} />
+        ))}
         {entitlementEntries.map(([key, value]) => (
-          <FeatureRow
-            key={key}
-            included
-            label={key.replaceAll('_', ' ') + (typeof value === 'boolean' ? '' : `: ${String(value)}`)}
-          />
+          <FeatureRow key={`e-${key}`} included label={formatFeatureLabel(key, value)} />
         ))}
       </ul>
       <Button asChild className="mt-auto">
