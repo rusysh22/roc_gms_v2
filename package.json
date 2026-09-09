@@ -17,6 +17,7 @@
     "drafts:cleanup": "payload run src/scripts/cleanupAbandonedDrafts.ts",
     "quick-brackets:cleanup": "payload run src/scripts/cleanupExpiredQuickBrackets.ts",
     "licenses:grandfather": "payload run src/scripts/grandfatherLicenses.ts",
+    "audit:backfill-event": "payload run src/scripts/backfillEventScopedAudit.ts",
     "generate:importmap": "payload generate:importmap",
     "generate:types": "payload generate:types",
     "typecheck": "tsc --noEmit",
