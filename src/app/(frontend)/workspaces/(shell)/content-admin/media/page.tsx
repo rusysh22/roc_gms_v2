@@ -9,6 +9,7 @@ import { FileUpload } from '@/components/ui/file-upload'
 import { Input } from '@/components/ui/input'
 import { PageHero } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
+import { getActiveEvent } from '../../../activeEvent'
 import { deleteMediaAction, uploadMediaAction } from './mediaActions'
 
 export const dynamic = 'force-dynamic'
@@ -45,11 +46,16 @@ export default async function MediaLibraryPage({ searchParams }: { searchParams?
   const mediaUpdated = get(params, 'mediaUpdated') === '1'
   const mediaDeleted = get(params, 'mediaDeleted') === '1'
 
+  // SEC-06: only this event's media (plus shared/legacy null-event assets), not every event's.
+  const activeEvent = await getActiveEvent(access.payload)
   const media = await access.payload.find({
     collection: 'media',
     depth: 0,
     limit: 60,
     sort: '-updatedAt',
+    where: activeEvent
+      ? { or: [{ event_id: { equals: activeEvent.id } }, { event_id: { exists: false } }] }
+      : { event_id: { exists: false } },
   })
 
   return (
