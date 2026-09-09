@@ -23,6 +23,7 @@ import { Matches } from './src/collections/Matches'
 import { MatchSets } from './src/collections/MatchSets'
 import { MedalRecords } from './src/collections/MedalRecords'
 import { Media } from './src/collections/Media'
+import { PendingLicenses } from './src/collections/PendingLicenses'
 import { Players } from './src/collections/Players'
 import { QuickBrackets } from './src/collections/QuickBrackets'
 import { RegistrationSubmissions } from './src/collections/RegistrationSubmissions'
@@ -110,6 +111,7 @@ export default buildConfig({
     Courts,
     Sponsors,
     Licenses,
+    PendingLicenses,
   ],
   db: postgresAdapter({
     pool: {

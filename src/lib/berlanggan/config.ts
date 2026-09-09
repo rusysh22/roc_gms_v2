@@ -24,6 +24,10 @@ export type BerlangganConfig = BerlangganPricingConfig & {
   pepper: string
 }
 
+export type BerlangganWebhookConfig = BerlangganConfig & {
+  webhookSecret: string
+}
+
 const resolveBaseUrl = () => (process.env.BERLANGGAN_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '')
 
 /** Enough to fetch the public plan catalog - no secret required. Null until a product slug is set. */
@@ -44,5 +48,19 @@ export const getBerlangganConfig = (): BerlangganConfig | null => {
   return { ...pricing, activationSecret, pepper }
 }
 
+/** Full activation config PLUS the shared secret Berlanggan signs its outgoing `order.paid` /
+ * `subscription.*` webhooks with (see src/app/(frontend)/api/berlanggan/webhook/route.ts). Null
+ * until BERLANGGAN_WEBHOOK_SECRET is also set - the webhook route treats null as "auto-activation
+ * isn't wired up yet" and 404s, so a missing secret can never be mistaken for an accepted call.
+ * Requires the activation config too because handling `license.issued` calls POST /v1/activate to
+ * register the account's seat and get a heartbeat token. */
+export const getBerlangganWebhookConfig = (): BerlangganWebhookConfig | null => {
+  const full = getBerlangganConfig()
+  const webhookSecret = process.env.BERLANGGAN_WEBHOOK_SECRET
+  if (!full || !webhookSecret) return null
+  return { ...full, webhookSecret }
+}
+
 export const isPricingConfigured = () => getBerlangganPricingConfig() !== null
 export const isGatingConfigured = () => getBerlangganConfig() !== null
+export const isWebhookConfigured = () => getBerlangganWebhookConfig() !== null

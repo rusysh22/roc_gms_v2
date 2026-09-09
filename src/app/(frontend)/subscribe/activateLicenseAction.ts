@@ -4,15 +4,15 @@ import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@payload-config'
-import { activate } from '@/lib/berlanggan/client'
 import { getBerlangganConfig } from '@/lib/berlanggan/config'
-import { deriveFingerprint } from '@/lib/berlanggan/fingerprint'
+import { activateAndStoreLicense } from '@/lib/berlanggan/licenseStore'
 
-// Links a Berlanggan (berlanggan.web.id) license key - received by the customer via email/
-// WhatsApp/their Berlanggan dashboard after buying a plan on /pricing - to the signed-in
-// InTourney account, unlocking /workspaces (see workspaceAuth.tsx's subscription check). One
-// InTourney account = one Berlanggan "seat" (fingerprint derived from the account id, not a real
-// device - see src/lib/berlanggan/fingerprint.ts).
+// The manual fallback: paste a Berlanggan (berlanggan.web.id) license key - received via email/
+// WhatsApp/the Berlanggan dashboard after buying a plan on /pricing - to link it to the signed-in
+// InTourney account. The primary path is Berlanggan's signed `license.issued` webhook
+// (src/app/(frontend)/api/berlanggan/webhook/route.ts), which activates the account automatically
+// the moment payment clears; this form only matters when that didn't reach the right account (e.g.
+// the buyer used a different email at checkout). Both paths share activateAndStoreLicense.
 
 export type ActivateLicenseResult =
   | { ok: true }
@@ -51,59 +51,14 @@ export async function activateLicenseAction(licenseKeyInput: string): Promise<Ac
     return { ok: false, reason: 'not_configured' }
   }
 
-  const fingerprint = deriveFingerprint(user.id, berlangganConfig.pepper)
-  const result = await activate(berlangganConfig, licenseKey, fingerprint)
-
-  if (result.status !== 'active') {
-    if (result.status === 'unreachable') {
-      return { ok: false, reason: 'unreachable' }
-    }
-    // Record the rejection for support visibility even though activation failed - a support
-    // conversation about "my key doesn't work" benefits from seeing what Berlanggan actually said.
-    const existing = await payload.find({
-      collection: 'licenses',
-      depth: 0,
-      limit: 1,
-      overrideAccess: true,
-      where: { user_id: { equals: user.id } },
-    })
-    if (existing.docs[0]) {
-      await payload.update({
-        collection: 'licenses',
-        id: existing.docs[0].id,
-        overrideAccess: true,
-        data: { last_error: result.message || result.status },
-      })
-    }
-    return { ok: false, reason: result.status }
-  }
-
-  const data = {
-    user_id: user.id,
-    license_key: licenseKey,
-    fingerprint,
-    token: result.token,
-    token_expires_at: result.token_expires_at,
-    license_expires_at: result.license_expires_at ?? null,
-    effective_status: 'active' as const,
-    entitlements: result.entitlements ?? {},
-    last_validated_at: new Date().toISOString(),
-    last_error: null,
-  }
-
-  const existing = await payload.find({
-    collection: 'licenses',
-    depth: 0,
-    limit: 1,
-    overrideAccess: true,
-    where: { user_id: { equals: user.id } },
+  const result = await activateAndStoreLicense(payload, {
+    config: berlangganConfig,
+    userId: user.id,
+    licenseKey,
   })
 
-  if (existing.docs[0]) {
-    await payload.update({ collection: 'licenses', id: existing.docs[0].id, overrideAccess: true, data })
-  } else {
-    await payload.create({ collection: 'licenses', overrideAccess: true, data })
+  if (!result.ok) {
+    return { ok: false, reason: result.reason }
   }
-
   return { ok: true }
 }
