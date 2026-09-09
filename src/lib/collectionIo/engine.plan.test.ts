@@ -86,6 +86,20 @@ describe('planMenuImport', () => {
     expect(plan.rows.find((r) => r.action === 'error')?.reason).toMatch(/name is required/i)
   })
 
+  it('SEC-03: ignores an `id` cell that points at another event, never targeting it for update', async () => {
+    const { payload } = makePayload({
+      // id 1 belongs to event 42, not the event 9 this import runs against.
+      clubs: [{ id: 1, event_id: 42, name: 'Rival Club', slug: 'rival-club' }],
+    })
+    const buffer = bookOf({ Clubs: [{ id: 1, name: 'Hijacked Name', slug: 'rival-club' }] })
+    const parsed = parseMenuWorkbook(buffer, MENU_IO_SPECS.clubs)
+    const plan = await planMenuImport(payload, '9', MENU_IO_SPECS.clubs, parsed)
+
+    // Falls through to the upsert-key path (slug), which also finds nothing in event 9 -> create,
+    // never an update against the foreign row.
+    expect(plan.rows[0].action).not.toBe('update')
+  })
+
   it('flags an unknown relation label as a per-row error', async () => {
     const { payload } = makePayload({ sports: [{ id: 1, event_id: 9, name: 'Badminton', slug: 'badminton' }] })
     const buffer = bookOf({ Rulesets: [{ name: 'Standard', sport: 'Chess' }] })

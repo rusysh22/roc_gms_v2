@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import type { Payload, Where } from 'payload'
 
+import { getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import type {
   ColumnSpec,
@@ -376,7 +377,20 @@ const findExisting = async (
   sheet: SheetSpec,
   row: ResolvedRow,
 ): Promise<string | null> => {
-  if (row.id) return row.id
+  if (row.id) {
+    // AUDIT_TOURNAMENT_STANDARDS SEC-03: the `id` column is filled from the uploaded spreadsheet,
+    // and the engine runs with the Local API's default overrideAccess. Without this check a
+    // staffer scoped to Event A could paste a record id from Event B into the id column and the
+    // import would update B's row and re-stamp it into A. Only accept an id that already belongs
+    // to this event; anything else falls through to the upsert-key / insert path.
+    const existing = await payload
+      .findByID({ collection: sheet.collection as never, id: row.id, depth: 0 })
+      .catch(() => null)
+    if (existing && String(getRelationId((existing as { event_id?: unknown }).event_id) ?? '') === String(eventId)) {
+      return row.id
+    }
+    return null
+  }
   if (sheet.upsertKeyFields.length === 0) return null
   const and: Record<string, unknown>[] = [{ event_id: { equals: eventId } }]
   for (const field of sheet.upsertKeyFields) {
