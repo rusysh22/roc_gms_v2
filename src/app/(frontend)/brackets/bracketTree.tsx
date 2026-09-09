@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { ArrowRight, Calendar, Crown, MapPin, Trophy, X } from 'lucide-react'
+import { ArrowRight, Calendar, ChevronRight, Crown, MapPin, Trophy, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketMatchCard, BracketParticipant, BracketRound } from '@/lib/brackets'
@@ -350,8 +350,9 @@ const getPartyColor = (party: GLootPartyProp, isWinner: boolean, matchDecided: b
 }
 
 // Reproduces the default Match component's exact structure and spacing (see
-// @g-loot/react-tournament-brackets components/match) - same top caption + "Match Details" link,
-// same two-row layout with a divider, same bottom caption - only the text color logic differs.
+// @g-loot/react-tournament-brackets components/match) - same top caption + "View Details" link,
+// same two-row layout with a divider, same bottom caption - the text color logic differs, and the
+// link itself is restyled louder than the library default (see its own comment below).
 const CustomMatch = ({
   match,
   onMatchClick,
@@ -409,9 +410,24 @@ const CustomMatch = ({
                 selectMatch(match)
                 onMatchClick?.({ match, topWon, bottomWon, event })
               }}
-              style={{ color: '#BEC0C6', fontSize: '0.8rem', textDecoration: 'none', cursor: 'pointer' }}
+              // Made deliberately louder than the library's original muted-gray caption-style link
+              // (#BEC0C6, no underline) - on a dark match card that link read as plain label text,
+              // not something tappable. A brighter accent color, bold weight, underline, and a
+              // trailing chevron all signal "this is a real control" at a glance.
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.15rem',
+                color: '#60A5FA',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                textDecoration: 'underline',
+                textUnderlineOffset: '2px',
+                cursor: 'pointer',
+              }}
             >
-              Match Details
+              View Details
+              <ChevronRight style={{ width: '0.7rem', height: '0.7rem' }} aria-hidden="true" />
             </button>
           </Dialog.Trigger>
         ) : null}
@@ -587,9 +603,10 @@ const ThirdPlaceCard = ({
               <button
                 type="button"
                 onClick={() => selectMatch(glootMatch)}
-                className="text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
+                className="flex items-center gap-0.5 text-xs font-bold text-blue underline underline-offset-2 transition-colors hover:text-ink"
               >
-                Match Details
+                View Details
+                <ChevronRight className="h-3 w-3" aria-hidden="true" />
               </button>
             </Dialog.Trigger>
           ) : null}
