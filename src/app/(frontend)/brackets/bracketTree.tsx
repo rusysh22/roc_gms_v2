@@ -332,14 +332,19 @@ type GLootPartyProp = {
   resultText?: string | null
 }
 
-// White (undetermined) / blue (won) / yellow (lost) / gray (TBD) - four states the library's own
-// binary won/lost theme color can't express (a scheduled-but-unplayed match and a genuine loss both
-// map to the same "not won" flag upstream), so the color decision is made explicitly here instead.
+// White (undetermined) / blue (won) / muted gray (lost) / lighter gray (TBD) - four states the
+// library's own binary won/lost theme color can't express (a scheduled-but-unplayed match and a
+// genuine loss both map to the same "not won" flag upstream), so the color decision is made
+// explicitly here instead. Loser was originally a bright yellow (#FACC15) - that reads as a
+// warning/alert color and competed with the winner's blue for attention, the opposite of what a
+// losing side should do. A dimmer gray (distinct from - slightly darker than - the TBD slot color,
+// which also has its own italic/dashed styling as a second cue) reads as "out of contention"
+// without drawing the eye.
 const PARTY_TEXT_COLOR = {
   tbd: '#9CA3AF',
   pending: '#FFFFFF',
   winner: '#60A5FA',
-  loser: '#FACC15',
+  loser: '#6B7280',
 } as const
 
 const getPartyColor = (party: GLootPartyProp, isWinner: boolean, matchDecided: boolean) => {
