@@ -571,22 +571,30 @@ const ThirdPlaceCard = ({
   ]
 
   return (
-    <div className="mt-4 rounded-panel border border-line bg-paper p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">3rd Place Match</p>
-        {glootMatch.href ? (
-          <Dialog.Trigger asChild>
-            <button
-              type="button"
-              onClick={() => selectMatch(glootMatch)}
-              className="text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
-            >
-              Match Details
-            </button>
-          </Dialog.Trigger>
-        ) : null}
-      </div>
-      <div className="max-w-xs overflow-hidden rounded-card border border-line">
+    // Rendered as a bottom section of the SAME bracket frame (a border-t divider, not its own
+    // rounded-panel/border/margin) rather than a fully detached card below it - see the call site
+    // in BracketTree, now nested inside the pan-zoom container's own bordered wrapper. Still can't
+    // be positioned at the Final's exact SVG coordinates (that column shifts under pan/zoom and
+    // g-loot has no API for a detached box mid-layout - see the comment above this component), so
+    // it's right-aligned instead: close enough to "under the Final" for a left-to-right bracket
+    // without depending on the viewer's current pan/zoom state.
+    <div className="border-t border-line bg-paper p-4">
+      <div className="ml-auto flex max-w-xs flex-col items-end gap-2">
+        <div className="flex w-full items-center justify-between gap-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">3rd Place Match</p>
+          {glootMatch.href ? (
+            <Dialog.Trigger asChild>
+              <button
+                type="button"
+                onClick={() => selectMatch(glootMatch)}
+                className="text-xs font-semibold text-ink-soft transition-colors hover:text-ink"
+              >
+                Match Details
+              </button>
+            </Dialog.Trigger>
+          ) : null}
+        </div>
+        <div className="w-full overflow-hidden rounded-card border border-line">
         {rows.map(({ participant, sourceIndex, resultText }) => {
           const isEmpty = !participant.id
           const feederMatch = semifinalMatches[sourceIndex]
@@ -619,6 +627,7 @@ const ThirdPlaceCard = ({
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
@@ -1224,10 +1233,10 @@ export const BracketTree = ({
         ) : (
           <div className="h-[600px] w-full animate-pulse bg-mist" />
         )}
+        {bronzeRound?.matches[0] ? (
+          <ThirdPlaceCard match={bronzeRound.matches[0]} semifinalRound={semifinalRound} timezone={timezone} />
+        ) : null}
       </div>
-      {bronzeRound?.matches[0] ? (
-        <ThirdPlaceCard match={bronzeRound.matches[0]} semifinalRound={semifinalRound} timezone={timezone} />
-      ) : null}
     </div>
     </BracketDialogContext.Provider>
     </Dialog.Root>
