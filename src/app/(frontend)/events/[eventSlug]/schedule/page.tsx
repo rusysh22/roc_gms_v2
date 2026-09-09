@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
-import { ArrowRight, BarChart3, Calendar, Clock, Crown, MapPin, Search } from 'lucide-react'
+import { ArrowRight, BarChart3, Calendar, ChevronDown, Clock, Crown, MapPin, Search } from 'lucide-react'
 
 import config from '@payload-config'
 import { cn } from '@/lib/utils'
@@ -473,10 +473,23 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                       )
 
                     return (
-                      <div key={dateKey}>
-                        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-soft">
+                      // Native <details>/<summary> gives every date group independent collapse/
+                      // expand state with zero client JS - the date label was previously a plain
+                      // muted <h2> easy to miss between match cards; a filled pill plus a match
+                      // count makes each date boundary an actual landmark instead of blending
+                      // into the surrounding text.
+                      <details key={dateKey} open className="group">
+                        <summary className="mb-3 flex w-fit cursor-pointer list-none items-center gap-2 rounded-full bg-green/15 px-3.5 py-1.5 text-sm font-bold tracking-wide text-green uppercase [&::-webkit-details-marker]:hidden">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                           {label}
-                        </h2>
+                          <span className="font-semibold normal-case text-green/70">
+                            ({rows.length} match{rows.length === 1 ? '' : 'es'})
+                          </span>
+                          <ChevronDown
+                            className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180"
+                            aria-hidden="true"
+                          />
+                        </summary>
                         <div className="flex flex-col gap-3">
                           {rows.map((match) => {
                             const entryAId = getRelationshipId(match.participant_a_entry_id)
@@ -665,7 +678,7 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                             )
                           })}
                         </div>
-                      </div>
+                      </details>
                     )
                   })}
                 </div>
