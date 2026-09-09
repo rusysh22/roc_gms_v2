@@ -168,10 +168,7 @@ export default function MarketingHomePage() {
       >
         <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="max-w-xl">
-            <p className="inline-flex items-center gap-2 rounded-full border border-line bg-mist px-3 py-1 text-xs font-bold uppercase tracking-wide text-ink-soft">
-              <Connector className="h-3.5 w-3.5 text-green" />
-              Tournament &amp; office games management
-            </p>
+            <SectionEyebrow tone="green">Tournament &amp; office games management</SectionEyebrow>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
               The bracket runs itself.
               <br />
