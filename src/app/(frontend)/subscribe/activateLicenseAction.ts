@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@payload-config'
+import { checkActivationRateLimit } from '@/lib/berlanggan/activationRateLimit'
 import { getBerlangganConfig } from '@/lib/berlanggan/config'
 import { activateAndStoreLicense } from '@/lib/berlanggan/licenseStore'
 
@@ -28,6 +29,7 @@ export type ActivateLicenseResult =
         | 'revoked'
         | 'suspended'
         | 'unreachable'
+        | 'rate_limited'
     }
 
 // Same shape as the client-side check in ActivateLicenseForm.tsx - server-side is the real gate,
@@ -36,7 +38,8 @@ const LICENSE_KEY_PATTERN = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i
 
 export async function activateLicenseAction(licenseKeyInput: string): Promise<ActivateLicenseResult> {
   const payload = await getPayload({ config })
-  const { user } = await payload.auth({ headers: await headers() })
+  const headerBag = await headers()
+  const { user } = await payload.auth({ headers: headerBag })
   if (!user) {
     return { ok: false, reason: 'not_signed_in' }
   }
@@ -44,6 +47,13 @@ export async function activateLicenseAction(licenseKeyInput: string): Promise<Ac
   const licenseKey = licenseKeyInput.trim().toUpperCase()
   if (!LICENSE_KEY_PATTERN.test(licenseKey)) {
     return { ok: false, reason: 'invalid_format' }
+  }
+
+  // SEC-08: throttle per-account and per-IP so a signed-in user can't script guesses at other
+  // customers' keys. Checked after the shape test (a malformed string was never a real attempt).
+  const ip = (headerBag.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown'
+  if (!checkActivationRateLimit(`u:${user.id}`) || !checkActivationRateLimit(`ip:${ip}`)) {
+    return { ok: false, reason: 'rate_limited' }
   }
 
   const berlangganConfig = getBerlangganConfig()
