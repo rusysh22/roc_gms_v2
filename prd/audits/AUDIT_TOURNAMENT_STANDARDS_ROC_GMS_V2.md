@@ -384,6 +384,25 @@ Halaman `/subscribe` menawarkan "View plans" dan form aktivasi kunci lisensi, ta
 **P2 - peningkatan kualitas/konsistensi, tidak mem-blokir penggunaan langsung:**
 - Sisanya: BRK-02..06, MATCH-03..09, SKD-05,06,08,09,10, REG-03,06,08,09,10, SEC-09,10, QB-UX-01,02, BILL-01,02,03.
 
+## 9b. Status perbaikan (diperbarui 10 September 2026)
+
+Batch keamanan pertama — dikerjakan langsung, semua di branch `develop`, `npm test` + `tsc` hijau:
+
+| Temuan | Status | Catatan |
+|---|---|---|
+| SEC-01 | **Sebagian** | Semua jalur cross-event konkret yang ada sekarang ditutup: `matchActions.findMatchByNumber` (+ comment/documentation), `bracketActions`, `standingActions`, `registrationActions` (approve/reject), seluruh aksi wizard new-event via `getWizardEvent(user)` + `assertWizardActionAccess` (termasuk `updateEventAction`) + render halaman wizard + route `data-template`. Postur `overrideAccess: false` sebagai default (defense-in-depth untuk hole di masa depan) **belum** — masih perlu review akses per-collection + rollout bertahap. |
+| SEC-02 | **Selesai** | `findMatchByNumber` menerima caller, mengembalikan `undefined` (persis "not found" yang sudah ditangani semua call site) bila bukan member event match. `schedulerActions` sudah aman (pakai `getActiveEvent`). |
+| SEC-03 | **Selesai** | `collectionIo/engine.ts` `findExisting` memverifikasi `event_id` record sebelum menjadikan `id` dari spreadsheet sebagai target update; kalau tidak cocok → jalur insert. + regression test. |
+| SEC-04 | **Selesai** | `Comments` dapat `event_id` terdenormalisasi (hook `beforeChange` via `resolveEventIdForEntity`), `read`/`create`/`update`/`delete` di-scope `scopedToUserEvents`. Backfill: `npm run audit:backfill-event`. |
+| SEC-05 | **Selesai** | `AuditLogs` dapat `event_id` (diisi `recordAuditLog`), `read` di-scope. Backfill sama. |
+| SEC-06 | **Selesai** | `Media` dapat `event_id` opsional (diisi semua jalur upload workspace), `update`/`delete` di-scope (null-event tetap bisa diedit content_admin manapun), `read` tetap publik, list Content Desk difilter per event aktif. |
+| SEC-07 | **Selesai** | `Users.read` → hanya baris sendiri untuk non-super_admin. UI workspace tak terpengaruh (baca via Local API server-side). |
+| SEC-08 | **Selesai** | Rate limiter in-memory per-user + per-IP (8 / 10 menit) di `activateLicenseAction`, mirip `registrationRateLimit.ts`. |
+| SEC-09 | Menunggu SEC-01 postur `overrideAccess: false`. |
+| SEC-10 | Tidak perlu kode (pola aman terkonfirmasi). |
+
+Belum dikerjakan: seluruh P1 non-keamanan (MATCH-01/02, SKD-*, REG-*, BRK-01) dan P2.
+
 ## 10. Catatan metodologi
 
 Audit ini disusun dari 5 sub-agent riset paralel (baca-kode-saja) yang masing-masing diberi cakupan domain, daftar file konkret untuk dibaca, dan daftar konvensi standar dunia nyata untuk dibandingkan (bukan hanya "cari bug") - plus verifikasi langsung penulis untuk fitur yang dibangun di sesi yang sama (Quick Bracket Schedule/Venue/Score), termasuk pengujian browser sungguhan (Playwright, termasuk simulasi konteks timezone berbeda) yang menemukan dan memverifikasi perbaikan satu bug timezone nyata (QB-UX-03) sebelum audit ini selesai ditulis. Setiap temuan menyertakan referensi file:baris konkret dan skenario kegagalan spesifik, bukan generalisasi. Temuan yang levelnya "belum pasti"/butuh verifikasi lanjutan ditandai eksplisit sebagai demikian (MATCH-09, REG-10), bukan diklaim pasti benar.
