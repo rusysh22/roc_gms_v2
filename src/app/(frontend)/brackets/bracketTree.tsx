@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
-import { ArrowRight, Calendar, ChevronRight, Crown, MapPin, Trophy, X } from 'lucide-react'
+import { ArrowRight, Calendar, CheckCircle2, ChevronRight, Crown, MapPin, Trophy, X } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
 
 import type { BracketChampion, BracketMatchCard, BracketParticipant, BracketRound } from '@/lib/brackets'
@@ -695,11 +695,15 @@ const MatchDetailsPanel = ({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scheduleValue, setScheduleValue] = useState(() => toDateTimeLocalValue(match.scheduledStartAtRaw))
-  const [savingSchedule, setSavingSchedule] = useState(false)
-  const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [venueValue, setVenueValue] = useState(() => match.venueLabel ?? '')
-  const [savingVenue, setSavingVenue] = useState(false)
-  const [venueError, setVenueError] = useState<string | null>(null)
+  // Transient "Saved" confirmation shown next to the buttons for a few seconds after a successful
+  // save - cleared early if the organizer starts editing again (isDirty takes priority over this
+  // in the footer below) or on unmount, so a stale timeout can never fire setState on a closed modal.
+  const [justSaved, setJustSaved] = useState(false)
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current)
+  }, [])
 
   // Presence of quickBracketSlug alone gates Schedule/Venue editing - unlike scoring (below), a
   // time or venue can be set on a match before both sides are even known.
@@ -715,82 +719,93 @@ const MatchDetailsPanel = ({
     match.state !== 'WALK_OVER'
   const canEditScore = isEditor && bothSidesReal
 
-  const handleSave = async (winnerSlot: 'a' | 'b') => {
+  // What each field looked like the last time it was successfully saved (or, for a field never
+  // touched, its starting value from `match`) - used both to detect unsaved edits across all three
+  // tabs at once and to reset everything on Cancel, regardless of which tab is currently active.
+  const originalScheduleValue = toDateTimeLocalValue(match.scheduledStartAtRaw)
+  const originalVenueValue = match.venueLabel ?? ''
+  const originalWinner = match.participantAIsWinner ? 'a' : match.participantBIsWinner ? 'b' : null
+  const originalScoreA = prefillScore(match.participantAResultText)
+  const originalScoreB = prefillScore(match.participantBResultText)
+
+  const scheduleDirty = isEditor && scheduleValue !== originalScheduleValue
+  const venueDirty = isEditor && venueValue !== originalVenueValue
+  const scoreDirty =
+    canEditScore && (selectedWinner !== originalWinner || scoreA !== originalScoreA || scoreB !== originalScoreB)
+  const isDirty = scheduleDirty || venueDirty || scoreDirty
+
+  // One Save covering all three tabs, so an organizer editing schedule + venue + score doesn't
+  // have to save each one separately before switching tabs. The two underlying actions each do a
+  // full read-modify-write of the bracket's single `bracket_data` JSON column (see
+  // quickBracketEditActions.ts), so they're deliberately sequential, not Promise.all'd - running
+  // them in parallel would race two independent reads of the same starting document, and whichever
+  // write lands second would silently discard the other's change.
+  const handleSaveAll = async () => {
     if (!quickBracketSlug) return
     setSaving(true)
     setError(null)
-    const result = await updateQuickBracketMatchAction(quickBracketSlug, String(match.id), winnerSlot, scoreA, scoreB)
-    setSaving(false)
-    if (!result.ok) {
-      setError(result.reason)
-      return
+
+    let nextMatch = match
+
+    if (scheduleDirty || venueDirty) {
+      const iso = fromDateTimeLocalValue(scheduleValue)
+      const trimmedVenue = venueValue.trim()
+      const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
+        scheduledStartAt: iso,
+        venueLabel: trimmedVenue || null,
+      })
+      if (!result.ok) {
+        setSaving(false)
+        setError(result.reason)
+        return
+      }
+      nextMatch = {
+        ...nextMatch,
+        startTime: iso ? formatMatchDate(iso, timezone) : '',
+        scheduledStartAtRaw: iso ?? undefined,
+        venueLabel: trimmedVenue || undefined,
+      }
     }
+
+    if (scoreDirty && selectedWinner) {
+      const result = await updateQuickBracketMatchAction(quickBracketSlug, String(match.id), selectedWinner, scoreA, scoreB)
+      if (!result.ok) {
+        setSaving(false)
+        setError(result.reason)
+        // The schedule/venue half (if any) already committed above - reflect that much before
+        // bailing, rather than silently discarding a save that did succeed.
+        onMatchChange(nextMatch)
+        router.refresh()
+        return
+      }
+      nextMatch = {
+        ...nextMatch,
+        state: 'result_published',
+        participantAResultText: scoreA || match.participantAResultText,
+        participantBResultText: scoreB || match.participantBResultText,
+        participantAIsWinner: selectedWinner === 'a',
+        participantBIsWinner: selectedWinner === 'b',
+      }
+    }
+
+    setSaving(false)
     // Optimistic local update so the modal reflects the save immediately - router.refresh() below
     // still catches up the bracket tree (and whatever downstream match this one feeds) behind it.
-    onMatchChange({
-      ...match,
-      state: 'result_published',
-      participantAResultText: scoreA || match.participantAResultText,
-      participantBResultText: scoreB || match.participantBResultText,
-      participantAIsWinner: winnerSlot === 'a',
-      participantBIsWinner: winnerSlot === 'b',
-    })
+    onMatchChange(nextMatch)
     router.refresh()
+
+    setJustSaved(true)
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current)
+    savedTimeoutRef.current = setTimeout(() => setJustSaved(false), 3000)
   }
 
-  const handleCancelScore = () => {
-    setScoreA(prefillScore(match.participantAResultText))
-    setScoreB(prefillScore(match.participantBResultText))
-    setSelectedWinner(match.participantAIsWinner ? 'a' : match.participantBIsWinner ? 'b' : null)
+  const handleCancelAll = () => {
+    setScheduleValue(originalScheduleValue)
+    setVenueValue(originalVenueValue)
+    setScoreA(originalScoreA)
+    setScoreB(originalScoreB)
+    setSelectedWinner(originalWinner)
     setError(null)
-  }
-
-  const handleSaveSchedule = async () => {
-    if (!quickBracketSlug) return
-    setSavingSchedule(true)
-    setScheduleError(null)
-    const iso = fromDateTimeLocalValue(scheduleValue)
-    const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
-      scheduledStartAt: iso,
-    })
-    setSavingSchedule(false)
-    if (!result.ok) {
-      setScheduleError(result.reason)
-      return
-    }
-    onMatchChange({
-      ...match,
-      startTime: iso ? formatMatchDate(iso, timezone) : '',
-      scheduledStartAtRaw: iso ?? undefined,
-    })
-    router.refresh()
-  }
-
-  const handleCancelSchedule = () => {
-    setScheduleValue(toDateTimeLocalValue(match.scheduledStartAtRaw))
-    setScheduleError(null)
-  }
-
-  const handleSaveVenue = async () => {
-    if (!quickBracketSlug) return
-    setSavingVenue(true)
-    setVenueError(null)
-    const trimmed = venueValue.trim()
-    const result = await updateQuickBracketMatchScheduleAction(quickBracketSlug, String(match.id), {
-      venueLabel: trimmed || null,
-    })
-    setSavingVenue(false)
-    if (!result.ok) {
-      setVenueError(result.reason)
-      return
-    }
-    onMatchChange({ ...match, venueLabel: trimmed || undefined })
-    router.refresh()
-  }
-
-  const handleCancelVenue = () => {
-    setVenueValue(match.venueLabel ?? '')
-    setVenueError(null)
   }
 
   return (
@@ -857,25 +872,6 @@ const MatchDetailsPanel = ({
                 onChange={(event) => setScheduleValue(event.target.value)}
                 className="mt-1.5 h-10 w-full rounded-card border border-line bg-paper px-3 text-sm text-ink focus-visible:border-green focus-visible:outline-none"
               />
-              {scheduleError ? <p className="mt-2 text-xs font-semibold text-danger">{scheduleError}</p> : null}
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveSchedule}
-                  disabled={savingSchedule}
-                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
-                >
-                  {savingSchedule ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelSchedule}
-                  disabled={savingSchedule}
-                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           ) : null}
         </div>
@@ -909,25 +905,6 @@ const MatchDetailsPanel = ({
                 maxLength={120}
                 className="mt-1.5 h-10 w-full rounded-card border border-line bg-paper px-3 text-sm text-ink focus-visible:border-green focus-visible:outline-none"
               />
-              {venueError ? <p className="mt-2 text-xs font-semibold text-danger">{venueError}</p> : null}
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveVenue}
-                  disabled={savingVenue}
-                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
-                >
-                  {savingVenue ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelVenue}
-                  disabled={savingVenue}
-                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -963,9 +940,17 @@ const MatchDetailsPanel = ({
                       )}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className={cn('truncate text-sm', isSelected ? 'font-extrabold text-ink' : 'font-semibold text-ink')}>
-                          {name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className={cn('min-w-0 truncate text-sm', isSelected ? 'font-extrabold text-ink' : 'font-semibold text-ink')}>
+                            {name}
+                          </p>
+                          {isSelected ? (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green px-2 py-0.5 text-[0.6rem] font-bold tracking-wide text-paper uppercase">
+                              <Crown className="h-2.5 w-2.5" aria-hidden="true" />
+                              Winner
+                            </span>
+                          ) : null}
+                        </div>
                         {subLabel ? <p className="truncate text-xs text-ink-soft">{subLabel}</p> : null}
                       </div>
                       <input
@@ -981,32 +966,9 @@ const MatchDetailsPanel = ({
                   )
                 })}
               </div>
-              {error ? <p className="mt-2 text-xs font-semibold text-danger">{error}</p> : null}
               {!selectedWinner ? (
-                <p className="mt-2 text-xs text-ink-soft">Tap a team to select the winner, enter scores, then save.</p>
-              ) : saving ? (
-                <p className="mt-2 text-xs text-ink-soft">Saving...</p>
-              ) : match.state === 'result_published' ? (
-                <p className="mt-2 text-xs font-bold text-green">Saved</p>
+                <p className="mt-2 text-xs text-ink-soft">Tap a team to select the winner, then enter scores.</p>
               ) : null}
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => selectedWinner && handleSave(selectedWinner)}
-                  disabled={saving || !selectedWinner}
-                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
-                >
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelScore}
-                  disabled={saving}
-                  className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
-                >
-                  Cancel
-                </button>
-              </div>
             </>
           ) : (
             <>
@@ -1093,6 +1055,41 @@ const MatchDetailsPanel = ({
               ) : null}
             </>
           )}
+        </div>
+      ) : null}
+
+      {/* One Save/Cancel pair for all three tabs (see handleSaveAll's comment) - stays visible
+          regardless of which tab is active, so editing schedule, then switching to Venue, then
+          Score, still only needs a single Save at the end instead of one per tab. */}
+      {isEditor ? (
+        <div className="flex flex-col gap-2">
+          {error ? <p className="text-xs font-semibold text-danger">{error}</p> : null}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSaveAll}
+              disabled={saving || !isDirty}
+              className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelAll}
+              disabled={saving || !isDirty}
+              className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}
+            >
+              Cancel
+            </button>
+            {!saving && isDirty ? (
+              <span className="text-xs text-ink-soft">Unsaved changes</span>
+            ) : !saving && justSaved ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-green">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Saved successfully
+              </span>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
