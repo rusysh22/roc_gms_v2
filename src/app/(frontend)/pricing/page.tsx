@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Check, Sparkles } from 'lucide-react'
+import { Check, Sparkles, X } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { fetchPlans, type PlanDto } from '@/lib/berlanggan/client'
@@ -13,11 +14,12 @@ export const metadata: Metadata = {
   alternates: { canonical: '/pricing' },
 }
 
-// Plans/prices are never hardcoded here - they're fetched live from Berlanggan (berlanggan.web.id,
-// the billing platform Event Management access runs on), whatever the operator has configured as
-// products there. Revalidated hourly (not on every request): prices change rarely, there's no
-// webhook to trigger instant invalidation (Berlanggan doesn't send any - see src/lib/berlanggan/),
-// and this page must not be force-dynamic or the hourly cache would never apply.
+// Plans/prices for the PAID tiers are never hardcoded here - they're fetched live from Berlanggan
+// (berlanggan.web.id, the billing platform Event Management access runs on), whatever the operator
+// has configured as products there. Revalidated hourly (not on every request): prices change
+// rarely, there's no webhook to trigger instant invalidation (Berlanggan doesn't send any - see
+// src/lib/berlanggan/), and this page must not be force-dynamic or the hourly cache would never
+// apply.
 const REVALIDATE_SECONDS = 3600
 
 const INTERVAL_LABEL: Record<PlanDto['interval'], string> = {
@@ -28,6 +30,74 @@ const INTERVAL_LABEL: Record<PlanDto['interval'], string> = {
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(price)
+
+// A simple included/not-included row, shared by the Free card (fully hardcoded, since Quick
+// Bracket isn't a real Berlanggan product to fetch) and every paid card (as a baseline fact that's
+// true for every paid tier today - see the comment on BASELINE_PAID_FEATURE below).
+const FeatureRow = ({ label, included }: { label: string; included: boolean }) => (
+  <li className="flex items-start gap-2">
+    {included ? (
+      <Check className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+    ) : (
+      <X className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft/50" aria-hidden="true" />
+    )}
+    <span className={cn(!included && 'text-ink-soft/70 line-through decoration-ink-soft/40')}>{label}</span>
+  </li>
+)
+
+const FREE_INCLUDED = [
+  'No sign-up required',
+  'Single & double elimination brackets',
+  'Live score entry once you claim it (still free)',
+  'Share via WhatsApp, Teams, email, or link',
+]
+
+// What Quick Bracket does NOT include, shown crossed out on the Free card so the gap versus a paid
+// Event Management plan is explicit rather than something people discover only after hitting a
+// paywall. These are genuine Event Management features Quick Bracket has no equivalent of - not a
+// guess at Berlanggan's own plan-tier differences (see BASELINE_PAID_FEATURE below for why those
+// aren't hardcoded).
+const FREE_NOT_INCLUDED = [
+  'Full Event Management workspace',
+  'Multi-sport events & competition categories',
+  'Participant/roster database & Excel import',
+  'Public branded event website',
+  'Standings & medal tally automation',
+  'Role-based team access (Scheduler, Match Officer, Content Admin)',
+]
+
+const FreePlanCard = () => (
+  <Card className="flex flex-col gap-4">
+    <div>
+      <CardTitle as="h3">Free</CardTitle>
+      <p className="mt-2 text-3xl font-extrabold text-ink">
+        {formatPrice(0)}
+        <span className="ml-1 text-sm font-semibold text-ink-soft">forever</span>
+      </p>
+      <CardDescription className="mt-1">Quick Bracket Tournament only</CardDescription>
+    </div>
+    <ul className="flex flex-col gap-2 text-sm text-ink-soft">
+      {FREE_INCLUDED.map((label) => (
+        <FeatureRow key={label} label={label} included />
+      ))}
+      {FREE_NOT_INCLUDED.map((label) => (
+        <FeatureRow key={label} label={label} included={false} />
+      ))}
+    </ul>
+    <Button asChild variant="secondary" className="mt-auto">
+      <Link href="/quick-bracket/new">Start free with Quick Bracket</Link>
+    </Button>
+  </Card>
+)
+
+// The one feature claim shown on every paid card that isn't sourced from Berlanggan's own
+// `entitlements` - unlike price/name/interval, this is safe to state unconditionally because
+// checkSubscription (src/lib/berlanggan/subscriptionGate.ts) gates /workspaces as a single
+// account-level on/off switch, not per-entitlement: every active paid license gets full Event
+// Management access today, regardless of which plan was purchased. Plan-specific differentiators
+// beyond that (seat limits, support tier, etc.) are NOT hardcoded here - only `plan.entitlements`
+// (whatever the operator actually configures on Berlanggan) can state those truthfully.
+const BASELINE_PAID_FEATURE = 'Full Event Management workspace access'
 
 const PlanCard = ({ plan, baseUrl }: { plan: PlanDto; baseUrl: string }) => {
   const entitlementEntries = Object.entries(plan.entitlements ?? {})
@@ -41,19 +111,16 @@ const PlanCard = ({ plan, baseUrl }: { plan: PlanDto; baseUrl: string }) => {
           <span className="ml-1 text-sm font-semibold text-ink-soft">{INTERVAL_LABEL[plan.interval]}</span>
         </p>
       </div>
-      {entitlementEntries.length > 0 ? (
-        <ul className="flex flex-col gap-2 text-sm text-ink-soft">
-          {entitlementEntries.map(([key, value]) => (
-            <li key={key} className="flex items-start gap-2">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden="true" />
-              <span>
-                {key.replaceAll('_', ' ')}
-                {typeof value === 'boolean' ? '' : `: ${String(value)}`}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <ul className="flex flex-col gap-2 text-sm text-ink-soft">
+        <FeatureRow label={BASELINE_PAID_FEATURE} included />
+        {entitlementEntries.map(([key, value]) => (
+          <FeatureRow
+            key={key}
+            included
+            label={key.replaceAll('_', ' ') + (typeof value === 'boolean' ? '' : `: ${String(value)}`)}
+          />
+        ))}
+      </ul>
       <Button asChild className="mt-auto">
         <a href={`${baseUrl}${plan.checkout_url}`}>Choose {plan.name}</a>
       </Button>
@@ -90,16 +157,19 @@ export default async function PricingPage() {
         </p>
 
         <div className="mx-auto mt-10 max-w-5xl">
-          {!config ? (
-            <Card className="mx-auto max-w-md text-center">
-              <CardTitle>Pricing coming soon</CardTitle>
-              <CardDescription className="mt-2">
-                Event Management plans aren&apos;t published yet - check back shortly.
-              </CardDescription>
-            </Card>
-          ) : (
-            <PricingPlans config={config} />
-          )}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <FreePlanCard />
+            {!config ? (
+              <Card className="sm:col-span-1 lg:col-span-2">
+                <CardTitle>Paid plans coming soon</CardTitle>
+                <CardDescription className="mt-2">
+                  Event Management plans aren&apos;t published yet - check back shortly.
+                </CardDescription>
+              </Card>
+            ) : (
+              <PricingPlans config={config} />
+            )}
+          </div>
         </div>
       </section>
     </main>
@@ -115,7 +185,7 @@ const PricingPlans = async ({
 
   if (!result.ok) {
     return (
-      <Card className="mx-auto max-w-md text-center">
+      <Card className="sm:col-span-1 lg:col-span-2">
         <CardTitle>Unable to load pricing right now</CardTitle>
         <CardDescription className="mt-2">Please try again shortly.</CardDescription>
       </Card>
@@ -124,8 +194,8 @@ const PricingPlans = async ({
 
   if (result.plans.length === 0) {
     return (
-      <Card className="mx-auto max-w-md text-center">
-        <CardTitle>Pricing coming soon</CardTitle>
+      <Card className="sm:col-span-1 lg:col-span-2">
+        <CardTitle>Paid plans coming soon</CardTitle>
         <CardDescription className="mt-2">
           Event Management plans aren&apos;t published yet - check back shortly.
         </CardDescription>
@@ -136,10 +206,10 @@ const PricingPlans = async ({
   const sortedPlans = [...result.plans].sort((a, b) => a.sort_order - b.sort_order)
 
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <>
       {sortedPlans.map((plan) => (
         <PlanCard key={plan.id} plan={plan} baseUrl={config.baseUrl} />
       ))}
-    </div>
+    </>
   )
 }
