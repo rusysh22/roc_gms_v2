@@ -1,5 +1,7 @@
 import type { Payload } from 'payload'
 
+import { canAccessEvent } from '@/access/eventMembership'
+
 export const wizardPage = '/workspaces/event-admin/new-event'
 
 // Single source of truth for which category formats step 8 (Generate Matches) can auto-generate a
@@ -61,13 +63,30 @@ export const isNextControlFlowError = (error: unknown): boolean =>
   ((error as { digest: string }).digest.startsWith('NEXT_REDIRECT') ||
     (error as { digest: string }).digest === 'NEXT_NOT_FOUND')
 
-export const getWizardEvent = async (payload: Payload, eventId: string) => {
+/**
+ * Load the event a wizard step is operating on.
+ *
+ * AUDIT_TOURNAMENT_STANDARDS SEC-01: `eventId` is a form/query value and the wizard guards only
+ * check the caller's *global* event-admin capability - without the membership check here a
+ * signed-in event_admin could POST any step action (or hit the data-template route) with another
+ * organizer's `eventId` and mutate/read their event. `user` is null only on the anonymous
+ * pre-login wizard path, which resolveWizardAccess has already gated via verifyAnonDraft.
+ */
+export const getWizardEvent = async (
+  payload: Payload,
+  eventId: string,
+  user: { id: string | number; roles?: readonly string[] | null } | null,
+) => {
   if (!eventId) {
     return null
   }
 
   try {
-    return await payload.findByID({ collection: 'events', id: eventId, depth: 0 })
+    const event = await payload.findByID({ collection: 'events', id: eventId, depth: 0 })
+    if (user && !(await canAccessEvent(payload, user, event.id))) {
+      return null
+    }
+    return event
   } catch {
     return null
   }

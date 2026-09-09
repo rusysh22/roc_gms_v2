@@ -25,7 +25,7 @@ import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspace
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
 export async function generateMatchesAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
@@ -33,7 +33,7 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

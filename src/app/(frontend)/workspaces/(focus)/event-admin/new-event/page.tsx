@@ -49,6 +49,7 @@ import {
   type AuditLogSummary,
   type RelationshipDoc,
 } from '../../../workspaceComponents'
+import { canAccessEvent } from '@/access/eventMembership'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { buildWizardReturnTo, resolveWizardAccess } from './wizardAccess'
 import { WizardDraftClaim } from './WizardDraftClaim'
@@ -357,6 +358,7 @@ export default async function NewEventWizardPage({
   // `firstIncompleteStep` lands on a walled step.
   const preliminaryStep = requestedStep || (eventId ? 'sports' : 'setup')
   let payload: Awaited<ReturnType<typeof requireWorkspaceAccess>>['payload']
+  let signedInUser: { id: string | number; roles?: readonly string[] | null } | null = null
   let isAnon = false
   if (AUTH_ONLY_STEPS.has(preliminaryStep)) {
     const access = await requireWorkspaceAccess({
@@ -373,6 +375,7 @@ export default async function NewEventWizardPage({
       )
     }
     payload = access.payload
+    signedInUser = access.user
   } else {
     const access = await resolveWizardAccess({
       step: preliminaryStep,
@@ -380,12 +383,17 @@ export default async function NewEventWizardPage({
       returnTo: buildWizardReturnTo(preliminaryStep, eventId),
     })
     payload = access.payload
+    signedInUser = access.user
     isAnon = access.mode === 'anon'
   }
 
-  const event = eventId
-    ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
-    : null
+  // AUDIT_TOURNAMENT_STANDARDS SEC-01: the wizard guards only check global event-admin
+  // capability - a signed-in caller must additionally be a member of the event they pass in the
+  // URL (anon drafts are gated by resolveWizardAccess/verifyAnonDraft instead).
+  const event =
+    eventId && (!signedInUser || (await canAccessEvent(payload, signedInUser, eventId)))
+      ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
+      : null
   if (eventId && !event) {
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">

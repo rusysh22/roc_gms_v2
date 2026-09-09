@@ -44,7 +44,7 @@ export async function addSportFromCatalogAction(formData: FormData): Promise<voi
     ? customParticipantModeRaw
     : 'open'
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

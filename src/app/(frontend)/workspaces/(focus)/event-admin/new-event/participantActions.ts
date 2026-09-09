@@ -35,7 +35,7 @@ export async function addClubAction(formData: FormData): Promise<void> {
   const slug = slugify(text(formData, 'slug') || name)
   const email = text(formData, 'contactEmail')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -87,7 +87,7 @@ export async function addTeamAction(formData: FormData): Promise<void> {
   const clubId = text(formData, 'clubId')
   const email = text(formData, 'contactEmail')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -154,7 +154,7 @@ export async function addPairAction(formData: FormData): Promise<void> {
   const player2Id = text(formData, 'player2Id')
   const clubId = text(formData, 'clubId')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -747,13 +747,13 @@ const planParticipantsImport = async (payload: Payload, eventId: string, parsed:
 }
 
 export async function previewParticipantsImportAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
 
   const eventId = text(formData, 'eventId')
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -848,7 +848,7 @@ export async function confirmParticipantsImportAction(formData: FormData): Promi
 
   const eventId = text(formData, 'eventId')
   const scratchFile = text(formData, 'scratchFile')
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -1583,7 +1583,7 @@ export async function addPlayerAction(formData: FormData): Promise<void> {
   const gender = text(formData, 'gender')
   const genders = new Set(['male', 'female', 'other', 'prefer_not_to_say'])
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

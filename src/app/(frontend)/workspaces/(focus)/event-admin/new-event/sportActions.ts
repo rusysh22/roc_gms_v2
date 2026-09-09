@@ -19,7 +19,7 @@ export async function addSportAction(formData: FormData): Promise<void> {
   const sportType = text(formData, 'sportType') || 'court'
   const slug = slugify(text(formData, 'slug') || name)
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -142,7 +142,7 @@ export async function addRulesetAction(formData: FormData): Promise<void> {
   const scoreType = text(formData, 'scoreType') || 'points'
   const bestOf = text(formData, 'bestOf')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

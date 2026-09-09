@@ -4,10 +4,27 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { Payload } from 'payload'
 
+import { canAccessEvent, getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const basePage = '/workspaces/event-admin/registrations'
+
+// AUDIT_TOURNAMENT_STANDARDS SEC-01: a submission is loaded by its own id from the form and
+// WORKSPACE_ROLES.registrationDesk is a global role check - without this an event_admin /
+// registration staffer of Event A could approve or reject Event B's pending submissions (approval
+// creates real Club/Team/Player/Entry rows in that event). Membership in the submission's event is
+// required.
+const assertSubmissionEventAccess = async (
+  payload: Payload,
+  user: { id: string | number; roles?: readonly string[] | null },
+  submissionEventId: unknown,
+) => {
+  const eventId = getRelationId(submissionEventId)
+  if (eventId && !(await canAccessEvent(payload, user, eventId))) {
+    redirect(`${basePage}?registrationError=not_pending`)
+  }
+}
 
 const text = (form: FormData, key: string) =>
   typeof form.get(key) === 'string' ? String(form.get(key)).trim() : ''
@@ -83,6 +100,7 @@ export async function approveRegistrationSubmissionAction(formData: FormData): P
   if (!submission || submission.status !== 'pending') {
     redirect(`${basePage}?registrationError=not_pending`)
   }
+  await assertSubmissionEventAccess(payload, user, submission!.event_id)
 
   const eventId = Number(submission!.event_id)
   const categoryId = Number(submission!.category_id)
@@ -234,6 +252,7 @@ export async function rejectRegistrationSubmissionAction(formData: FormData): Pr
   if (!submission || submission.status !== 'pending') {
     redirect(`${basePage}?registrationError=not_pending`)
   }
+  await assertSubmissionEventAccess(payload, user, submission!.event_id)
 
   const data = {
     status: 'rejected' as const,

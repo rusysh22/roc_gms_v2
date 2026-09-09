@@ -42,7 +42,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
   const thirdPlacePolicyRaw = text(formData, 'thirdPlacePolicy')
   const thirdPlacePolicy = thirdPlacePolicies.has(thirdPlacePolicyRaw) ? thirdPlacePolicyRaw : 'none'
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -197,7 +197,7 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
     actorUserId: user?.id ?? null,
   })
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   revalidatePath(wizardPage)
   if (event?.slug) {
     revalidatePath(`/events/${event.slug}/sports`)
