@@ -663,6 +663,9 @@ const MatchDetailsPanel = ({
   const [tab, setTab] = useState<MatchDetailTab>('score')
   const [scoreA, setScoreA] = useState(() => prefillScore(match.participantAResultText))
   const [scoreB, setScoreB] = useState(() => prefillScore(match.participantBResultText))
+  const [selectedWinner, setSelectedWinner] = useState<'a' | 'b' | null>(() =>
+    match.participantAIsWinner ? 'a' : match.participantBIsWinner ? 'b' : null,
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scheduleValue, setScheduleValue] = useState(() => toDateTimeLocalValue(match.scheduledStartAtRaw))
@@ -712,6 +715,7 @@ const MatchDetailsPanel = ({
   const handleCancelScore = () => {
     setScoreA(prefillScore(match.participantAResultText))
     setScoreB(prefillScore(match.participantBResultText))
+    setSelectedWinner(match.participantAIsWinner ? 'a' : match.participantBIsWinner ? 'b' : null)
     setError(null)
   }
 
@@ -907,58 +911,67 @@ const MatchDetailsPanel = ({
         <div className="rounded-card bg-mist px-4 py-4">
           {canEditScore ? (
             <>
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSave('a')}
-                  disabled={saving}
-                  className={cn(
-                    'min-w-0 flex-1 truncate rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50',
-                    match.participantAIsWinner
-                      ? 'border-green bg-green/10 text-ink'
-                      : 'border-line text-ink hover:border-green',
-                  )}
-                >
-                  {match.participantAName}
-                </button>
-                <input
-                  value={scoreA}
-                  onChange={(event) => setScoreA(event.target.value)}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className="h-9 w-14 shrink-0 rounded-full border border-line bg-paper px-2 text-center text-sm text-ink focus-visible:border-green focus-visible:outline-none"
-                />
-                <span className="shrink-0 text-xs font-semibold text-ink-soft">vs</span>
-                <input
-                  value={scoreB}
-                  onChange={(event) => setScoreB(event.target.value)}
-                  placeholder="0"
-                  inputMode="numeric"
-                  className="h-9 w-14 shrink-0 rounded-full border border-line bg-paper px-2 text-center text-sm text-ink focus-visible:border-green focus-visible:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSave('b')}
-                  disabled={saving}
-                  className={cn(
-                    'min-w-0 flex-1 truncate rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50',
-                    match.participantBIsWinner
-                      ? 'border-green bg-green/10 text-ink'
-                      : 'border-line text-ink hover:border-green',
-                  )}
-                >
-                  {match.participantBName}
-                </button>
+              <div className="flex flex-col gap-2">
+                {(['a', 'b'] as const).map((slot) => {
+                  const name = slot === 'a' ? match.participantAName : match.participantBName
+                  const subLabel = slot === 'a' ? match.participantASubLabel : match.participantBSubLabel
+                  const score = slot === 'a' ? scoreA : scoreB
+                  const setScore = slot === 'a' ? setScoreA : setScoreB
+                  const isSelected = selectedWinner === slot
+
+                  return (
+                    <div
+                      key={slot}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedWinner(slot)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setSelectedWinner(slot)
+                        }
+                      }}
+                      className={cn(
+                        'flex items-center gap-3 rounded-card border px-3 py-2.5 text-left transition-colors',
+                        isSelected ? 'border-green bg-green/10' : 'border-line bg-paper hover:border-green/50',
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('truncate text-sm', isSelected ? 'font-extrabold text-ink' : 'font-semibold text-ink')}>
+                          {name}
+                        </p>
+                        {subLabel ? <p className="truncate text-xs text-ink-soft">{subLabel}</p> : null}
+                      </div>
+                      <input
+                        value={score}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => setScore(event.target.value)}
+                        placeholder="0"
+                        inputMode="numeric"
+                        aria-label={`${name} score`}
+                        className="h-10 w-16 shrink-0 rounded-full border border-line bg-paper px-2 text-center text-base font-bold text-ink focus-visible:border-green focus-visible:outline-none"
+                      />
+                    </div>
+                  )
+                })}
               </div>
               {error ? <p className="mt-2 text-xs font-semibold text-danger">{error}</p> : null}
-              {saving ? (
+              {!selectedWinner ? (
+                <p className="mt-2 text-xs text-ink-soft">Tap a team to select the winner, enter scores, then save.</p>
+              ) : saving ? (
                 <p className="mt-2 text-xs text-ink-soft">Saving...</p>
               ) : match.state === 'result_published' ? (
                 <p className="mt-2 text-xs font-bold text-green">Saved</p>
-              ) : (
-                <p className="mt-2 text-xs text-ink-soft">Click a team&apos;s name to record it as the winner.</p>
-              )}
-              <div className="mt-3">
+              ) : null}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectedWinner && handleSave(selectedWinner)}
+                  disabled={saving || !selectedWinner}
+                  className={cn(buttonVariants({ variant: 'primary', size: 'sm' }))}
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
                 <button
                   type="button"
                   onClick={handleCancelScore}
