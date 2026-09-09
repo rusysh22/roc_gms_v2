@@ -38,6 +38,13 @@ export function BrandLogo({
         alt={LABEL}
         height={height}
         width={Math.round((iconSrc.width / iconSrc.height) * height)}
+        // Tailwind's Preflight base layer resets every `img` to `height: auto` - CSS always wins
+        // over the `height` HTML attribute Next.js Image sets, and `w-auto` on width leaves BOTH
+        // dimensions unconstrained, so the browser falls back to the source PNG's raw pixel size
+        // (629x512 for the icon, 1246x240 for the wordmark) instead of the intended small nav-bar
+        // size. An inline style beats any class-based rule regardless of specificity, so pin the
+        // height there and let width stay `auto` via the class - the one dimension left unconstrained.
+        style={{ height, width: 'auto' }}
         className={cn('w-auto', className)}
         priority={priority}
       />
@@ -51,6 +58,7 @@ export function BrandLogo({
         alt={LABEL}
         height={height}
         width={Math.round((wordmarkSrc.width / wordmarkSrc.height) * height)}
+        style={{ height, width: 'auto' }}
         className={cn('w-auto', className)}
         priority={priority}
       />
@@ -64,6 +72,7 @@ export function BrandLogo({
         alt={LABEL}
         height={height}
         width={Math.round((lockupSrc.width / lockupSrc.height) * height)}
+        style={{ height, width: 'auto' }}
         className={cn('h-auto', className)}
         priority={priority}
       />
@@ -81,6 +90,7 @@ export function BrandLogo({
         aria-hidden
         height={iconH}
         width={Math.round((iconSrc.width / iconSrc.height) * iconH)}
+        style={{ height: iconH, width: 'auto' }}
         className="w-auto"
         priority={priority}
       />
@@ -89,6 +99,7 @@ export function BrandLogo({
         alt={LABEL}
         height={wordmarkH}
         width={Math.round((wordmarkSrc.width / wordmarkSrc.height) * wordmarkH)}
+        style={{ height: wordmarkH, width: 'auto' }}
         className="w-auto"
         priority={priority}
       />
