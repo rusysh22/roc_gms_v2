@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { canAccessEvent, getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import { validateDocumentationFile } from '@/lib/documentationValidation'
@@ -48,8 +49,10 @@ export async function addDocumentationAssetAction(formData: FormData): Promise<v
     where: { match_number: { equals: matchNumber } },
   })
   const match = matches.docs[0]
+  const matchEventId = getRelationId(match?.event_id)
 
-  if (!match) {
+  // AUDIT_TOURNAMENT_STANDARDS SEC-02: match_number is global - require event membership.
+  if (!match || (matchEventId && !(await canAccessEvent(payload, user, matchEventId)))) {
     redirect(`/workspaces/matches/${matchNumber}?docError=not_found`)
   }
 
@@ -98,6 +101,12 @@ export async function deleteDocumentationAssetAction(formData: FormData): Promis
     .findByID({ collection: 'documentation-assets', id: assetId, depth: 0 })
     .catch(() => null)
   if (!asset) {
+    redirect(`${returnTo}?docError=not_found`)
+  }
+
+  // AUDIT_TOURNAMENT_STANDARDS SEC-02: the asset carries its own event_id - scope the delete to it.
+  const assetEventId = getRelationId(asset!.event_id)
+  if (assetEventId && !(await canAccessEvent(payload, user, assetEventId))) {
     redirect(`${returnTo}?docError=not_found`)
   }
 

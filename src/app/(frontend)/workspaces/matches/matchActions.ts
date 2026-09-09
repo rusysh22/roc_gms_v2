@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import type { Payload } from 'payload'
 import { Forbidden } from 'payload'
 
+import { canAccessEvent } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { attemptDoubleEliminationAdvancement, recalculateDoubleEliminationBracket } from '@/lib/doubleElimination'
@@ -91,7 +92,17 @@ const getSafeReturnTo = (formData: FormData, fallback: string) => {
   return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : fallback
 }
 
-const findMatchByNumber = async (payload: Payload, matchNumber: string) => {
+// AUDIT_TOURNAMENT_STANDARDS SEC-02: match_number is unique platform-wide, and
+// assertWorkspaceActionAccess only checks the caller's *global* role - so without this a
+// match_officer/scheduler who belongs to Event A could pass a match_number from Event B and drive
+// its transitions/scores through the normal UI. A caller who isn't a member of the match's event
+// gets the same `undefined` a genuinely missing number returns (callers already redirect to
+// not_found / return {error:'not_found'}), which also avoids confirming the number exists.
+const findMatchByNumber = async (
+  payload: Payload,
+  matchNumber: string,
+  user: { id: string | number; roles?: readonly string[] | null },
+) => {
   const matches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -99,7 +110,12 @@ const findMatchByNumber = async (payload: Payload, matchNumber: string) => {
     where: { match_number: { equals: matchNumber } },
   })
 
-  return { payload, match: matches.docs[0] as MinimalMatch | undefined }
+  const match = matches.docs[0] as MinimalMatch | undefined
+  if (match?.event_id && !(await canAccessEvent(payload, user, match.event_id))) {
+    return { payload, match: undefined }
+  }
+
+  return { payload, match }
 }
 
 const revalidateMatch = (matchNumber: string) => {
@@ -691,7 +707,7 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -734,7 +750,7 @@ export async function finishAndPublishMatchAction(formData: FormData): Promise<v
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -798,7 +814,7 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -922,7 +938,7 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1009,7 +1025,7 @@ export async function deleteMatchSetAction(formData: FormData): Promise<void> {
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1100,7 +1116,7 @@ export async function recordRankingResultAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1197,7 +1213,7 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.scheduler,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1267,7 +1283,7 @@ export async function applyLiveScorePoint({
   user: { id: string | number; roles?: string[] | null }
 }): Promise<ApplyLiveScorePointResult> {
   const actorUserId = user.id
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     return { ok: false, error: 'not_found' }
