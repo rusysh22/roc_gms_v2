@@ -6,26 +6,26 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 
 export const metadata: Metadata = {
-  title: 'Tentang Kami',
-  description: 'Tentang InTourney - platform untuk merencanakan dan menjalankan turnamen multi-cabang olahraga.',
+  title: 'About Us',
+  description: 'About InTourney - a platform for planning and running multi-sport tournaments and games.',
   alternates: { canonical: '/about' },
 }
 
 const VALUES = [
   {
     icon: Zap,
-    title: 'Cepat digunakan',
-    description: 'Dari Quick Bracket tanpa akun sampai event penuh, panitia bisa langsung jalan tanpa training panjang.',
+    title: 'Quick to get running',
+    description: 'From a no-account Quick Bracket to a full event, organizers can get going without lengthy training.',
   },
   {
     icon: GitBranch,
-    title: 'Alur turnamen yang benar',
-    description: 'Bagan, jadwal, dan hasil pertandingan mengikuti aturan format turnamen yang sesungguhnya digunakan panitia.',
+    title: 'Tournament flow done right',
+    description: 'Brackets, schedules, and results follow the tournament formats organizers actually run.',
   },
   {
     icon: ShieldCheck,
-    title: 'Transparan ke peserta',
-    description: 'Halaman publik event, jadwal, dan papan klasemen bisa diakses siapa saja tanpa perlu login.',
+    title: 'Transparent for participants',
+    description: 'A public event page, schedule, and standings are viewable by anyone, no login required.',
   },
 ]
 
@@ -34,12 +34,15 @@ export default function AboutPage() {
     <main className="font-sans text-ink">
       <section className="px-4 pt-12 pb-16">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Tentang Kami</p>
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Kami membantu panitia menjalankan turnamen</h1>
+          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">About Us</p>
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+            We help organizers run tournaments
+          </h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-ink-soft">
-            InTourney dibangun untuk panitia turnamen multi-cabang olahraga dan games - mulai dari
-            membuat event dan mengimpor peserta, menyusun bagan dan jadwal, sampai operasional hari
-            pertandingan, hasil, klasemen, tabel medali, dan situs publik untuk event Anda.
+            InTourney is built for organizers running multi-sport tournaments and games - from
+            creating the event and importing participants, through drawing brackets and building
+            schedules, to match-day operations, results, standings, medal tallies, and a public
+            website for the event.
           </p>
         </div>
 
@@ -56,12 +59,12 @@ export default function AboutPage() {
         </div>
 
         <div className="mx-auto mt-12 max-w-3xl rounded-card border border-line bg-mist p-6 text-sm leading-relaxed text-ink-soft">
-          <h2 className="text-base font-extrabold text-ink">Siapa yang menjalankan InTourney</h2>
+          <h2 className="text-base font-extrabold text-ink">Who runs InTourney</h2>
           <p className="mt-2">
-            InTourney saat ini dikelola oleh perseorangan (belum berbentuk badan hukum) sebagai
-            pengelola platform. Fitur Quick Bracket Tournament tetap gratis dan tanpa akun sebagai
-            cara tercepat mencoba layanan; area Event Management berbayar untuk mendukung
-            pengembangan dan operasional layanan secara berkelanjutan - lihat{' '}
+            InTourney is currently operated by an individual (not yet incorporated as a limited
+            liability company) as the platform provider. Quick Bracket Tournament stays free and
+            account-free as the fastest way to try the Service; the Event Management area is paid to
+            support ongoing development and operations - see{' '}
             <Link href="/pricing" className="font-semibold text-ink underline underline-offset-2">
               Pricing
             </Link>
@@ -71,12 +74,12 @@ export default function AboutPage() {
 
         <div className="mx-auto mt-10 flex max-w-3xl flex-wrap items-center justify-center gap-3">
           <Button asChild>
-            <Link href="/quick-bracket/new">Coba Quick Bracket</Link>
+            <Link href="/quick-bracket/new">Try Quick Bracket</Link>
           </Button>
           <Button asChild variant="secondary">
             <Link href="/contact">
               <MessageCircle className="h-4 w-4" aria-hidden="true" />
-              Hubungi Kami
+              Contact Us
             </Link>
           </Button>
         </div>

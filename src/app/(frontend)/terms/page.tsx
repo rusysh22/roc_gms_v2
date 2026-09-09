@@ -4,212 +4,208 @@ import Link from 'next/link'
 import { LegalLayout } from '@/components/legal-layout'
 
 export const metadata: Metadata = {
-  title: 'Syarat & Ketentuan',
-  description: 'Syarat dan Ketentuan penggunaan layanan InTourney.',
+  title: 'Terms of Service',
+  description: 'Terms of Service for using InTourney.',
   alternates: { canonical: '/terms' },
 }
 
-const EFFECTIVE_DATE = '9 September 2026'
+const EFFECTIVE_DATE = 'September 9, 2026'
 
 export default function TermsPage() {
   return (
     <LegalLayout
-      title="Syarat & Ketentuan"
+      title="Terms of Service"
       effectiveDate={EFFECTIVE_DATE}
       intro={
         <p>
-          Dokumen ini mengatur penggunaan Anda atas InTourney ("Layanan"), termasuk situs publik,
-          Quick Bracket Tournament, dan area Event Management di <code>/workspaces</code>. Dengan
-          mengakses atau menggunakan Layanan, Anda menyetujui Syarat & Ketentuan ini. Jika Anda
-          tidak setuju, mohon untuk tidak menggunakan Layanan.
+          These Terms govern your use of InTourney (the &quot;Service&quot;), including the public
+          website, Quick Bracket Tournament, and the Event Management area at{' '}
+          <code>/workspaces</code>. By accessing or using the Service, you agree to these Terms. If
+          you do not agree, please do not use the Service.
         </p>
       }
       sections={[
         {
-          heading: 'Tentang Penyedia Layanan',
+          heading: 'About the Service Provider',
           body: (
             <p>
-              InTourney saat ini dikelola dan dioperasikan oleh perseorangan (belum berbentuk badan
-              hukum/PT/CV) sebagai penyedia platform ("kami", "Pengelola InTourney"). Pertanyaan
-              hukum terkait Layanan ini dapat diajukan melalui{' '}
+              InTourney is currently owned and operated by an individual (not yet incorporated as a
+              limited liability company) acting as the platform provider (&quot;we&quot;, &quot;the
+              InTourney operator&quot;). Legal questions about the Service can be sent to{' '}
               <a href="mailto:legal@intourney.id">legal@intourney.id</a>.
             </p>
           ),
         },
         {
-          heading: 'Penerimaan Syarat',
+          heading: 'Acceptance of Terms',
           body: (
             <p>
-              Anda harus berusia minimal 18 tahun, atau menggunakan Layanan dengan izin dan
-              pengawasan orang tua/wali, untuk membuat akun Event Management. Quick Bracket
-              Tournament dapat digunakan tanpa membuat akun sebagaimana dijelaskan pada bagian 4.
+              You must be at least 18 years old, or use the Service with the permission and
+              supervision of a parent or guardian, to create an Event Management account. Quick
+              Bracket Tournament can be used without creating an account, as described in section 4.
             </p>
           ),
         },
         {
-          heading: 'Akun Pengguna',
+          heading: 'User Accounts',
           body: (
             <>
               <p>
-                Saat mendaftar melalui email/kata sandi atau Google Sign-In, Anda bertanggung jawab
-                menjaga kerahasiaan kredensial akun dan atas seluruh aktivitas yang terjadi di bawah
-                akun Anda. Segera beri tahu kami melalui{' '}
-                <a href="mailto:legal@intourney.id">legal@intourney.id</a> jika Anda mencurigai
-                adanya penggunaan akun tanpa izin.
+                When you register with an email/password or Google Sign-In, you are responsible for
+                keeping your account credentials confidential and for all activity that occurs under
+                your account. Notify us promptly at{' '}
+                <a href="mailto:legal@intourney.id">legal@intourney.id</a> if you suspect
+                unauthorized use of your account.
               </p>
               <p>
-                Akun baru secara otomatis mendapatkan peran "Event Admin" yang memungkinkan Anda
-                membuat dan mengelola event Anda sendiri. Kami dapat menangguhkan atau menghapus
-                akun yang melanggar Syarat ini.
+                New accounts automatically receive the &quot;Event Admin&quot; role, letting you
+                create and manage your own events. We may suspend or terminate accounts that violate
+                these Terms.
               </p>
             </>
           ),
         },
         {
-          heading: 'Quick Bracket Tournament (Tanpa Login)',
+          heading: 'Quick Bracket Tournament (No Login Required)',
           body: (
             <p>
-              Fitur Quick Bracket memungkinkan pembuatan bagan turnamen tanpa akun. Bagan yang
-              dibuat melalui fitur ini bersifat sementara dan akan kedaluwarsa/dihapus secara
-              otomatis setelah jangka waktu tertentu, kecuali Anda mengklaimnya menjadi event penuh
-              dengan membuat akun. Kami mencatat alamat IP pembuat bagan untuk keperluan pencegahan
-              penyalahgunaan (lihat <Link href="/privacy">Kebijakan Privasi</Link>).
+              Quick Bracket lets you generate a tournament bracket without an account. Brackets
+              created this way are temporary and are automatically expired/deleted after a set
+              period, unless you claim them into a full event by creating an account. We log the
+              creator&apos;s IP address for abuse-prevention purposes (see our{' '}
+              <Link href="/privacy">Privacy Policy</Link>).
             </p>
           ),
         },
         {
-          heading: 'Konten & Data yang Anda Masukkan',
+          heading: 'Content and Data You Enter',
           body: (
             <>
               <p>
-                Sebagai penyelenggara event, Anda dapat memasukkan data pihak lain ke dalam Layanan
-                - misalnya nama klub, tim, dan peserta/atlet (termasuk nama, email, nomor telepon,
-                foto, atau data kontak lain) - baik secara manual maupun melalui impor Excel. Anda
-                menyatakan dan menjamin bahwa Anda memiliki hak dan izin yang sah untuk memasukkan
-                dan mengelola data tersebut di dalam Layanan, termasuk persetujuan dari pihak yang
-                datanya Anda masukkan bila diwajibkan oleh hukum yang berlaku.
+                As an event organizer, you may enter other people&apos;s data into the Service - for
+                example club, team, and participant/athlete names (including names, emails, phone
+                numbers, photos, or other contact details) - either manually or via Excel import. You
+                represent and warrant that you have the lawful right and permission to enter and
+                manage that data within the Service, including consent from the individuals whose
+                data you enter where required by applicable law.
               </p>
               <p>
-                Anda bertanggung jawab penuh atas keakuratan dan legalitas konten yang Anda unggah,
-                dan setuju untuk tidak mengunggah konten yang melanggar hukum, mengandung ujaran
-                kebencian, atau melanggar hak pihak ketiga.
+                You are solely responsible for the accuracy and legality of content you upload, and
+                agree not to upload content that is unlawful, hateful, or that infringes the rights
+                of any third party.
               </p>
             </>
           ),
         },
         {
-          heading: 'Berlangganan, Pembayaran & Pengembalian Dana',
+          heading: 'Subscription, Payment & Refunds',
           body: (
             <>
               <p>
-                Akses ke area Event Management (<code>/workspaces</code>) memerlukan langganan
-                aktif. Paket dan harga langganan ditampilkan secara langsung (live) di halaman{' '}
-                <Link href="/pricing">Pricing</Link> sesuai produk yang kami sediakan.
+                Access to the Event Management area (<code>/workspaces</code>) requires an active
+                subscription. Plans and pricing are shown live on the{' '}
+                <Link href="/pricing">Pricing</Link> page, matching whatever products we make
+                available.
               </p>
               <p>
-                <strong>Pemrosesan pembayaran dilakukan oleh pihak ketiga, Berlanggan
-                (berlanggan.web.id)</strong> ("Berlanggan"), yang bertindak sebagai penyedia
-                infrastruktur penagihan dan aktivasi lisensi independen dari InTourney. Saat Anda
-                memilih paket, Anda akan diarahkan ke halaman checkout milik Berlanggan untuk
-                menyelesaikan pembayaran; syarat pembayaran, metode pembayaran, dan kebijakan
-                mereka sendiri turut berlaku pada transaksi tersebut. Setelah pembayaran berhasil,
-                Anda akan menerima kunci lisensi ("license key") yang perlu Anda aktivasi pada
-                halaman <Link href="/subscribe">Subscribe</Link> untuk mengaitkannya dengan akun
-                InTourney Anda.
+                <strong>Payment is processed by a third party, Berlanggan (berlanggan.web.id)</strong>{' '}
+                (&quot;Berlanggan&quot;), which acts as an independent billing and license-activation
+                provider separate from InTourney. When you choose a plan, you will be taken to
+                Berlanggan&apos;s own checkout page to complete payment; their own payment terms,
+                payment methods, and policies also apply to that transaction. Once payment succeeds,
+                you will receive a license key, which you activate on the{' '}
+                <Link href="/subscribe">Subscribe</Link> page to link it to your InTourney account.
               </p>
               <p>
-                Satu kunci lisensi hanya dapat diaktivasi pada satu akun InTourney pada satu waktu.
-                Status langganan Anda (aktif, masa tenggang, kedaluwarsa, dicabut, atau
-                ditangguhkan) divalidasi ulang secara berkala terhadap sistem Berlanggan.
+                A license key can only be activated on one InTourney account at a time. Your
+                subscription status (active, grace period, expired, revoked, or suspended) is
+                periodically re-validated against Berlanggan&apos;s system.
               </p>
               <p>
-                Permintaan pengembalian dana (refund) mengikuti kebijakan yang berlaku di
-                Berlanggan sebagai penyedia pembayaran. Untuk kendala aktivasi, tautan lisensi yang
-                salah, atau sengketa penagihan yang berkaitan dengan penggunaan Layanan InTourney,
-                hubungi kami melalui <a href="mailto:legal@intourney.id">legal@intourney.id</a> dan
-                kami akan membantu menghubungkan Anda dengan proses yang tepat.
+                Refund requests follow the policy in effect on Berlanggan, as the payment provider.
+                For activation issues, an incorrectly linked license, or a billing dispute related to
+                your use of the InTourney Service, contact us at{' '}
+                <a href="mailto:legal@intourney.id">legal@intourney.id</a> and we will help direct
+                you to the right process.
               </p>
             </>
           ),
         },
         {
-          heading: 'Larangan Penggunaan',
+          heading: 'Prohibited Uses',
           body: (
             <ul>
-              <li>Menyalahgunakan, meretas, atau mengganggu operasional Layanan.</li>
-              <li>Mengumpulkan data pengguna lain tanpa izin (scraping, harvesting).</li>
-              <li>Mengunggah konten ilegal, menyesatkan, atau melanggar hak kekayaan intelektual pihak lain.</li>
-              <li>Menggunakan Layanan untuk tujuan penipuan terhadap peserta turnamen.</li>
-              <li>Mencoba mendapatkan akses tidak sah ke akun, event, atau data milik pihak lain.</li>
+              <li>Misusing, hacking, or disrupting the Service&apos;s operation.</li>
+              <li>Collecting other users&apos; data without permission (scraping, harvesting).</li>
+              <li>Uploading illegal, misleading content, or content that infringes another party&apos;s intellectual property.</li>
+              <li>Using the Service to defraud tournament participants.</li>
+              <li>Attempting to gain unauthorized access to accounts, events, or data belonging to others.</li>
             </ul>
           ),
         },
         {
-          heading: 'Kekayaan Intelektual',
+          heading: 'Intellectual Property',
           body: (
             <p>
-              Nama "InTourney", logo, dan tampilan antarmuka Layanan adalah milik Pengelola
-              InTourney. Konten yang Anda unggah tetap menjadi milik Anda atau pemilik aslinya;
-              dengan mengunggahnya, Anda memberi kami lisensi terbatas untuk menyimpan dan
-              menampilkannya sepanjang diperlukan untuk menjalankan Layanan (misalnya menampilkan
-              bagan dan jadwal di halaman publik event Anda).
+              The &quot;InTourney&quot; name, logo, and the Service&apos;s user interface are owned
+              by the InTourney operator. Content you upload remains yours or its original
+              owner&apos;s; by uploading it, you grant us a limited license to store and display it
+              to the extent necessary to operate the Service (for example, displaying brackets and
+              schedules on your event&apos;s public pages).
             </p>
           ),
         },
         {
-          heading: 'Batasan Tanggung Jawab',
+          heading: 'Limitation of Liability',
           body: (
             <p>
-              Layanan disediakan "sebagaimana adanya" (as is) tanpa jaminan apa pun, tersurat
-              maupun tersirat. Sepanjang diizinkan oleh hukum yang berlaku, Pengelola InTourney
-              tidak bertanggung jawab atas kerugian tidak langsung, insidental, atau konsekuensial
-              yang timbul dari penggunaan atau ketidakmampuan menggunakan Layanan, termasuk namun
-              tidak terbatas pada kerugian akibat gangguan penyelenggaraan turnamen, kehilangan
-              data, atau kegagalan transaksi pihak ketiga (termasuk Berlanggan).
+              The Service is provided &quot;as is&quot; without warranties of any kind, express or
+              implied. To the fullest extent permitted by applicable law, the InTourney operator is
+              not liable for indirect, incidental, or consequential damages arising from your use of,
+              or inability to use, the Service, including but not limited to losses from tournament
+              disruption, data loss, or failed third-party transactions (including Berlanggan).
             </p>
           ),
         },
         {
-          heading: 'Penghentian Layanan',
+          heading: 'Termination',
           body: (
             <p>
-              Kami dapat menangguhkan atau menghentikan akses Anda ke Layanan jika Anda melanggar
-              Syarat ini, atau menghentikan sebagian/seluruh Layanan sewaktu-waktu dengan
-              pemberitahuan yang wajar bila memungkinkan. Anda dapat berhenti menggunakan Layanan
-              dan meminta penghapusan akun kapan saja melalui{' '}
-              <a href="mailto:legal@intourney.id">legal@intourney.id</a>.
+              We may suspend or terminate your access to the Service if you violate these Terms, or
+              discontinue part or all of the Service at any time with reasonable notice where
+              practicable. You may stop using the Service and request account deletion at any time
+              via <a href="mailto:legal@intourney.id">legal@intourney.id</a>.
             </p>
           ),
         },
         {
-          heading: 'Perubahan Syarat',
+          heading: 'Changes to These Terms',
           body: (
             <p>
-              Kami dapat memperbarui Syarat & Ketentuan ini dari waktu ke waktu. Perubahan berlaku
-              sejak tanggal "Berlaku efektif" di atas diperbarui. Penggunaan Layanan yang
-              berkelanjutan setelah perubahan berarti Anda menyetujui Syarat yang telah diperbarui.
+              We may update these Terms from time to time. Changes take effect as of the updated
+              &quot;Effective date&quot; above. Continued use of the Service after a change means you
+              accept the updated Terms.
             </p>
           ),
         },
         {
-          heading: 'Hukum yang Berlaku',
+          heading: 'Governing Law',
           body: (
             <p>
-              Syarat & Ketentuan ini diatur dan ditafsirkan berdasarkan hukum Republik Indonesia,
-              termasuk namun tidak terbatas pada Undang-Undang Nomor 11 Tahun 2008 tentang
-              Informasi dan Transaksi Elektronik sebagaimana diubah dengan Undang-Undang Nomor 19
-              Tahun 2016, Undang-Undang Nomor 8 Tahun 1999 tentang Perlindungan Konsumen, dan
-              Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi.
+              These Terms are governed by and construed in accordance with the laws of the Republic
+              of Indonesia, including but not limited to Law No. 11 of 2008 on Electronic Information
+              and Transactions as amended by Law No. 19 of 2016, Law No. 8 of 1999 on Consumer
+              Protection, and Law No. 27 of 2022 on Personal Data Protection.
             </p>
           ),
         },
         {
-          heading: 'Kontak',
+          heading: 'Contact',
           body: (
             <p>
-              Pertanyaan mengenai Syarat & Ketentuan ini dapat disampaikan ke{' '}
-              <a href="mailto:legal@intourney.id">legal@intourney.id</a>. Lihat juga{' '}
-              <Link href="/contact">Hubungi Kami</Link> untuk kanal lainnya.
+              Questions about these Terms can be sent to{' '}
+              <a href="mailto:legal@intourney.id">legal@intourney.id</a>. See also{' '}
+              <Link href="/contact">Contact Us</Link> for other channels.
             </p>
           ),
         },

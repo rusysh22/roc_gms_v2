@@ -33,13 +33,13 @@ export function LegalLayout({
     <main className="font-sans text-ink">
       <section className="px-4 pt-12 pb-16">
         <div className="mx-auto max-w-3xl">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">Dokumen Legal</p>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">Legal Document</p>
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">{title}</h1>
-          <p className="mt-2 text-sm text-ink-soft">Berlaku efektif: {effectiveDate}</p>
+          <p className="mt-2 text-sm text-ink-soft">Effective date: {effectiveDate}</p>
           <div className="mt-6 text-sm leading-relaxed text-ink-soft">{intro}</div>
 
-          <nav aria-label="Daftar isi" className="mt-8 rounded-card border border-line bg-mist p-4">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">Daftar Isi</p>
+          <nav aria-label="Table of contents" className="mt-8 rounded-card border border-line bg-mist p-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">Table of Contents</p>
             <ol className="grid gap-1.5 sm:grid-cols-2">
               {sections.map((section, index) => (
                 <li key={section.heading}>

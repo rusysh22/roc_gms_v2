@@ -4,193 +4,190 @@ import Link from 'next/link'
 import { LegalLayout } from '@/components/legal-layout'
 
 export const metadata: Metadata = {
-  title: 'Kebijakan Privasi',
-  description: 'Kebijakan Privasi InTourney: data apa yang kami kumpulkan dan bagaimana kami menggunakannya.',
+  title: 'Privacy Policy',
+  description: 'InTourney Privacy Policy: what data we collect and how we use it.',
   alternates: { canonical: '/privacy' },
 }
 
-const EFFECTIVE_DATE = '9 September 2026'
+const EFFECTIVE_DATE = 'September 9, 2026'
 
 export default function PrivacyPage() {
   return (
     <LegalLayout
-      title="Kebijakan Privasi"
+      title="Privacy Policy"
       effectiveDate={EFFECTIVE_DATE}
       intro={
         <p>
-          Kebijakan Privasi ini menjelaskan bagaimana InTourney ("kami") mengumpulkan, menggunakan,
-          dan melindungi data pribadi saat Anda menggunakan Layanan, sesuai dengan Undang-Undang
-          Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi ("UU PDP"). Dengan menggunakan
-          Layanan, Anda menyetujui praktik yang dijelaskan di sini - lihat juga{' '}
-          <Link href="/terms">Syarat & Ketentuan</Link>.
+          This Privacy Policy explains how InTourney (&quot;we&quot;) collects, uses, and protects
+          personal data when you use the Service, in line with Indonesia&apos;s Law No. 27 of 2022 on
+          Personal Data Protection (&quot;PDP Law&quot;). By using the Service, you agree to the
+          practices described here - see also our <Link href="/terms">Terms of Service</Link>.
         </p>
       }
       sections={[
         {
-          heading: 'Data yang Kami Kumpulkan',
+          heading: 'Data We Collect',
           body: (
             <>
-              <p>Kami mengumpulkan data berikut, tergantung bagaimana Anda menggunakan Layanan:</p>
+              <p>We collect the following data, depending on how you use the Service:</p>
               <ul>
                 <li>
-                  <strong>Akun</strong> - nama, alamat email, dan kata sandi (tersimpan terenkripsi)
-                  saat Anda mendaftar; atau nama, email, dan foto profil dari akun Google Anda jika
-                  Anda mendaftar melalui "Sign in with Google".
+                  <strong>Account data</strong> - name, email address, and password (stored
+                  encrypted) when you register; or name, email, and profile photo from your Google
+                  account if you sign up via &quot;Sign in with Google&quot;.
                 </li>
                 <li>
-                  <strong>Data event & peserta</strong> - saat Anda (sebagai penyelenggara)
-                  membuat event, klub, tim, atau peserta, kami menyimpan data yang Anda masukkan,
-                  misalnya nama peserta, nomor identitas, email, nomor telepon, foto, jenis
-                  kelamin, dan nama/email kontak klub atau tim.
+                  <strong>Event and participant data</strong> - when you (as an organizer) create an
+                  event, club, team, or participant, we store the data you enter, such as a
+                  participant&apos;s name, identification number, email, phone number, photo,
+                  gender, and a club or team&apos;s contact name/email.
                 </li>
                 <li>
-                  <strong>Formulir pendaftaran publik</strong> - saat seseorang mendaftar ke event
-                  melalui formulir publik, kami menyimpan nama pendaftar, kontak (email/telepon),
-                  data anggota rombongan, dan alamat IP pengirim untuk mencegah penyalahgunaan.
+                  <strong>Public registration forms</strong> - when someone registers for an event
+                  through a public form, we store the registrant&apos;s name, contact details
+                  (email/phone), roster member data, and the submitter&apos;s IP address to help
+                  prevent abuse.
                 </li>
                 <li>
-                  <strong>Quick Bracket (tanpa akun)</strong> - nama peserta yang Anda masukkan ke
-                  dalam bagan dan alamat IP pembuat bagan.
+                  <strong>Quick Bracket (no account)</strong> - participant names you enter into a
+                  bracket, and the bracket creator&apos;s IP address.
                 </li>
                 <li>
-                  <strong>Data langganan</strong> - saat Anda mengaktivasi lisensi Event Management,
-                  kami menyimpan status langganan dan pengenal aktivasi yang dipertukarkan dengan
-                  Berlanggan (berlanggan.web.id) sebagai mitra pemrosesan pembayaran kami; kami
-                  tidak menyimpan detail kartu/metode pembayaran Anda - itu ditangani sepenuhnya
-                  oleh Berlanggan.
+                  <strong>Subscription data</strong> - when you activate an Event Management license,
+                  we store the subscription status and activation identifiers exchanged with
+                  Berlanggan (berlanggan.web.id), our payment-processing partner; we do not store
+                  your card or payment method details - that is handled entirely by Berlanggan.
                 </li>
                 <li>
-                  <strong>Data teknis</strong> - alamat IP, jenis perangkat/browser, dan halaman
-                  yang dikunjungi, dikumpulkan secara otomatis untuk keperluan keamanan dan
-                  analitik (lihat bagian Cookie & Analitik).
+                  <strong>Technical data</strong> - IP address, device/browser type, and pages
+                  visited, collected automatically for security and analytics purposes (see the
+                  Cookies & Analytics section).
                 </li>
               </ul>
             </>
           ),
         },
         {
-          heading: 'Bagaimana Kami Menggunakan Data',
+          heading: 'How We Use Data',
           body: (
             <ul>
-              <li>Menyediakan dan mengoperasikan fitur Layanan (event, bagan, jadwal, hasil pertandingan, papan klasemen publik).</li>
-              <li>Mengautentikasi akun dan menjaga keamanan Layanan.</li>
-              <li>Memproses dan memvalidasi status langganan Event Management.</li>
-              <li>Berkomunikasi dengan Anda terkait akun, dukungan, atau perubahan kebijakan.</li>
-              <li>Mencegah penyalahgunaan, penipuan, dan pelanggaran Syarat & Ketentuan.</li>
-              <li>Menganalisis penggunaan situs secara agregat untuk meningkatkan Layanan.</li>
+              <li>Providing and operating the Service&apos;s features (events, brackets, schedules, match results, public standings).</li>
+              <li>Authenticating accounts and keeping the Service secure.</li>
+              <li>Processing and validating Event Management subscription status.</li>
+              <li>Communicating with you about your account, support, or policy changes.</li>
+              <li>Preventing abuse, fraud, and violations of the Terms of Service.</li>
+              <li>Analyzing site usage in aggregate to improve the Service.</li>
             </ul>
           ),
         },
         {
-          heading: 'Berbagi Data dengan Pihak Ketiga',
+          heading: 'Sharing Data with Third Parties',
           body: (
             <>
-              <p>Kami tidak menjual data pribadi Anda. Kami membagikan data secukupnya kepada:</p>
+              <p>We do not sell your personal data. We share data as necessary with:</p>
               <ul>
                 <li>
-                  <strong>Berlanggan (berlanggan.web.id)</strong> - untuk pemrosesan pembayaran dan
-                  aktivasi lisensi Event Management, kami mengirimkan pengenal akun (bukan kata
-                  sandi Anda) untuk memvalidasi status langganan.
+                  <strong>Berlanggan (berlanggan.web.id)</strong> - for payment processing and
+                  Event Management license activation, we send an account identifier (not your
+                  password) to validate subscription status.
                 </li>
                 <li>
-                  <strong>Google</strong> - jika Anda memilih "Sign in with Google", Google
-                  memproses autentikasi Anda sesuai kebijakan privasi mereka sendiri.
+                  <strong>Google</strong> - if you choose &quot;Sign in with Google&quot;, Google
+                  processes your authentication under its own privacy policy.
                 </li>
                 <li>
-                  <strong>Penyedia hosting & infrastruktur</strong> - server dan basis data yang
-                  menjalankan Layanan.
+                  <strong>Hosting and infrastructure providers</strong> - the servers and databases
+                  that run the Service.
                 </li>
                 <li>
-                  <strong>Data yang Anda pilih tampilkan secara publik</strong> - nama peserta,
-                  bagan, jadwal, dan hasil pertandingan yang Anda publikasikan di halaman event
-                  publik dapat dilihat oleh siapa saja yang mengakses tautan tersebut - ini adalah
-                  fungsi inti Layanan (papan turnamen publik), bukan berbagi data ke pihak ketiga
-                  lain di luar itu.
+                  <strong>Data you choose to make public</strong> - participant names, brackets,
+                  schedules, and match results you publish on your event&apos;s public pages can be
+                  viewed by anyone who accesses that link - this is a core function of the Service
+                  (public tournament pages), not sharing with an unrelated third party beyond that.
                 </li>
               </ul>
               <p>
-                Kami dapat mengungkapkan data jika diwajibkan oleh hukum yang berlaku atau untuk
-                melindungi hak, keamanan, dan properti InTourney maupun penggunanya.
+                We may disclose data where required by applicable law, or to protect the rights,
+                safety, and property of InTourney or its users.
               </p>
             </>
           ),
         },
         {
-          heading: 'Penyimpanan & Keamanan Data',
+          heading: 'Data Storage & Security',
           body: (
             <p>
-              Data disimpan pada basis data yang kami kelola dan dilindungi dengan praktik keamanan
-              yang wajar (kata sandi terenkripsi, kontrol akses berbasis peran). Namun, tidak ada
-              sistem yang sepenuhnya bebas risiko; kami tidak dapat menjamin keamanan mutlak atas
-              data yang dikirimkan melalui internet. Data disimpan selama akun atau event terkait
-              masih aktif, atau selama diperlukan untuk memenuhi kewajiban hukum.
+              Data is stored in databases we manage and protected with reasonable security practices
+              (encrypted passwords, role-based access control). However, no system is completely risk
+              -free; we cannot guarantee absolute security of data transmitted over the internet.
+              Data is retained for as long as the related account or event remains active, or as
+              needed to meet legal obligations.
             </p>
           ),
         },
         {
-          heading: 'Hak Anda',
+          heading: 'Your Rights',
           body: (
             <>
-              <p>Sesuai UU PDP, Anda berhak untuk:</p>
+              <p>Under the PDP Law, you have the right to:</p>
               <ul>
-                <li>Meminta akses dan salinan data pribadi Anda yang kami simpan.</li>
-                <li>Meminta koreksi atas data yang tidak akurat.</li>
-                <li>Meminta penghapusan akun dan data pribadi Anda, dengan pengecualian data yang wajib kami simpan untuk kepatuhan hukum.</li>
-                <li>Menarik persetujuan Anda atas pemrosesan data tertentu, sepanjang tidak diwajibkan oleh hukum untuk tetap disimpan.</li>
+                <li>Request access to and a copy of the personal data we hold about you.</li>
+                <li>Request correction of inaccurate data.</li>
+                <li>Request deletion of your account and personal data, except data we are required to retain for legal compliance.</li>
+                <li>Withdraw your consent to certain processing, to the extent it is not otherwise legally required.</li>
               </ul>
               <p>
-                Untuk menggunakan hak-hak ini, hubungi kami di{' '}
-                <a href="mailto:privacy@intourney.id">privacy@intourney.id</a>. Jika Anda adalah
-                peserta yang datanya dimasukkan oleh penyelenggara event (bukan pemilik akun),
-                silakan hubungi penyelenggara event terkait terlebih dahulu, atau hubungi kami dan
-                kami akan membantu menindaklanjuti.
+                To exercise these rights, contact us at{' '}
+                <a href="mailto:privacy@intourney.id">privacy@intourney.id</a>. If you are a
+                participant whose data was entered by an event organizer (rather than an account
+                holder yourself), please contact the relevant organizer first, or contact us and we
+                will help follow up.
               </p>
             </>
           ),
         },
         {
-          heading: 'Data Anak',
+          heading: "Children's Data",
           body: (
             <p>
-              Layanan ini tidak ditujukan untuk anak-anak di bawah 13 tahun sebagai pemegang akun.
-              Kami memahami bahwa data peserta turnamen yang dimasukkan oleh penyelenggara dapat
-              mencakup data anak (misalnya peserta kompetisi olahraga usia sekolah) - dalam hal
-              ini, penyelenggara event bertanggung jawab memastikan adanya persetujuan orang tua/wali
-              yang sah sebelum memasukkan data tersebut ke Layanan, sebagaimana diatur pada bagian
-              "Konten & Data yang Anda Masukkan" di <Link href="/terms">Syarat & Ketentuan</Link>.
+              The Service is not intended for children under 13 to hold an account. We recognize
+              that participant data entered by organizers may include data about minors (for
+              example, school-age sports competitors) - in that case, the event organizer is
+              responsible for ensuring valid parental/guardian consent has been obtained before
+              entering that data into the Service, as set out under &quot;Content and Data You
+              Enter&quot; in our <Link href="/terms">Terms of Service</Link>.
             </p>
           ),
         },
         {
-          heading: 'Cookie & Analitik',
+          heading: 'Cookies & Analytics',
           body: (
             <p>
-              Kami menggunakan cookie sesi yang diperlukan untuk menjaga status login Anda. Jika
-              diaktifkan, kami juga menggunakan Google Analytics untuk memahami penggunaan situs
-              secara agregat (misalnya halaman yang paling banyak dikunjungi) - data ini tidak kami
-              gunakan untuk mengidentifikasi Anda secara individual. Anda dapat mengatur browser
-              Anda untuk menolak cookie, meski beberapa fitur Layanan mungkin tidak berfungsi
-              dengan baik tanpanya.
+              We use necessary session cookies to keep you signed in. Where enabled, we also use
+              Google Analytics to understand aggregate site usage (for example, the most-visited
+              pages) - we do not use this data to identify you individually. You can configure your
+              browser to reject cookies, though some features of the Service may not work correctly
+              without them.
             </p>
           ),
         },
         {
-          heading: 'Perubahan Kebijakan',
+          heading: 'Changes to This Policy',
           body: (
             <p>
-              Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Perubahan berlaku
-              sejak tanggal "Berlaku efektif" di atas diperbarui. Kami mendorong Anda meninjau
-              halaman ini secara berkala.
+              We may update this Privacy Policy from time to time. Changes take effect as of the
+              updated &quot;Effective date&quot; above. We encourage you to review this page
+              periodically.
             </p>
           ),
         },
         {
-          heading: 'Kontak',
+          heading: 'Contact',
           body: (
             <p>
-              Pertanyaan atau permintaan terkait privasi dapat disampaikan ke{' '}
-              <a href="mailto:privacy@intourney.id">privacy@intourney.id</a>. Lihat juga{' '}
-              <Link href="/contact">Hubungi Kami</Link> untuk kanal lainnya.
+              Privacy-related questions or requests can be sent to{' '}
+              <a href="mailto:privacy@intourney.id">privacy@intourney.id</a>. See also{' '}
+              <Link href="/contact">Contact Us</Link> for other channels.
             </p>
           ),
         },

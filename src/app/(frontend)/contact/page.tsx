@@ -6,33 +6,33 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 
 export const metadata: Metadata = {
-  title: 'Hubungi Kami',
-  description: 'Cara menghubungi tim InTourney untuk dukungan, pertanyaan bisnis, atau privasi.',
+  title: 'Contact Us',
+  description: 'How to reach the InTourney team for support, business questions, or privacy requests.',
   alternates: { canonical: '/contact' },
 }
 
 // Reuses the real WhatsApp sales number already live on the homepage's "Request a demo" CTA
 // (src/app/(frontend)/page.tsx) - kept as one constant so both stay in sync.
 const WHATSAPP_URL =
-  'https://wa.me/6282331565773?text=' + encodeURIComponent('Halo, saya ingin bertanya tentang InTourney.')
+  'https://wa.me/6282331565773?text=' + encodeURIComponent('Hi, I have a question about InTourney.')
 
 const CHANNELS = [
   {
     icon: MessageCircle,
     title: 'WhatsApp',
-    description: 'Untuk pertanyaan umum, demo, atau bantuan cepat.',
-    action: { label: 'Chat via WhatsApp', href: WHATSAPP_URL },
+    description: 'For general questions, demos, or quick help.',
+    action: { label: 'Chat on WhatsApp', href: WHATSAPP_URL },
   },
   {
     icon: Mail,
-    title: 'Dukungan & Legal',
-    description: 'Untuk pertanyaan akun, langganan, atau Syarat & Ketentuan.',
+    title: 'Support & Legal',
+    description: 'For account, subscription, or Terms of Service questions.',
     action: { label: 'legal@intourney.id', href: 'mailto:legal@intourney.id' },
   },
   {
     icon: ShieldCheck,
-    title: 'Privasi Data',
-    description: 'Untuk permintaan akses, koreksi, atau penghapusan data pribadi.',
+    title: 'Data Privacy',
+    description: 'For requests to access, correct, or delete personal data.',
     action: { label: 'privacy@intourney.id', href: 'mailto:privacy@intourney.id' },
   },
 ]
@@ -42,10 +42,10 @@ export default function ContactPage() {
     <main className="font-sans text-ink">
       <section className="px-4 pt-12 pb-16">
         <div className="mx-auto max-w-3xl text-center">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Hubungi Kami</p>
-          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Ada pertanyaan?</h1>
+          <p className="mb-3 text-xs font-bold uppercase tracking-wide text-ink-soft">Contact Us</p>
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">Have a question?</h1>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-ink-soft">
-            Pilih kanal yang paling sesuai di bawah ini. Kami akan merespons secepat mungkin.
+            Pick whichever channel fits best below. We&apos;ll get back to you as soon as we can.
           </p>
         </div>
 
@@ -66,14 +66,14 @@ export default function ContactPage() {
 
         <div className="mx-auto mt-10 max-w-3xl text-center text-sm text-ink-soft">
           <p>
-            Lihat juga{' '}
+            See also{' '}
             <Link href="/terms" className="inline-flex items-center gap-1 font-semibold text-ink underline underline-offset-2">
               <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-              Syarat & Ketentuan
+              Terms of Service
             </Link>{' '}
-            dan{' '}
+            and{' '}
             <Link href="/privacy" className="font-semibold text-ink underline underline-offset-2">
-              Kebijakan Privasi
+              Privacy Policy
             </Link>
             .
           </p>
