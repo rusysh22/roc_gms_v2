@@ -401,7 +401,26 @@ Batch keamanan pertama — dikerjakan langsung, semua di branch `develop`, `npm 
 | SEC-09 | Menunggu SEC-01 postur `overrideAccess: false`. |
 | SEC-10 | Tidak perlu kode (pola aman terkonfirmasi). |
 
-Belum dikerjakan: seluruh P1 non-keamanan (MATCH-01/02, SKD-*, REG-*, BRK-01) dan P2.
+**Batch P1 (fungsional) — selesai:**
+
+| Temuan | Status |
+|---|---|
+| MATCH-01 | **Selesai** — `isLevelDraw` membedakan seri sah dari match belum selesai; publish lewat tanpa syarat pemenang bila ruleset `allow_draw` + skor imbang. |
+| MATCH-02 | **Selesai** — `retractBracketAdvancement` (generalisasi dari single-elim) menangani double-elim; reopen diizinkan sebelum peserta yang di-advance main lagi, diblokir setelahnya. |
+| SKD-01 | **Selesai** — `detectScheduleConflicts` opsi `restMinutesByMatchId` + tipe `insufficient_rest`; dipakai di create/reschedule manual + import. |
+| SKD-02 | **Selesai** — query konflik di-scope `event_id`, cap dinaikkan 500→5000. |
+| SKD-03 | **Selesai** — create/reschedule manual parse datetime-local di timezone event; dialog prefill + label ikut zona event. |
+| SKD-04 | **Selesai** — optimizer terima `utcOffset` eksplisit; slot dihitung sebagai instant di zona event. |
+| SKD-07 | **Selesai** — publish menolak pemenang manual yang bertentangan dengan skor kecuali ada alasan (tercatat di audit log). |
+| REG-01 | **Selesai** — `CompetitionCategories.max_entries`; approve melebihi kuota → entry `waitlisted`; `promoteWaitlistedEntryAction` + panel Waitlist. |
+| REG-02 | **Selesai** — cek duplikasi di submit publik + approve (email lowercase / display name). |
+| REG-04 | **Selesai** — hook `beforeChange` Rosters menegakkan `max_roster_size` di semua jalur. |
+| REG-05 | **Selesai** — `findUnderRosteredEntries` jadi gate keras di `generateMatchesAction`. |
+| REG-07 | **Selesai** — `spreadsheetGuards` 5MB/5000-baris di semua entry point import. |
+| REG-09 | **Selesai** — banner "N lagi belum ditampilkan" di antrian approval. |
+| BRK-01 | **Selesai** — disclosure "no bracket reset" di format picker + label kartu grand final Quick Bracket. |
+
+Belum dikerjakan: P2.
 
 ## 10. Catatan metodologi
 
