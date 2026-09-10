@@ -22,6 +22,7 @@ import {
   deriveMatchOutcome,
   deriveSetWinnerSide,
   formatScoreSummary,
+  isLevelDraw,
   type MatchOutcome,
   type OutcomeSet,
 } from '@/lib/matchResult'
@@ -524,7 +525,7 @@ async function performMatchTransition(
   match: MinimalMatch,
   matchNumber: string,
   targetStatus: string,
-  opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {},
+  opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null; isDraw?: boolean } = {},
 ): Promise<{ ok: true; match: MinimalMatch } | { ok: false; error: string }> {
   if (!isValidTransition(match.status, targetStatus)) {
     return { ok: false, error: 'invalid_transition' }
@@ -546,6 +547,12 @@ async function performMatchTransition(
     opts.winnerEntryId
   ) {
     updateData.winner_entry_id = opts.winnerEntryId
+    if (!match.actual_end_at) updateData.actual_end_at = new Date().toISOString()
+  }
+  // MATCH-01: a permitted draw publishes with no winner - still stamp the end time and clear any
+  // stale winner from an earlier (wrong) result.
+  if (opts.isDraw && (targetStatus === 'result_published' || targetStatus === 'finished')) {
+    updateData.winner_entry_id = null
     if (!match.actual_end_at) updateData.actual_end_at = new Date().toISOString()
   }
   if (opts.scoreSummary !== undefined) {
@@ -594,7 +601,7 @@ async function performMatchTransition(
   const transition = MATCH_TRANSITIONS.find(
     (candidate) => candidate.from.includes(match.status) && candidate.to === targetStatus,
   )
-  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id) {
+  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id && !opts.isDraw) {
     return { ok: false, error: 'winner_required' }
   }
 
@@ -668,7 +675,12 @@ const resolvePublishResult = async (
   payload: Payload,
   match: MinimalMatch,
   manualWinnerSide: 'a' | 'b' | null,
-): Promise<{ winnerEntryId: string | number | null; scoreSummary: string | null; outcome: MatchOutcome }> => {
+): Promise<{
+  winnerEntryId: string | number | null
+  scoreSummary: string | null
+  outcome: MatchOutcome
+  isDraw: boolean
+}> => {
   const ruleset = await loadRulesetForMatch(payload, {
     categoryId: match.category_id,
     stageId: match.stage_id,
@@ -683,10 +695,14 @@ const resolvePublishResult = async (
   }
   const winnerEntryId = winnerSide ? sideEntryId(match, winnerSide) ?? null : null
 
+  // MATCH-01: only a draw when nobody picked or derived a winner AND the ruleset + scores say it's
+  // a genuine tie (not an unfinished match).
+  const isDraw = !winnerSide && isLevelDraw(ruleset, outcomeSets, outcome)
+
   const labels = await loadParticipantLabels(payload, match)
   const scoreSummary = formatScoreSummary(labels.a, labels.b, outcomeSets, outcome) || null
 
-  return { winnerEntryId, scoreSummary, outcome }
+  return { winnerEntryId, scoreSummary, outcome, isDraw }
 }
 
 export async function transitionMatchStatusAction(formData: FormData): Promise<void> {
@@ -713,10 +729,14 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     redirect(`${returnTo}?matchError=not_found`)
   }
 
-  let opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {}
+  let opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null; isDraw?: boolean } = {}
   if (targetStatus === 'result_published') {
     const resolved = await resolvePublishResult(payload, match, winnerSide)
-    opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+    opts = {
+      winnerEntryId: resolved.winnerEntryId,
+      scoreSummary: resolved.scoreSummary,
+      isDraw: resolved.isDraw,
+    }
   } else if (targetStatus === 'walkover' && winnerSide) {
     opts = { winnerEntryId: sideEntryId(match, winnerSide) ?? null }
   }
@@ -757,11 +777,15 @@ export async function finishAndPublishMatchAction(formData: FormData): Promise<v
   }
 
   const resolved = await resolvePublishResult(payload, match, null)
-  if (!resolved.outcome.decided || !resolved.winnerEntryId) {
+  if (!resolved.isDraw && (!resolved.outcome.decided || !resolved.winnerEntryId)) {
     redirect(`${returnTo}?matchError=match_not_decided`)
   }
 
-  const opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+  const opts = {
+    winnerEntryId: resolved.winnerEntryId,
+    scoreSummary: resolved.scoreSummary,
+    isDraw: resolved.isDraw,
+  }
 
   let current = match
   if (current.status === 'ongoing' || current.status === 'paused') {

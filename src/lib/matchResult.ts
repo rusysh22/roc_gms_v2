@@ -68,7 +68,7 @@ export const deriveSetWinnerSide = (
   return aScore > bScore ? 'a' : 'b'
 }
 
-const setWinnerSide = (ruleset: MatchRuleset | null | undefined, set: OutcomeSet): Side | null => {
+export const setWinnerSide = (ruleset: MatchRuleset | null | undefined, set: OutcomeSet): Side | null => {
   if (set.winner_side === 'a' || set.winner_side === 'b') {
     return set.winner_side
   }
@@ -103,6 +103,31 @@ export const deriveMatchOutcome = (
     setsWonA >= neededWins ? 'a' : setsWonB >= neededWins ? 'b' : null
 
   return { decided: winnerSide !== null, winnerSide, setsWonA, setsWonB, neededWins }
+}
+
+/**
+ * AUDIT_TOURNAMENT_STANDARDS MATCH-01: a legitimate tie that the ruleset permits (football 1-1,
+ * a round-robin points draw). Distinguished from "not decided yet" so a publish can go through
+ * with no winner: the ruleset must allow draws, no side may have taken the match, the set tally
+ * must be level, and every set must itself be either level or already decided (nobody mid-set).
+ * Callers only ask this once a match is Finished/Under review, so an empty score line (0-0) still
+ * counts - but there must be at least one set row, so "finished without scoring" is never an
+ * auto-draw.
+ */
+export const isLevelDraw = (
+  ruleset: MatchRuleset | null | undefined,
+  sets: OutcomeSet[],
+  outcome: MatchOutcome,
+): boolean => {
+  if (!ruleset?.allow_draw) return false
+  if (outcome.winnerSide !== null) return false
+  if (sets.length === 0) return false
+  if (outcome.setsWonA !== outcome.setsWonB) return false
+  return sets.every((set) => {
+    const a = set.participant_a_score ?? 0
+    const b = set.participant_b_score ?? 0
+    return a === b || setWinnerSide(ruleset, set) !== null
+  })
 }
 
 const perSetScores = (sets: OutcomeSet[]): string =>
