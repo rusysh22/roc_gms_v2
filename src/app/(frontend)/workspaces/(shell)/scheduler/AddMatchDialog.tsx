@@ -38,12 +38,14 @@ export function AddMatchDialog({
   entries,
   venues,
   courts,
+  timezoneLabel,
 }: {
   sports: WorkspaceOption[]
   categories: WorkspaceOption[]
   entries: WorkspaceOption[]
   venues: WorkspaceOption[]
   courts: WorkspaceOption[]
+  timezoneLabel: string
 }) {
   return (
     <Dialog>
@@ -65,10 +67,10 @@ export function AddMatchDialog({
           <OptionSelect label="Category" name="categoryId" options={categories} />
           <OptionSelect label="Participant A" name="participantA" options={entries} />
           <OptionSelect label="Participant B" name="participantB" options={entries} />
-          <Field label="Start">
+          <Field label={`Start (${timezoneLabel})`}>
             <Input name="scheduledStart" type="datetime-local" required />
           </Field>
-          <Field label="End">
+          <Field label={`End (${timezoneLabel})`}>
             <Input name="scheduledEnd" type="datetime-local" required />
           </Field>
           <OptionSelect label="Venue" name="venueId" options={venues} />

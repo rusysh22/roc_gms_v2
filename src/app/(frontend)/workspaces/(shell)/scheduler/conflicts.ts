@@ -12,6 +12,15 @@ export type ConflictType =
   | 'participant_overlap'
   | 'missing_schedule_fields'
   | 'invalid_time_range'
+  | 'insufficient_rest'
+
+export type DetectConflictsOptions = {
+  // AUDIT_TOURNAMENT_STANDARDS SKD-01: per-match minimum rest (minutes) between a participant's
+  // consecutive matches, from the category/stage ruleset. Keyed by match id as a string. Absent =
+  // no rest rule for that match (the previous behaviour: only overlaps were ever flagged). The
+  // auto-scheduler already enforced this; the manual create/reschedule path did not.
+  restMinutesByMatchId?: Map<string, number>
+}
 
 export type ConflictWarning = {
   id: string
@@ -139,8 +148,12 @@ const findSharedParticipant = (a: WorkspaceMatch, b: WorkspaceMatch) => {
   return null
 }
 
-export const detectScheduleConflicts = (matches: WorkspaceMatch[]): ConflictWarning[] => {
+export const detectScheduleConflicts = (
+  matches: WorkspaceMatch[],
+  options: DetectConflictsOptions = {},
+): ConflictWarning[] => {
   const warnings: ConflictWarning[] = []
+  const restMinutesByMatchId = options.restMinutesByMatchId
 
   for (const match of matches) {
     if (SCHEDULED_LIKE_STATUSES.has(match.status)) {
@@ -203,6 +216,42 @@ export const detectScheduleConflicts = (matches: WorkspaceMatch[]): ConflictWarn
           type: 'participant_overlap',
           severity: 'alert',
           message: `${a.match_number} and ${b.match_number} overlap for ${sharedParticipant}.`,
+          matchIds: [a.id, b.id],
+        })
+      }
+    }
+  }
+
+  // SKD-01: minimum rest between a participant's consecutive matches. A separate pass from the
+  // overlap loop above - two matches can be non-overlapping (so no participant_overlap) yet still
+  // leave the athlete no recovery time. Only pairs that don't already overlap are considered.
+  if (restMinutesByMatchId && restMinutesByMatchId.size > 0) {
+    for (let i = 0; i < matches.length; i += 1) {
+      for (let j = i + 1; j < matches.length; j += 1) {
+        const a = matches[i]
+        const b = matches[j]
+        if (timeRangesOverlap(a, b)) continue
+        const rangeA = getTimeRange(a)
+        const rangeB = getTimeRange(b)
+        if (!rangeA || !rangeB) continue
+
+        const requiredRestMin = Math.max(
+          restMinutesByMatchId.get(String(a.id)) ?? 0,
+          restMinutesByMatchId.get(String(b.id)) ?? 0,
+        )
+        if (requiredRestMin <= 0) continue
+
+        const [first, second] = rangeA.start <= rangeB.start ? [rangeA, rangeB] : [rangeB, rangeA]
+        const gapMin = (second.start - first.end) / 60000
+        if (gapMin >= requiredRestMin) continue
+
+        const shared = findSharedParticipant(a, b)
+        if (!shared) continue
+        warnings.push({
+          id: `rest-${a.id}-${b.id}`,
+          type: 'insufficient_rest',
+          severity: 'alert',
+          message: `${a.match_number} and ${b.match_number} leave ${shared} only ${Math.max(0, Math.round(gapMin))} min rest (needs ${requiredRestMin}).`,
           matchIds: [a.id, b.id],
         })
       }

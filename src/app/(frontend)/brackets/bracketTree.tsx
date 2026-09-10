@@ -53,9 +53,8 @@ const formatMatchDate = (value: string | undefined, timezone: string) => {
 // <input type="datetime-local"> must round-trip through that SAME fixed zone - not the viewer's
 // browser timezone - or a value typed and saved by an organizer outside WIB would silently
 // re-display as a different wall-clock time than what they entered. Indonesia has no DST, so a
-// fixed +07:00 offset is exact (unlike RescheduleMatchDialog.tsx's own toDateTimeLocalValue, which
-// intentionally uses the browser's local zone because the real scheduler's event can be in any
-// timezone and that dialog runs entirely client-side against the organizer's own wall clock).
+// fixed +07:00 offset is exact. RescheduleMatchDialog.tsx does the same thing with the event's
+// configured timezone (SKD-03) rather than a hardcoded one.
 const JAKARTA_UTC_OFFSET = '+07:00'
 
 const toDateTimeLocalValue = (iso?: string) => {

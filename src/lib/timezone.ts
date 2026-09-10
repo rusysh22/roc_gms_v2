@@ -21,3 +21,14 @@ export type EventTimezone = (typeof EVENT_TIMEZONE_OPTIONS)[number]['value']
 // renders the platform default instead of throwing, while call sites that do have the event in
 // scope pass `resolveEventTimezone(event.timezone)` for a correct, event-specific result.
 export const resolveEventTimezone = (timezone?: string | null): string => timezone || DEFAULT_EVENT_TIMEZONE
+
+/** Short human label for a zone (e.g. "WIB (GMT+7)") - for date-input hints so an admin typing a
+ * naive "14:00" knows which local time it will be stored as. Falls back to the raw zone id. */
+export const eventTimezoneLabel = (timezone?: string | null): string => {
+  const resolved = resolveEventTimezone(timezone)
+  const option = EVENT_TIMEZONE_OPTIONS.find((o) => o.value === resolved)
+  if (!option) return resolved
+  const abbr = option.label.split(' - ')[0]
+  const gmt = option.label.match(/GMT[+-]\d+/)?.[0]
+  return gmt ? `${abbr} (${gmt})` : abbr
+}

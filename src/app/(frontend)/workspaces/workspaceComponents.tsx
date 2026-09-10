@@ -38,6 +38,7 @@ export type WorkspaceMatch = {
   event_id?: RelationshipDoc | string | number | null
   sport_id?: RelationshipDoc | string | number | null
   category_id?: RelationshipDoc | string | number | null
+  stage_id?: RelationshipDoc | string | number | null
   participant_a_entry_id?: EntryDoc | string | number | null
   participant_b_entry_id?: EntryDoc | string | number | null
   winner_entry_id?: EntryDoc | string | number | null

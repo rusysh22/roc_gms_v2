@@ -72,7 +72,7 @@ export type CategoryRulesetInfo = {
 // map (a stage entry only exists when that stage has its own ruleset_id override) - this resolves
 // a match's effective info by checking its stage key first, falling back to its category key,
 // mirroring loadRulesetForMatch's own stage-then-category resolution order exactly.
-const resolveRulesetInfo = (
+export const resolveRulesetInfo = (
   rulesetIndex: Map<string, CategoryRulesetInfo>,
   categoryId: string | undefined,
   stageId: string | undefined,

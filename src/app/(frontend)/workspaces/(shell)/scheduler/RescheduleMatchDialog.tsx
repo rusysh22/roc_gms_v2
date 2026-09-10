@@ -11,11 +11,24 @@ import { Select } from '@/components/ui/select'
 import { getRelationshipId, type WorkspaceMatch, type WorkspaceOption } from '../../workspaceComponents'
 import { rescheduleMatchAction } from './schedulerActions'
 
-const toDateTimeLocalValue = (iso?: string | null) => {
+// SKD-03: the prefilled value must be in the EVENT's timezone (the same zone rescheduleMatchAction
+// now parses the submitted value back in), not the viewer's browser zone - otherwise opening and
+// re-saving the dialog silently shifts a match's time for anyone not physically in the event's
+// region. 'sv-SE' formats as "YYYY-MM-DD HH:mm:ss"; swap the space for a T.
+const toDateTimeLocalValue = (iso: string | null | undefined, timezone: string) => {
   if (!iso) return ''
   const date = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  if (Number.isNaN(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+  return parts.replace(' ', 'T')
 }
 
 // Rescheduling is scoped to one specific match, so the trigger lives right on that match's row
@@ -30,10 +43,14 @@ export function RescheduleMatchDialog({
   match,
   venues,
   courts,
+  timezone,
+  timezoneLabel,
 }: {
   match: WorkspaceMatch
   venues: WorkspaceOption[]
   courts: WorkspaceOption[]
+  timezone: string
+  timezoneLabel: string
 }) {
   const isScheduled = Boolean(match.scheduled_start_at)
   const verb = isScheduled ? 'Reschedule' : 'Schedule'
@@ -49,20 +66,20 @@ export function RescheduleMatchDialog({
       <DialogContent title={`${verb} ${match.match_number}`} className="max-w-lg">
         <form action={rescheduleMatchAction} className="grid gap-4 sm:grid-cols-2">
           <input type="hidden" name="matchNumber" value={match.match_number} />
-          <Field label="Start">
+          <Field label={`Start (${timezoneLabel})`}>
             <Input
               name="scheduledStart"
               type="datetime-local"
               required
-              defaultValue={toDateTimeLocalValue(match.scheduled_start_at)}
+              defaultValue={toDateTimeLocalValue(match.scheduled_start_at, timezone)}
             />
           </Field>
-          <Field label="End">
+          <Field label={`End (${timezoneLabel})`}>
             <Input
               name="scheduledEnd"
               type="datetime-local"
               required
-              defaultValue={toDateTimeLocalValue(match.scheduled_end_at)}
+              defaultValue={toDateTimeLocalValue(match.scheduled_end_at, timezone)}
             />
           </Field>
           <Field label="Venue">

@@ -21,6 +21,7 @@ import {
   type ScheduleImportRow,
   type ScheduleImportRowOutcome,
 } from '@/lib/scheduleImport'
+import { buildCategoryRulesetIndex, resolveRulesetInfo } from '@/lib/scheduleOptimizer'
 import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
@@ -53,11 +54,6 @@ const scheduleStates = new Set(['draft', 'ready_for_scheduling', 'scheduled'])
 // status) - it just stops requiring the misleading detour to get there.
 const reschedulableFromStates = new Set(['draft', 'ready_for_scheduling', 'scheduled', 'published', 'postponed'])
 
-const dateValue = (value: string) => {
-  const time = new Date(value).getTime()
-  return Number.isFinite(time) ? new Date(time).toISOString() : null
-}
-
 const assertRelationship = async (
   payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload'],
   collection: 'sports' | 'competition-categories' | 'competition-entries' | 'venues' | 'courts',
@@ -74,15 +70,41 @@ const refreshSchedule = () => {
   revalidatePath('/schedule')
 }
 
+// SKD-01: resolve each match's ruleset-defined minimum rest so detectScheduleConflicts can enforce
+// it on the manual create/reschedule path the same way the auto-optimizer already does.
+const buildRestMinutesByMatch = async (
+  payload: Awaited<ReturnType<typeof assertWorkspaceActionAccess>>['payload'],
+  eventId: string | number,
+  matches: WorkspaceMatch[],
+): Promise<Map<string, number>> => {
+  const index = await buildCategoryRulesetIndex(payload, eventId)
+  const map = new Map<string, number>()
+  for (const match of matches) {
+    const categoryId = getRelationshipId(match.category_id)
+    const stageId = getRelationshipId(match.stage_id)
+    const rest = resolveRulesetInfo(
+      index,
+      categoryId != null ? String(categoryId) : undefined,
+      stageId != null ? String(stageId) : undefined,
+    ).minRestMinutes
+    if (rest && rest > 0) map.set(String(match.id), rest)
+  }
+  return map
+}
+
 export async function createScheduledMatchAction(formData: FormData): Promise<void> {
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: scheduleReturn })
   const event = await getActiveEvent(payload)
   const sportId = text(formData, 'sportId'); const categoryId = text(formData, 'categoryId')
   const participantA = text(formData, 'participantA'); const participantB = text(formData, 'participantB')
   const venueId = text(formData, 'venueId'); const courtId = text(formData, 'courtId')
-  const start = dateValue(text(formData, 'scheduledStart')); const end = dateValue(text(formData, 'scheduledEnd'))
   const matchNumber = text(formData, 'matchNumber').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)
   const status = text(formData, 'status') || 'scheduled'
+  // SKD-03: the datetime-local inputs carry no zone - parse them in the EVENT's timezone (same
+  // helper the schedule import uses), not the server's local time.
+  const timezone = resolveEventTimezone(event?.timezone)
+  const start = parseScheduleDateTime(text(formData, 'scheduledStart'), timezone)
+  const end = parseScheduleDateTime(text(formData, 'scheduledEnd'), timezone)
   if (!event || !sportId || !categoryId || !participantA || !participantB || participantA === participantB || !venueId || !courtId || !start || !end || new Date(end) <= new Date(start) || !matchNumber || !scheduleStates.has(status)) redirect(`${scheduleReturn}?scheduleError=invalid_match`)
   try {
     const [sport, category, entryA, entryB, venue, court, sameNumber] = await Promise.all([
@@ -96,9 +118,12 @@ export async function createScheduledMatchAction(formData: FormData): Promise<vo
   } catch {
     redirect(`${scheduleReturn}?scheduleError=invalid_relationship`)
   }
-  const all = await payload.find({ collection: 'matches', depth: 2, limit: 500 })
-  const candidate: WorkspaceMatch = { id: 'candidate', match_number: matchNumber, status, scheduled_start_at: start, scheduled_end_at: end, participant_a_entry_id: participantA, participant_b_entry_id: participantB, venue_id: venueId, court_id: courtId }
-  if (detectScheduleConflicts([...all.docs as WorkspaceMatch[], candidate]).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
+  // SKD-02: scope to THIS event (match_number is globally unique but scheduling is per-event) and
+  // lift the cap well above any single event's match count so nothing is silently skipped.
+  const all = await payload.find({ collection: 'matches', depth: 2, limit: 5000, where: { event_id: { equals: event.id } } })
+  const candidate: WorkspaceMatch = { id: 'candidate', match_number: matchNumber, status, scheduled_start_at: start, scheduled_end_at: end, participant_a_entry_id: participantA, participant_b_entry_id: participantB, venue_id: venueId, court_id: courtId, category_id: categoryId }
+  const restByMatch = await buildRestMinutesByMatch(payload, event.id, [...all.docs as WorkspaceMatch[], candidate])
+  if (detectScheduleConflicts([...all.docs as WorkspaceMatch[], candidate], { restMinutesByMatchId: restByMatch }).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
   const created = await payload.create({ collection: 'matches', data: { event_id: Number(event.id), sport_id: Number(sportId), category_id: Number(categoryId), participant_a_entry_id: Number(participantA), participant_b_entry_id: Number(participantB), venue_id: Number(venueId), court_id: Number(courtId), match_number: matchNumber, scheduled_start_at: start, scheduled_end_at: end, status: status as 'draft' | 'ready_for_scheduling' | 'scheduled', is_public: text(formData, 'isPublic') === 'on', generation_source: 'manual', generation_key: `manual-${event.id}-${matchNumber}`, documentation_status: 'not_started' } })
   await recordAuditLog({ payload, action: 'schedule.match_create', entityType: 'matches', entityId: created.id, before: null, after: { match_number: matchNumber, scheduled_start_at: start, scheduled_end_at: end, reason: 'manual schedule creation' }, actorUserId: user.id })
   refreshSchedule(); redirect(`${scheduleReturn}?scheduleCreated=1`)
@@ -106,16 +131,35 @@ export async function createScheduledMatchAction(formData: FormData): Promise<vo
 
 export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   const matchNumber = text(formData, 'matchNumber'); const reason = text(formData, 'reason')
-  const start = dateValue(text(formData, 'scheduledStart')); const end = dateValue(text(formData, 'scheduledEnd')); const venueId = text(formData, 'venueId'); const courtId = text(formData, 'courtId')
-  if (!matchNumber || !reason || !start || !end || new Date(end) <= new Date(start) || !venueId || !courtId) redirect(`${scheduleReturn}?scheduleError=invalid_reschedule`)
+  const venueId = text(formData, 'venueId'); const courtId = text(formData, 'courtId')
+  if (!matchNumber || !reason || !venueId || !courtId) redirect(`${scheduleReturn}?scheduleError=invalid_reschedule`)
   const { payload, user } = await assertWorkspaceActionAccess({ allowedRoles: WORKSPACE_ROLES.scheduler, returnTo: scheduleReturn })
   const result = await payload.find({ collection: 'matches', depth: 2, limit: 1, where: { match_number: { equals: matchNumber } } }); const match = result.docs[0] as WorkspaceMatch | undefined
   if (!match || !reschedulableFromStates.has(match.status)) redirect(`${scheduleReturn}?scheduleError=reschedule_not_allowed`)
+  const rescheduleEventId = getRelationshipId(match.event_id)
+  // SKD-03: interpret the datetime-local values in the event's timezone, not the server's.
+  const rescheduleEventDoc = rescheduleEventId != null
+    ? await payload.findByID({ collection: 'events', id: rescheduleEventId, depth: 0 }).catch(() => null)
+    : null
+  const rescheduleTimezone = resolveEventTimezone(rescheduleEventDoc?.timezone)
+  const start = parseScheduleDateTime(text(formData, 'scheduledStart'), rescheduleTimezone)
+  const end = parseScheduleDateTime(text(formData, 'scheduledEnd'), rescheduleTimezone)
+  if (!start || !end || new Date(end) <= new Date(start)) redirect(`${scheduleReturn}?scheduleError=invalid_reschedule`)
   const court = await payload.findByID({ collection: 'courts', id: courtId, depth: 0 }) as { venue_id?: string | number }
   if (String(court.venue_id) !== venueId) redirect(`${scheduleReturn}?scheduleError=invalid_relationship`)
-  const all = await payload.find({ collection: 'matches', depth: 2, limit: 500 })
+  // SKD-02: scope the conflict scan to this match's event and lift the row cap.
+  const all = await payload.find({
+    collection: 'matches',
+    depth: 2,
+    limit: 5000,
+    where: rescheduleEventId != null ? { event_id: { equals: rescheduleEventId } } : {},
+  })
   const candidate = { ...match, id: 'candidate', scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId }
-  if (detectScheduleConflicts([...all.docs.filter((item) => item.id !== match.id) as WorkspaceMatch[], candidate]).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
+  const others = all.docs.filter((item) => item.id !== match.id) as WorkspaceMatch[]
+  const restByMatch = rescheduleEventId != null
+    ? await buildRestMinutesByMatch(payload, rescheduleEventId, [...others, candidate])
+    : new Map<string, number>()
+  if (detectScheduleConflicts([...others, candidate], { restMinutesByMatchId: restByMatch }).some((warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert')) redirect(`${scheduleReturn}?scheduleError=conflict`)
   const before = { status: match.status, scheduled_start_at: match.scheduled_start_at || null, scheduled_end_at: match.scheduled_end_at || null, venue_id: match.venue_id || null, court_id: match.court_id || null }
   // A postponed match confirmed onto a new time is "Rescheduled - new time confirmed," not still
   // "Postponed - new time pending" (section 15.4's explicit public-page distinction) - flipping
@@ -127,18 +171,15 @@ export async function rescheduleMatchAction(formData: FormData): Promise<void> {
   // postponed-recovery path) threw Forbidden unconditionally, for every role.
   await payload.update({ collection: 'matches', id: Number(match.id), data: { scheduled_start_at: start, scheduled_end_at: end, venue_id: Number(venueId), court_id: Number(courtId), ...(isRecoveringFromPostponed ? { status: 'scheduled' as const } : {}) }, user })
   await recordAuditLog({ payload, action: 'schedule.match_reschedule', entityType: 'matches', entityId: match.id, before, after: { status: isRecoveringFromPostponed ? 'scheduled' : match.status, scheduled_start_at: start, scheduled_end_at: end, venue_id: venueId, court_id: courtId, reason }, actorUserId: user.id })
-  const eventId = getRelationshipId(match.event_id)
-  if (eventId) {
-    const eventDoc = await payload.findByID({ collection: 'events', id: eventId, depth: 0 }).catch(() => null)
-    const timezone = resolveEventTimezone(eventDoc?.timezone)
+  if (rescheduleEventId != null) {
     await postMatchAnnouncement({
       payload,
-      eventId,
+      eventId: rescheduleEventId,
       categoryId: getRelationshipId(match.category_id),
       matchId: match.id,
       matchNumber,
       title: `Schedule change: ${matchNumber}`,
-      summary: `${matchNumber} has a new time: ${formatDateTime(start, timezone)}–${formatDateTime(end, timezone)}. Reason: ${reason}`,
+      summary: `${matchNumber} has a new time: ${formatDateTime(start, rescheduleTimezone)}–${formatDateTime(end, rescheduleTimezone)}. Reason: ${reason}`,
       urgency: 'schedule_change',
     })
   }
@@ -214,6 +255,8 @@ const runScheduleImport = async (
   // Mutated as rows apply, so a conflict check for row N sees row N-1's already-applied move too -
   // not just what was in the database before the whole import started.
   const workingMatches = new Map<string, WorkspaceMatch>(matches.map((match) => [String(match.id), { ...match }]))
+  // SKD-01: same ruleset-rest enforcement as the single-match reschedule path.
+  const restByMatch = await buildRestMinutesByMatch(payload, event.id, matches as WorkspaceMatch[])
 
   const processRow = async (row: ScheduleImportRow): Promise<ScheduleImportRowOutcome> => {
     const match = matchesByNumber.get(row.matchNumber)
@@ -266,12 +309,18 @@ const runScheduleImport = async (
         court_id: court.id,
       }
       const others = Array.from(workingMatches.values()).filter((item) => String(item.id) !== String(match.id))
-      if (
-        detectScheduleConflicts([...others, candidate]).some(
-          (warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert',
-        )
-      ) {
-        return { matchNumber: row.matchNumber, outcome: 'error', message: 'Conflicts with another match at that venue/court/time' }
+      const candidateRest = restByMatch.get(String(match.id))
+      const restForCheck = candidateRest ? new Map(restByMatch).set('candidate', candidateRest) : restByMatch
+      const conflictWarnings = detectScheduleConflicts([...others, candidate], { restMinutesByMatchId: restForCheck }).filter(
+        (warning) => warning.matchIds.includes('candidate') && warning.severity === 'alert',
+      )
+      if (conflictWarnings.length > 0) {
+        const restWarning = conflictWarnings.find((w) => w.type === 'insufficient_rest')
+        return {
+          matchNumber: row.matchNumber,
+          outcome: 'error',
+          message: restWarning ? restWarning.message : 'Conflicts with another match at that venue/court/time',
+        }
       }
 
       const before = {
