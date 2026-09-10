@@ -118,6 +118,18 @@ export const CompetitionCategories: CollectionConfig = {
       ],
     },
     {
+      // AUDIT_TOURNAMENT_STANDARDS REG-01: without a cap, the "Waitlisted" entry status was
+      // decorative - nothing ever set it. When set (>0), approving a registration past this many
+      // confirmed entries creates the entry as `waitlisted` instead of `confirmed`, and a
+      // Registrations-workspace action promotes waitlisted entries when a slot frees up.
+      name: 'max_entries',
+      type: 'number',
+      min: 0,
+      admin: {
+        description: 'Maximum confirmed entries. 0 or blank = unlimited. Extra approvals are waitlisted.',
+      },
+    },
+    {
       name: 'group_qualify_count',
       type: 'number',
       min: 1,

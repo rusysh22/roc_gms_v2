@@ -38,6 +38,8 @@ const errorMessages: Record<string, string> = {
   invalid_roster_size:
     'Check the number of people listed - a pair needs exactly two, individual needs exactly one, and teams have a minimum/maximum roster size.',
   rate_limited: 'Too many submissions from this connection recently - please try again in a bit.',
+  already_registered:
+    'A registration for this category already exists under that email or name. Contact the organizer if you think this is a mistake.',
 }
 
 const participantModeCopy: Record<string, { label: string; helper: string }> = {

@@ -2017,6 +2017,9 @@ const CategoriesStep = async ({
             <Field label="Max roster size">
               <Input name="maxRosterSize" type="number" min="0" />
             </Field>
+            <Field label="Max entries (0 = unlimited)">
+              <Input name="maxEntries" type="number" min="0" />
+            </Field>
             <div className="sm:col-span-2">
               <SubmitButton>Add category</SubmitButton>
             </div>
@@ -2145,6 +2148,9 @@ const CategoriesStep = async ({
                         </Field>
                         <Field label="Max roster size">
                           <Input name="maxRosterSize" type="number" min="0" defaultValue={category.max_roster_size ?? ''} />
+                        </Field>
+                        <Field label="Max entries (0 = unlimited)">
+                          <Input name="maxEntries" type="number" min="0" defaultValue={category.max_entries ?? ''} />
                         </Field>
                         <div className="sm:col-span-2">
                           <SubmitButton>Save category</SubmitButton>

@@ -107,6 +107,28 @@ export async function approveRegistrationSubmissionAction(formData: FormData): P
   const mode = String(submission!.participant_mode)
   const roster = (submission!.roster || []) as RosterRow[]
 
+  // REG-02: don't approve a second entry for someone already registered in this category. Match on
+  // the contact email an approved submission recorded, or the exact display name.
+  const email = String(submission!.contact_email || '').trim().toLowerCase()
+  const priorApproved = await payload.find({
+    collection: 'registration-submissions',
+    depth: 0,
+    limit: 1,
+    where: {
+      and: [
+        { category_id: { equals: categoryId } },
+        { status: { equals: 'approved' } },
+        { id: { not_equals: submissionId } },
+        email
+          ? { or: [{ contact_email: { equals: email } }, { display_name: { equals: submission!.display_name } }] }
+          : { display_name: { equals: submission!.display_name } },
+      ],
+    },
+  })
+  if (priorApproved.totalDocs > 0) {
+    redirect(`${basePage}?registrationError=duplicate_registration`)
+  }
+
   const clubId = await findOrCreateClub(
     payload,
     eventId,
@@ -184,17 +206,28 @@ export async function approveRegistrationSubmissionAction(formData: FormData): P
   const existingEntries = await payload.find({
     collection: 'competition-entries',
     depth: 0,
-    limit: 500,
+    limit: 2000,
     where: { category_id: { equals: categoryId } },
   })
   const nextSeed = existingEntries.docs.reduce((max, entry) => Math.max(max, Number(entry.seed_number) || 0), 0) + 1
+
+  // REG-01: once a category hits its max_entries of confirmed entries, further approvals land on
+  // the waitlist instead of silently overfilling the draw. promoteWaitlistedEntryAction moves them
+  // up when a confirmed entry withdraws.
+  const category = await payload
+    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .catch(() => null)
+  const maxEntries = category?.max_entries ?? 0
+  const confirmedCount = existingEntries.docs.filter((e) => e.status === 'confirmed').length
+  const entryStatus: 'confirmed' | 'waitlisted' =
+    maxEntries > 0 && confirmedCount >= maxEntries ? 'waitlisted' : 'confirmed'
 
   const entryData = {
     event_id: eventId,
     category_id: categoryId,
     display_name: String(submission!.display_name),
     entry_type: entryType as 'individual' | 'pair' | 'team' | 'club',
-    status: 'confirmed' as const,
+    status: entryStatus,
     seed_number: nextSeed,
     player_id: mode === 'individual' ? entryPlayerId : undefined,
     team_id: teamId,
@@ -233,7 +266,58 @@ export async function approveRegistrationSubmissionAction(formData: FormData): P
   })
 
   revalidatePath(basePage)
-  redirect(`${basePage}?registrationUpdated=approved`)
+  redirect(`${basePage}?registrationUpdated=${entryStatus === 'waitlisted' ? 'waitlisted' : 'approved'}`)
+}
+
+// REG-01: move a waitlisted entry up to confirmed - after a confirmed entry withdraws, or after an
+// admin raises max_entries. Refuses if the category is still full.
+export async function promoteWaitlistedEntryAction(formData: FormData): Promise<void> {
+  const { payload, user } = await assertWorkspaceActionAccess({
+    allowedRoles: WORKSPACE_ROLES.registrationDesk,
+    returnTo: basePage,
+  })
+
+  const entryId = text(formData, 'entryId')
+  if (!entryId) {
+    redirect(`${basePage}?registrationError=invalid_request`)
+  }
+
+  const entry = await payload
+    .findByID({ collection: 'competition-entries', id: entryId, depth: 0 })
+    .catch(() => null)
+  if (!entry || entry.status !== 'waitlisted') {
+    redirect(`${basePage}?registrationError=not_waitlisted`)
+  }
+  await assertSubmissionEventAccess(payload, user, entry!.event_id)
+
+  const categoryId = Number(entry!.category_id)
+  const category = await payload
+    .findByID({ collection: 'competition-categories', id: categoryId, depth: 0 })
+    .catch(() => null)
+  const maxEntries = category?.max_entries ?? 0
+  if (maxEntries > 0) {
+    const confirmed = await payload.count({
+      collection: 'competition-entries',
+      where: { and: [{ category_id: { equals: categoryId } }, { status: { equals: 'confirmed' } }] },
+    })
+    if (confirmed.totalDocs >= maxEntries) {
+      redirect(`${basePage}?registrationError=category_full`)
+    }
+  }
+
+  await payload.update({ collection: 'competition-entries', id: entryId, data: { status: 'confirmed' } })
+  await recordAuditLog({
+    payload,
+    action: 'competition_entry.promote_from_waitlist',
+    entityType: 'competition-entries',
+    entityId: entryId,
+    before: { status: 'waitlisted' },
+    after: { status: 'confirmed' },
+    actorUserId: user.id,
+  })
+
+  revalidatePath(basePage)
+  redirect(`${basePage}?registrationUpdated=promoted`)
 }
 
 export async function rejectRegistrationSubmissionAction(formData: FormData): Promise<void> {
