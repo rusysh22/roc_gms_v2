@@ -16,6 +16,7 @@ import {
   planMenuImport,
 } from '@/lib/collectionIo/engine'
 import { MENU_IO_SPECS } from '@/lib/collectionIo/specs'
+import { checkSpreadsheetRowCount, checkSpreadsheetSize } from '@/lib/spreadsheetGuards'
 import {
   getAuthenticatedWorkspaceUser,
   hasWorkspaceRole,
@@ -94,13 +95,24 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!(file instanceof File) || file.size === 0) {
     return Response.json({ error: 'no file uploaded' }, { status: 400 })
   }
+  // REG-07: a Route Handler is not covered by next.config's bodySizeLimit - cap the upload before
+  // XLSX.read touches it.
+  const sizeCheck = checkSpreadsheetSize(file.size)
+  if (!sizeCheck.ok) {
+    return Response.json({ error: sizeCheck.reason }, { status: 413 })
+  }
   const buffer = Buffer.from(await file.arrayBuffer())
 
   let plan
   try {
     const parsed = parseMenuWorkbook(buffer, spec)
-    if (parsed.every((sheet) => sheet.rows.length === 0)) {
+    const totalRows = parsed.reduce((sum, sheet) => sum + sheet.rows.length, 0)
+    if (totalRows === 0) {
       return Response.json({ error: 'the workbook has no data rows' }, { status: 400 })
+    }
+    const rowCheck = checkSpreadsheetRowCount(totalRows)
+    if (!rowCheck.ok) {
+      return Response.json({ error: rowCheck.reason }, { status: 413 })
     }
     plan = await planMenuImport(payload, eventId, spec, parsed)
   } catch (err) {

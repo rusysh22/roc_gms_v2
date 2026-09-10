@@ -10,6 +10,7 @@ import type { Payload } from 'payload'
 import { recordAuditLog } from '@/lib/audit'
 import { advanceCategoriesStatus } from '@/lib/categoryLifecycle'
 import { parseParticipantsWorkbook, type ParsedParticipantsWorkbook } from '@/lib/participantsImport'
+import { checkSpreadsheetRowCount, checkSpreadsheetSize } from '@/lib/spreadsheetGuards'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import {
   SCRATCH_DIR,
@@ -364,8 +365,17 @@ const parseImportFile = async (file: FormDataEntryValue | null): Promise<ParsedP
   if (!(file instanceof File) || file.size === 0) {
     return null
   }
+  // REG-07: bound the upload before XLSX.read, and the parsed row count after.
+  if (!checkSpreadsheetSize(file.size).ok) {
+    return null
+  }
   try {
-    return parseParticipantsWorkbook(await file.arrayBuffer())
+    const parsed = parseParticipantsWorkbook(await file.arrayBuffer())
+    const totalRows = Object.values(parsed).reduce(
+      (sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0),
+      0,
+    )
+    return checkSpreadsheetRowCount(totalRows).ok ? parsed : null
   } catch {
     return null
   }

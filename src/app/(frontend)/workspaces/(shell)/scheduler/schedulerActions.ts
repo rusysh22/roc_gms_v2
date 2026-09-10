@@ -22,6 +22,7 @@ import {
   type ScheduleImportRowOutcome,
 } from '@/lib/scheduleImport'
 import { buildCategoryRulesetIndex, resolveRulesetInfo } from '@/lib/scheduleOptimizer'
+import { checkSpreadsheetRowCount, checkSpreadsheetSize } from '@/lib/spreadsheetGuards'
 import { resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../workspaceAuth'
@@ -511,9 +512,12 @@ const parseUploadedScheduleSheet = async (
   file: FormDataEntryValue | null,
 ): Promise<ScheduleImportRow[] | null> => {
   if (!(file instanceof File) || file.size === 0) return null
+  // REG-07: bound the upload before XLSX.read, then bound the parsed row count.
+  if (!checkSpreadsheetSize(file.size).ok) return null
   try {
     const rows = parseScheduleImportWorkbook(await file.arrayBuffer())
-    return rows.length > 0 ? rows : null
+    if (rows.length === 0 || !checkSpreadsheetRowCount(rows.length).ok) return null
+    return rows
   } catch {
     return null
   }
