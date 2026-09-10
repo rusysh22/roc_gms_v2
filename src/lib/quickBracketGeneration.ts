@@ -269,7 +269,12 @@ export const buildQuickDoubleEliminationBracket = (
   const grandFinal = buildMatchCard({
     id: 'grand-final',
     matchNumber: 'GF',
-    roundName: 'Grand Final',
+    // AUDIT_TOURNAMENT_STANDARDS BRK-01: Quick Bracket's double-elim has no bracket reset - the
+    // grand final decides the champion in one match even when a losers-bracket finalist wins it.
+    // Name it so that's visible on the bracket, not a surprise (also disclosed on the format
+    // picker). A full reset would need the advancement engine extended - out of scope for the
+    // no-login quick tool.
+    roundName: 'Grand Final (single match, no reset)',
     participantA: blankParticipant(),
     participantB: blankParticipant(),
     isBye: false,

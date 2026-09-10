@@ -137,7 +137,8 @@ export const QuickBracketForm = () => {
                 {
                   value: 'double_elimination' as const,
                   title: 'Double Elimination',
-                  description: 'Lose once, fight back through the losers bracket.',
+                  description:
+                    'Lose once, fight back through the losers bracket. The grand final is a single match - no bracket reset.',
                 },
               ]
             ).map((option) => (
