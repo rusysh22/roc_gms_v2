@@ -69,6 +69,7 @@ type MinimalMatchSet = {
   participant_b_score?: number | null
   winner_entry_id?: string | number | null
   notes?: string | null
+  updatedAt?: string | null
 }
 
 const toStringField = (value: FormDataEntryValue | null) =>
@@ -623,8 +624,19 @@ async function performMatchTransition(
   // off a finished/result_published/walkover/disputed match throws Forbidden for every role. A
   // match_officer hitting a locked-status transition (reopen/restore/publish) gets a clean message
   // instead of a 500.
+  // AUDIT_TOURNAMENT_STANDARDS MATCH-08: optimistic lock. Updating by (id AND still-expected
+  // status) means a concurrent transition that already moved this match makes our write match zero
+  // rows - we bail cleanly instead of silently clobbering the other officer's change.
   try {
-    await payload.update({ collection: 'matches', id: match.id, data: updateData, user })
+    const updated = await payload.update({
+      collection: 'matches',
+      where: { and: [{ id: { equals: match.id } }, { status: { equals: match.status } }] },
+      data: updateData,
+      user,
+    })
+    if (updated.docs.length === 0) {
+      return { ok: false, error: 'stale_transition' }
+    }
   } catch (error) {
     if (error instanceof Forbidden) {
       return { ok: false, error: 'transition_forbidden' }
@@ -839,6 +851,7 @@ export async function finishAndPublishMatchAction(formData: FormData): Promise<v
 export async function updateMatchSetScoreAction(formData: FormData): Promise<void> {
   const matchNumber = toStringField(formData.get('matchNumber'))
   const matchSetId = toStringField(formData.get('matchSetId'))
+  const expectedUpdatedAt = toStringField(formData.get('expectedUpdatedAt'))
   const winnerSide = toStringField(formData.get('winnerSide'))
   // The set winner is normally derived from the score + ruleset. `manualWinnerOverride=1` is the
   // hidden "Correct manually" path for retirement / DQ / a score the rules can't resolve.
@@ -879,6 +892,13 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
 
   if (String(existingSet.match_id || '') !== String(match.id)) {
     redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  // MATCH-07: reject an absolute-value score edit if another officer changed this set between the
+  // form being rendered and submitted (the "+1" tap path already has atomic SQL). Older cached
+  // pages that don't send the token are not blocked.
+  if (expectedUpdatedAt && existingSet.updatedAt && existingSet.updatedAt !== expectedUpdatedAt) {
+    redirect(`${returnTo}?matchError=stale_transition`)
   }
 
   // AUDIT_E2E RULE-01: the ruleset's target_score/max_score/deuce_enabled/allow_draw were

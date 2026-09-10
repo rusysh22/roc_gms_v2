@@ -570,6 +570,9 @@ export default async function AdminMatchDetailPage({
                   >
                     <input type="hidden" name="matchNumber" value={match.match_number} />
                     <input type="hidden" name="matchSetId" value={set.id} />
+                    {/* MATCH-07: optimistic-concurrency token - rejects the write if another officer
+                        edited this set between page render and submit. */}
+                    <input type="hidden" name="expectedUpdatedAt" value={set.updatedAt ?? ''} />
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm font-extrabold text-ink">Set {set.set_number}</span>
                     </div>

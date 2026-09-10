@@ -69,9 +69,12 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
     requiresConfirm: true,
   },
   {
-    from: ['scheduled', 'published', 'ready_to_start'],
+    // AUDIT_TOURNAMENT_STANDARDS MATCH-03: 'ongoing'/'paused' included so a mid-match retirement
+    // (injury, DQ) can be recorded as a walkover - a decided outcome distinct from a normal loss -
+    // instead of only being possible before the first point.
+    from: ['scheduled', 'published', 'ready_to_start', 'ongoing', 'paused'],
     to: 'walkover',
-    label: 'Mark Walkover',
+    label: 'Mark Walkover / Retirement',
     requiresConfirm: true,
     requiresWinnerSelection: true,
   },
@@ -156,6 +159,7 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
   ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
   best_of_decided: 'This match is already decided under its best-of format - no further sets can be added.',
   invalid_match_state: 'Scores can only be entered while a match is ongoing, paused, or under review.',
+  stale_transition: 'This match was changed by someone else a moment ago. Refresh and try again.',
   manual_winner_conflict:
     'The winner you picked is not the one the entered scores show. Add a short reason in the "Override reason" box to publish it anyway, or correct the scores first.',
   revision_reason_required: 'A reason is required to revise a finished or published result.',
