@@ -29,7 +29,7 @@ import {
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import {
   attemptSingleEliminationWinnerAdvancement,
-  retractSingleEliminationAdvancement,
+  retractBracketAdvancement,
 } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import {
@@ -582,11 +582,11 @@ async function performMatchTransition(
           | null)
       : null
     const stageType = stage?.stage_type ?? ''
-    if (stageType === 'double_elimination') {
-      return { ok: false, error: 'reopen_not_supported' }
-    }
-    if (stageType === 'single_elimination') {
-      const retraction = await retractSingleEliminationAdvancement(payload, match.id)
+    // MATCH-02: double-elimination uses the same next_match_id/next_loser_match_id graph as
+    // single-elim, so the same retraction works - allowed before the advanced participant plays
+    // again, blocked (with the offending match named) once they have.
+    if (stageType === 'single_elimination' || stageType === 'double_elimination') {
+      const retraction = await retractBracketAdvancement(payload, match.id)
       if (!retraction.retracted && retraction.blockedBy) {
         return { ok: false, error: 'reopen_blocked_downstream' }
       }

@@ -287,20 +287,27 @@ export type AdvancementRetractionResult = {
   clearedFrom: string[]
 }
 
-// The reverse of attemptSingleEliminationWinnerAdvancement: used when a published result is
-// reopened. Pulls this match's winner (and, for a Bronze-Final-wired semifinal, its loser) back
-// out of the next-round slots they were pushed into - but only while those downstream matches have
-// not progressed. If any has (checked in / started / scored / finished), nothing is touched and
-// the blocking match is reported, so the admin resolves it by hand instead of losing real results.
-export const retractSingleEliminationAdvancement = async (
+// The reverse of the winner-advancement step: used when a published result is reopened. Pulls this
+// match's winner (and its loser, for a Bronze-Final-wired single-elim semifinal or any
+// winners-bracket match in double-elim) back out of the next-round slots they were pushed into -
+// but only while those downstream matches have not progressed. If any has (checked in / started /
+// scored / finished), nothing is touched and the blocking match is reported, so the admin resolves
+// it by hand instead of losing real results.
+//
+// AUDIT_TOURNAMENT_STANDARDS MATCH-02: double-elimination uses the exact same
+// next_match_id/next_match_slot + next_loser_match_id/next_loser_match_slot graph fields as
+// single-elim (see doubleElimination.ts), so this works unchanged for both - a mistapped
+// double-elim result is now correctable before the advanced participant plays again, instead of
+// only being fixable by wiping the whole bracket.
+export const retractBracketAdvancement = async (
   payload: Payload,
   matchId: Id,
 ): Promise<AdvancementRetractionResult> => {
   const match = await getMatchById(payload, matchId)
   const stageType =
     match.stage_id && typeof match.stage_id === 'object' ? match.stage_id.stage_type : undefined
-  if (stageType !== 'single_elimination') {
-    return { retracted: false, reason: 'Not a single-elimination stage.', clearedFrom: [] }
+  if (stageType !== 'single_elimination' && stageType !== 'double_elimination') {
+    return { retracted: false, reason: 'Not an elimination-bracket stage.', clearedFrom: [] }
   }
 
   const winnerEntryId = getRelationshipId(match.winner_entry_id)
@@ -361,6 +368,9 @@ export const retractSingleEliminationAdvancement = async (
     clearedFrom,
   }
 }
+
+/** @deprecated use retractBracketAdvancement - kept so existing imports/tests keep working. */
+export const retractSingleEliminationAdvancement = retractBracketAdvancement
 
 export const attemptSingleEliminationWinnerAdvancement = async (
   payload: Payload,
