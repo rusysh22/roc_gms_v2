@@ -7,7 +7,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { generateSchedulePlan, type SchedulePlanParams } from '@/lib/scheduleOptimizer'
-import { resolveEventTimezone } from '@/lib/timezone'
+import { eventUtcOffset, resolveEventTimezone } from '@/lib/timezone'
 import { getActiveEvent } from '../../../activeEvent'
 import {
   NoActiveEventNotice,
@@ -114,6 +114,8 @@ export default async function ScheduleOptimizerPage({ searchParams }: { searchPa
     defaultDurationMinutes: DEFAULT_DURATION_MINUTES,
     defaultMinRestMinutes: DEFAULT_MIN_REST_MINUTES,
     allowedWeekdays: selectedWeekdays,
+    // SKD-04: proposed slot times are the event's local wall-clock, not the server's.
+    utcOffset: eventUtcOffset(activeEvent.timezone),
   }
 
   const validRange =

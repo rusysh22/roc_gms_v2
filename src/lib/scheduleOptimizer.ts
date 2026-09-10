@@ -185,15 +185,19 @@ export type SchedulePlan = {
 }
 
 export type SchedulePlanParams = {
-  // 'YYYY-MM-DD', inclusive on both ends, interpreted in the server's local time zone.
+  // 'YYYY-MM-DD', inclusive on both ends.
   rangeStartDate: string
   rangeEndDate: string
-  // Minutes from local midnight.
+  // Minutes from midnight in the event's timezone.
   dailyStartMinute: number
   dailyEndMinute: number
   slotStepMinutes: number
   defaultDurationMinutes: number
   defaultMinRestMinutes: number
+  // SKD-04: fixed UTC offset of the event's timezone (e.g. '+07:00'), so a slot's wall-clock time
+  // is interpreted in the EVENT's zone, not the server's, before it is stored as a UTC instant.
+  // Optional - omitted keeps the old server-local behaviour (existing tests rely on that).
+  utcOffset?: string
   // MSG-04: which days of the week matches may be placed on - 0 = Sunday ... 6 = Saturday
   // (JS Date#getDay() convention). Empty/undefined means every day is allowed, so a caller that
   // doesn't pass this (existing callers, existing tests) keeps its exact prior behavior.
@@ -236,10 +240,12 @@ const dayKeysInRange = (startDate: string, endDate: string, allowedWeekdays?: nu
   return keys
 }
 
-const dateAtMinute = (dayKey: string, minuteOfDay: number): Date => {
-  const date = new Date(`${dayKey}T00:00:00`)
-  date.setMinutes(date.getMinutes() + minuteOfDay)
-  return date
+const dateAtMinute = (dayKey: string, minuteOfDay: number, utcOffset?: string): Date => {
+  // With an explicit offset, "2026-09-15T00:00:00+07:00" is an exact instant regardless of the
+  // server's zone (SKD-04). Without one, fall back to the previous server-local midnight. Adding
+  // the minute count as real elapsed time is exact either way (Indonesia has no DST).
+  const base = new Date(`${dayKey}T00:00:00${utcOffset ?? ''}`)
+  return new Date(base.getTime() + minuteOfDay * 60_000)
 }
 
 const overlapsWithRest = (candidate: { start: number; end: number }, entry: OccupancyEntry, restMinutesForCandidate: number) => {
@@ -369,7 +375,7 @@ export const computeSchedulePlan = (input: {
         minuteOfDay + durationMinutes <= params.dailyEndMinute;
         minuteOfDay += params.slotStepMinutes
       ) {
-        const start = dateAtMinute(dayKey, minuteOfDay).getTime()
+        const start = dateAtMinute(dayKey, minuteOfDay, params.utcOffset).getTime()
         if (start < notBeforeMs) continue
         const end = start + durationMs
 

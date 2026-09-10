@@ -16,6 +16,18 @@ export const EVENT_TIMEZONE_OPTIONS = [
 
 export type EventTimezone = (typeof EVENT_TIMEZONE_OPTIONS)[number]['value']
 
+// Fixed UTC offsets - Indonesia observes no DST, so these are exact year-round (same rationale as
+// scheduleImport.ts's own TIMEZONE_UTC_OFFSETS, which this consolidates). Used to interpret naive
+// "YYYY-MM-DD HH:mm" wall-clock strings as an instant in the event's zone rather than the server's.
+const EVENT_UTC_OFFSETS: Record<string, string> = {
+  'Asia/Jakarta': '+07:00',
+  'Asia/Makassar': '+08:00',
+  'Asia/Jayapura': '+09:00',
+}
+
+export const eventUtcOffset = (timezone?: string | null): string =>
+  EVENT_UTC_OFFSETS[resolveEventTimezone(timezone)] ?? '+07:00'
+
 // Every formatter below takes `timezone` as its last, optional parameter and falls back to WIB -
 // so a call site that hasn't been threaded through to a specific event's timezone yet still
 // renders the platform default instead of throwing, while call sites that do have the event in
