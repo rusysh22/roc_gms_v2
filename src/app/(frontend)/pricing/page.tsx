@@ -192,6 +192,8 @@ export default async function PricingPage() {
         <p className="mx-auto mt-6 max-w-xl text-center text-xs text-ink-soft">
           Checkout and billing are handled by our payment partner, Berlanggan (berlanggan.web.id).
           See our <Link href="/terms" className="font-semibold text-ink underline underline-offset-2">Terms</Link> for details.
+          {/* BILL-03: the shown price is the catalog list price; any applicable tax is confirmed at checkout. */}{' '}
+          Prices shown are list prices; the final total, including any applicable tax, is confirmed on the Berlanggan checkout page.
         </p>
 
         <div className="mx-auto mt-10 max-w-5xl">

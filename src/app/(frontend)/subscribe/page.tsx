@@ -6,6 +6,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { getBerlangganPricingConfig } from '@/lib/berlanggan/config'
 import { sanitizeRedirect } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { ActivateLicenseForm } from './ActivateLicenseForm'
@@ -63,6 +64,7 @@ export default async function SubscribePage({
     where: { user_id: { equals: user.id } },
   })
   const license = existing.docs[0]
+  const berlangganBaseUrl = getBerlangganPricingConfig()?.baseUrl ?? 'https://berlanggan.web.id'
 
   const copy = REASON_COPY[reason || ''] ?? REASON_COPY.no_license
 
@@ -107,6 +109,12 @@ export default async function SubscribePage({
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button asChild variant="secondary" size="sm">
               <Link href="/pricing">View plans</Link>
+            </Button>
+            {/* BILL-02: checkout, invoices, payment method and cancellation all live on Berlanggan. */}
+            <Button asChild variant="secondary" size="sm">
+              <a href={berlangganBaseUrl} target="_blank" rel="noreferrer noopener">
+                Manage billing on Berlanggan
+              </a>
             </Button>
           </div>
 
