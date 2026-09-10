@@ -38,6 +38,7 @@ type StandingMatch = {
 
 type StandingMatchSet = {
   id: Id
+  match_id?: RelationshipDoc | Id | null
   set_number: number
   participant_a_score?: number | null
   participant_b_score?: number | null
@@ -403,23 +404,40 @@ export const calculateStandingsForScope = async (
   const decidedMatchesResult = await payload.find({
     collection: 'matches',
     depth: 1,
-    limit: 500,
+    limit: 2000,
     sort: ['scheduled_start_at', 'match_number'],
     where: { and: [...scopeConditions, { status: { in: Array.from(RESULT_STATUSES) } }] },
   })
   const decidedMatches = decidedMatchesResult.docs as StandingMatch[]
 
+  // AUDIT_TOURNAMENT_STANDARDS SKD-10: one query for every match's sets instead of one query per
+  // match inside the loop (an O(n) sequential fan-out that got slow on multi-day/multi-sport
+  // events and could silently truncate at the old 500 cap).
+  const allSets =
+    decidedMatches.length > 0
+      ? (
+          await payload.find({
+            collection: 'match-sets',
+            depth: 1,
+            limit: 20000,
+            sort: 'set_number',
+            where: { match_id: { in: decidedMatches.map((match) => match.id) } },
+          })
+        ).docs as StandingMatchSet[]
+      : []
+  const setsByMatchId = new Map<string, StandingMatchSet[]>()
+  for (const set of allSets) {
+    const key = String(
+      set.match_id && typeof set.match_id === 'object' ? set.match_id.id : set.match_id,
+    )
+    const list = setsByMatchId.get(key) ?? []
+    list.push(set)
+    setsByMatchId.set(key, list)
+  }
+
   const headToHead = new Map<string, number>()
   for (const match of decidedMatches) {
-    const matchSets = await payload.find({
-      collection: 'match-sets',
-      depth: 1,
-      limit: 50,
-      sort: 'set_number',
-      where: { match_id: { equals: match.id } },
-    })
-
-    addMatchToRows(rowsByEntryId, match, matchSets.docs as StandingMatchSet[], ruleset, headToHead)
+    addMatchToRows(rowsByEntryId, match, setsByMatchId.get(String(match.id)) ?? [], ruleset, headToHead)
   }
 
   const rows = Array.from(rowsByEntryId.values()).sort(compareRows(ruleset, headToHead))
