@@ -19,6 +19,7 @@ import {
 } from '@/lib/matchGeneration'
 import { advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { recordAuditLog } from '@/lib/audit'
+import { findUnderRosteredEntries } from '@/lib/rosterValidation'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { categoryHasStartedMatch, clearCategoryGeneratedData } from '@/lib/cascadeDelete'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
@@ -75,6 +76,13 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
 
   if (schedulableEntries.length < 2) {
     redirect(`${wizardPage}?eventId=${eventId}&step=generate&wizardError=not_enough_entries`)
+  }
+
+  // REG-05: a hard gate on roster completeness, not just a readiness-dashboard warning - a bracket
+  // must not be generated with team entries that have no registered players.
+  const underRostered = await findUnderRosteredEntries(payload, categoryId)
+  if (underRostered.length > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}&wizardError=roster_incomplete`)
   }
   if (formatType === 'double_elimination' && !isExactPowerOfTwo(schedulableEntries.length)) {
     // ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-14 scope decision (see

@@ -177,6 +177,8 @@ const errorMessages: Record<string, string> = {
   import_failed:
     'The import could not be completed - the file may have an unexpected cell value or format. Re-download the template for this event, re-enter your rows, and try again. If it keeps failing, the team has been notified.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
+  roster_incomplete:
+    'One or more teams have fewer active roster players than this category requires. Complete the rosters in the Participants step (or lower the minimum roster size) before generating matches.',
   duplicate_seed: 'Two entries had the same seed number. Give each entry a unique seed and save again.',
   invalid_group_count: 'Choose between 2 and 12 groups.',
   missing_groups: 'Create groups first.',
