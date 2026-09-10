@@ -746,6 +746,20 @@ const MatchDetailsPanel = ({
   // write lands second would silently discard the other's change.
   const handleSaveAll = async () => {
     if (!quickBracketSlug) return
+
+    // QB-UX-01: this match already has a recorded result and the winner is being changed. A quick
+    // bracket doesn't cascade a correction to matches the old winner already advanced into, so an
+    // accidental click here can quietly desync the bracket - make it a deliberate choice.
+    if (
+      scoreDirty &&
+      match.state === 'result_published' &&
+      selectedWinner !== originalWinner &&
+      typeof window !== 'undefined' &&
+      !window.confirm('This match already has a result. Overwrite it with the new winner?')
+    ) {
+      return
+    }
+
     setSaving(true)
     setError(null)
 
@@ -918,6 +932,13 @@ const MatchDetailsPanel = ({
         <div className="rounded-card bg-mist px-4 py-4">
           {canEditScore ? (
             <>
+              {/* MATCH-05: this is the simplified quick-entry model - no per-set tracking or
+                  ruleset validation like the full Match Officer flow. Say so, so an organizer used
+                  to that flow isn't surprised. */}
+              <p className="mb-3 text-xs text-ink-soft">
+                Quick score entry - one number per side, no per-set tracking. Click a side to set
+                the winner; re-click to correct a mistake.
+              </p>
               <div className="flex flex-col gap-2">
                 {(['a', 'b'] as const).map((slot) => {
                   const name = slot === 'a' ? match.participantAName : match.participantBName
