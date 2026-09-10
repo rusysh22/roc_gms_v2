@@ -131,6 +131,21 @@ describe('applyMenuImport', () => {
     expect(created).toMatchObject({ sport_id: 1, event_id: 9 })
   })
 
+  it('REG-10: a blank optional cell on re-import leaves an existing value unchanged', async () => {
+    const { payload, store } = makePayload({
+      clubs: [{ id: 1, event_id: 9, name: 'Menteng AC', slug: 'menteng-ac', contact_person: 'Budi', contact_email: 'budi@example.com' }],
+    })
+    // Re-import the row with contact_person filled but contact_email left blank.
+    const buffer = bookOf({ Clubs: [{ name: 'Menteng AC', slug: 'menteng-ac', contact_person: 'Sri' }] })
+    const parsed = parseMenuWorkbook(buffer, MENU_IO_SPECS.clubs)
+    const summary = await applyMenuImport(payload, '9', 1, MENU_IO_SPECS.clubs, parsed)
+
+    expect(summary).toMatchObject({ updated: 1, created: 0 })
+    const club = store.clubs.find((c) => c.slug === 'menteng-ac')!
+    expect(club.contact_person).toBe('Sri') // changed
+    expect(club.contact_email).toBe('budi@example.com') // untouched, not cleared
+  })
+
   it('rebuilds the relation index between sheets so a later sheet can reference a new row', async () => {
     const { payload, store } = makePayload({
       clubs: [{ id: 1, event_id: 9, name: 'Menteng AC', slug: 'menteng-ac' }],

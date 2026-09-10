@@ -482,15 +482,22 @@ export async function applyMenuImport(
       }
       try {
         const existingId = await findExisting(payload, eventId, sheet, row)
-        const payloadData = { ...data, event_id: Number(eventId) }
+        // AUDIT_TOURNAMENT_STANDARDS REG-10: a blank optional cell maps to `undefined` in a
+        // spec's toData. On an UPDATE those keys are dropped entirely so a re-import of a
+        // partially-filled template never clears a value a previous import set - "leave unchanged",
+        // not "set null". On CREATE the full object is fine (undefined keys are simply not set).
+        const fullData = { ...data, event_id: Number(eventId) }
         if (existingId) {
+          const payloadData = Object.fromEntries(
+            Object.entries(fullData).filter(([, value]) => value !== undefined),
+          )
           const before = await payload.findByID({ collection: sheet.collection as never, id: existingId, depth: 0 }).catch(() => null)
           await payload.update({ collection: sheet.collection as never, id: existingId, data: payloadData as never })
           await recordAuditLog({ payload, action: `${sheet.collection}.import_update`, entityType: sheet.collection, entityId: existingId, before, after: payloadData, actorUserId })
           summary.updated += 1
         } else {
-          const created = await payload.create({ collection: sheet.collection as never, data: payloadData as never })
-          await recordAuditLog({ payload, action: `${sheet.collection}.import_create`, entityType: sheet.collection, entityId: String((created as { id: unknown }).id), before: null, after: payloadData, actorUserId })
+          const created = await payload.create({ collection: sheet.collection as never, data: fullData as never })
+          await recordAuditLog({ payload, action: `${sheet.collection}.import_create`, entityType: sheet.collection, entityId: String((created as { id: unknown }).id), before: null, after: fullData, actorUserId })
           summary.created += 1
         }
       } catch (err) {

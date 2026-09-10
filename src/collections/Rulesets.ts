@@ -55,6 +55,12 @@ export const Rulesets: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'points',
+      admin: {
+        // AUDIT_TOURNAMENT_STANDARDS MATCH-09: no validation/derivation code reads this today - the
+        // score model is driven entirely by set_based / best_of / target_score / max_score. This
+        // field is a presentational label only (what the scoreboard calls the number).
+        description: 'Label for the score unit shown on scoreboards. Scoring behaviour is set by the fields below, not this.',
+      },
       options: [
         { label: 'Points', value: 'points' },
         { label: 'Goals', value: 'goals' },
