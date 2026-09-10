@@ -420,7 +420,38 @@ Batch keamanan pertama — dikerjakan langsung, semua di branch `develop`, `npm 
 | REG-09 | **Selesai** — banner "N lagi belum ditampilkan" di antrian approval. |
 | BRK-01 | **Selesai** — disclosure "no bracket reset" di format picker + label kartu grand final Quick Bracket. |
 
-Belum dikerjakan: P2.
+**Batch P2 — selesai:**
+
+| Temuan | Status |
+|---|---|
+| BRK-03 | Kartu grand-final reset disembunyikan selama status `draft` (muncul saat jadi fixture nyata). |
+| BRK-04 | `detectSingleEliminationChampion` menolak menebak juara bila round terakhir punya >1 match (nama round di-rename salah). |
+| MATCH-03 | Walkover/retirement bisa dari `ongoing`/`paused`. |
+| MATCH-04 | **Belum** — indikator "live" kosmetik; perlu keputusan (hapus animasi vs bangun polling/SSE). |
+| MATCH-05 | Catatan inline "quick score entry, no per-set tracking" di tab Score Quick Bracket. |
+| MATCH-06 | Link "Open Match Details" (review/dispute) dari kiosk live-score saat finished/published. |
+| MATCH-07 | `updateMatchSetScoreAction` pakai token `expectedUpdatedAt` — tolak edit kalau set berubah di antara render & submit. |
+| MATCH-08 | `performMatchTransition` update kondisional (id + status), gagal bersih `stale_transition` saat balapan. |
+| MATCH-09 | Deskripsi admin di `score_type` menegaskan field presentasional. |
+| SKD-06 | `tie_note` ditampilkan di tabel standings publik (marker "TIE" + teks). |
+| SKD-08 | Match `cancelled` dikecualikan dari gate "semua match diputuskan" untuk derivasi medali. |
+| SKD-09 | Medali tanpa link klub dikelompokkan "Unaffiliated" di tally publik, bukan dibuang. |
+| SKD-10 | Batch-fetch match-sets (hilangkan N+1), cap dinaikkan 500→2000. |
+| REG-09 | Banner "N lagi belum ditampilkan" di antrian approval. |
+| REG-10 | Engine import drop key `undefined` saat UPDATE — sel opsional kosong tidak menghapus nilai + regression test. |
+| QB-UX-01 | Konfirmasi saat menimpa pemenang Quick Bracket yang sudah `result_published`. |
+| BILL-01 | Banner grace-period di shell workspace. |
+| BILL-02 | Link "Manage billing on Berlanggan" di `/subscribe`. |
+| BILL-03 | Keterangan "harga list, total termasuk pajak dikonfirmasi di checkout" di `/pricing`. |
+
+**Belum dikerjakan (dengan alasan):**
+- **SEC-01 postur `overrideAccess: false` default** + **SEC-09** — hole konkret sudah ditutup; postur defense-in-depth perlu review akses per-collection menyeluruh + rollout bertahap, effort tersendiri.
+- **MATCH-04** — butuh keputusan produk (hapus animasi "live" vs bangun polling/SSE nyata).
+- **SKD-05** (mini-table tie multi-arah) — pekerjaan besar di comparator standings, task tersendiri.
+- **REG-03 / REG-06** (unique index komposit) — push-mode auto-migrate akan gagal bila ada data duplikat existing; perlu pass dedup dulu.
+- **BRK-02** — kode repair usang; dihapus berisiko bila masih ada data legacy di produksi.
+- **BRK-05 / BRK-06** — simplifikasi yang memang disengaja & terdokumentasi, tidak perlu aksi.
+- **REG-08** — perbedaan dua mesin import; urusan dokumentasi (docs-site), bukan kode.
 
 ## 10. Catatan metodologi
 
