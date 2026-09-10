@@ -507,6 +507,12 @@ export default async function AdminMatchDetailPage({
                         </Select>
                       </Field>
                     ) : null}
+                    {/* SKD-07: only consulted when the picked winner disagrees with the entered scores. */}
+                    {transition.to === 'result_published' ? (
+                      <Field label="Override reason (only if winner ≠ score)">
+                        <Input name="winnerOverrideReason" placeholder="e.g. opponent disqualified after the match" />
+                      </Field>
+                    ) : null}
                     {transition.requiresConfirm ? (
                       <ConfirmSubmitButton
                         formId={formId}

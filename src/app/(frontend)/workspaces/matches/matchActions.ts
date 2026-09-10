@@ -525,7 +525,12 @@ async function performMatchTransition(
   match: MinimalMatch,
   matchNumber: string,
   targetStatus: string,
-  opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null; isDraw?: boolean } = {},
+  opts: {
+    winnerEntryId?: string | number | null
+    scoreSummary?: string | null
+    isDraw?: boolean
+    overrideReason?: string
+  } = {},
 ): Promise<{ ok: true; match: MinimalMatch } | { ok: false; error: string }> {
   if (!isValidTransition(match.status, targetStatus)) {
     return { ok: false, error: 'invalid_transition' }
@@ -635,7 +640,12 @@ async function performMatchTransition(
     entityType: 'matches',
     entityId: match.id,
     before: beforeSnapshot,
-    after: { ...beforeSnapshot, ...updateData },
+    after: {
+      ...beforeSnapshot,
+      ...updateData,
+      // SKD-07: only present when the officer overrode the score-derived winner.
+      ...(opts.overrideReason ? { manual_winner_override_reason: opts.overrideReason } : {}),
+    },
     actorUserId,
   })
 
@@ -729,13 +739,30 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     redirect(`${returnTo}?matchError=not_found`)
   }
 
-  let opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null; isDraw?: boolean } = {}
+  const overrideReason = toStringField(formData.get('winnerOverrideReason'))
+  let opts: {
+    winnerEntryId?: string | number | null
+    scoreSummary?: string | null
+    isDraw?: boolean
+    overrideReason?: string
+  } = {}
   if (targetStatus === 'result_published') {
     const resolved = await resolvePublishResult(payload, match, winnerSide)
+
+    // SKD-07: a manually-picked winner that contradicts what the entered scores + ruleset say
+    // must not publish silently - standings would then credit a win to the side whose score_for
+    // is the lower number. Require an explicit reason; it's recorded on the audit log.
+    const derivedSide = resolved.outcome.decided ? resolved.outcome.winnerSide : null
+    const contradictsScore = Boolean(winnerSide && derivedSide && winnerSide !== derivedSide)
+    if (contradictsScore && overrideReason.length < 3) {
+      redirect(`${returnTo}?matchError=manual_winner_conflict`)
+    }
+
     opts = {
       winnerEntryId: resolved.winnerEntryId,
       scoreSummary: resolved.scoreSummary,
       isDraw: resolved.isDraw,
+      overrideReason: contradictsScore ? overrideReason : undefined,
     }
   } else if (targetStatus === 'walkover' && winnerSide) {
     opts = { winnerEntryId: sideEntryId(match, winnerSide) ?? null }

@@ -156,6 +156,8 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
   ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
   best_of_decided: 'This match is already decided under its best-of format - no further sets can be added.',
   invalid_match_state: 'Scores can only be entered while a match is ongoing, paused, or under review.',
+  manual_winner_conflict:
+    'The winner you picked is not the one the entered scores show. Add a short reason in the "Override reason" box to publish it anyway, or correct the scores first.',
   revision_reason_required: 'A reason is required to revise a finished or published result.',
   revision_requires_approval: 'Only an event admin or super admin can revise a finished or published result.',
   invalid_ranking_result: 'Enter either a result value or a DNS/DNF/DSQ status - not both, and not neither.',
