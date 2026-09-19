@@ -54,6 +54,15 @@ export function NavBar({ brand, brandHref = '/', items, activeHref, cta, classNa
     if (anchorIds.length === 0) return
     const NAV_OFFSET = 120
     const compute = () => {
+      // Off the homepage, none of these ids exist in the DOM at all (they're marketing sections
+      // that only render on `/`). Without this guard, the "scrolled to bottom" fallback below
+      // fires immediately on any short page - e.g. `/pricing` - since it never actually needs to
+      // scroll, permanently lighting up the last anchor item ("How it works") on every page.
+      const sectionsPresent = anchorIds.some((id) => document.getElementById(id))
+      if (!sectionsPresent) {
+        setActiveAnchor(null)
+        return
+      }
       let current: string | null = null
       for (const id of anchorIds) {
         const el = document.getElementById(id)
