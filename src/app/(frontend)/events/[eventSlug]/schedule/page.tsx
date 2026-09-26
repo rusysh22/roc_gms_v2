@@ -70,6 +70,9 @@ type StandingDoc = {
   set_for: number
   set_against: number
   qualified_status: string
+  // SKD-06: set by standings.ts when a top-3 rank is still alphabetical-provisional after every
+  // configured tie-breaker. The public table used to render it as a settled rank.
+  tie_note?: string | null
   category_id?: string | number | { name?: string } | null
   stage_id?: string | number | { name?: string } | null
   group_id?: string | number | { name?: string } | null
@@ -726,11 +729,24 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                             standingEntryId !== undefined ? clubLabelByEntryId.get(String(standingEntryId)) : undefined
                           return (
                           <tr key={standing.id} className="border-b border-line last:border-0">
-                            <td className="px-4 py-3 font-bold tabular-nums">{standing.rank}</td>
+                            <td className="px-4 py-3 font-bold tabular-nums">
+                              {standing.rank}
+                              {standing.tie_note ? (
+                                <span
+                                  className="ml-1 align-top text-[10px] font-bold text-gold"
+                                  title="Tied - provisional order pending a decision"
+                                >
+                                  TIE
+                                </span>
+                              ) : null}
+                            </td>
                             <td className="px-4 py-3 font-semibold">
                               {getRelationshipLabel(standing.entry_id)}
                               {standingClub ? (
                                 <span className="block text-xs font-semibold text-ink-soft">{standingClub}</span>
+                              ) : null}
+                              {standing.tie_note ? (
+                                <span className="block text-xs font-medium text-gold">{standing.tie_note}</span>
                               ) : null}
                             </td>
                             <td className="px-3 py-3 text-right tabular-nums">{standing.played}</td>
@@ -774,6 +790,9 @@ export default async function PublicSchedulePage({ params, searchParams }: Sched
                               <CardTitle>{getRelationshipLabel(standing.entry_id)}</CardTitle>
                               {standingClub ? (
                                 <p className="text-xs font-semibold text-ink-soft">{standingClub}</p>
+                              ) : null}
+                              {standing.tie_note ? (
+                                <p className="text-xs font-medium text-gold">{standing.tie_note}</p>
                               ) : null}
                             </div>
                           </div>

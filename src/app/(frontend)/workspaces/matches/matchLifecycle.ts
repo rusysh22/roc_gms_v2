@@ -31,8 +31,8 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
   },
   { from: ['cancelled'], to: 'scheduled', label: 'Restore Match', requiresConfirm: true, reverse: true },
   // Reopening a final result / undoing a walkover. Event Admin only (locked-status hook). For
-  // single elimination the winner is pulled back out of the next round first, and it is blocked if
-  // that next match has already progressed; not supported for double elimination.
+  // single AND double elimination (MATCH-02) the advanced participant is pulled back out of the
+  // next round(s) first, and it is blocked if any of those matches has already progressed.
   { from: ['result_published'], to: 'under_review', label: 'Reopen Result', requiresConfirm: true, reverse: true },
   { from: ['walkover'], to: 'scheduled', label: 'Undo Walkover', requiresConfirm: true, reverse: true },
   {
@@ -69,9 +69,12 @@ export const MATCH_TRANSITIONS: MatchTransition[] = [
     requiresConfirm: true,
   },
   {
-    from: ['scheduled', 'published', 'ready_to_start'],
+    // AUDIT_TOURNAMENT_STANDARDS MATCH-03: 'ongoing'/'paused' included so a mid-match retirement
+    // (injury, DQ) can be recorded as a walkover - a decided outcome distinct from a normal loss -
+    // instead of only being possible before the first point.
+    from: ['scheduled', 'published', 'ready_to_start', 'ongoing', 'paused'],
     to: 'walkover',
-    label: 'Mark Walkover',
+    label: 'Mark Walkover / Retirement',
     requiresConfirm: true,
     requiresWinnerSelection: true,
   },
@@ -148,14 +151,17 @@ export const MATCH_ACTION_ERROR_MESSAGES: Record<string, string> = {
   transition_forbidden:
     'That change needs an Event Admin - a finished, published, walked-over, or cancelled match is locked to Match Officers.',
   reopen_not_supported:
-    "Reopening isn't supported for double-elimination results. Use Undo Phase or Clear & regenerate if nothing has started, or mark the match Disputed.",
+    "Reopening this result isn't supported for this stage type. Mark the match Disputed instead.",
   reopen_blocked_downstream:
-    'The next-round match this result fed has already progressed. Reopen or resolve that match first.',
+    'A match this result fed has already progressed. Reopen or resolve that match first.',
   set_delete_locked: 'Sets cannot be removed once the match result is finished or published.',
   set_delete_not_last: 'Only the most recent set can be removed. Delete later sets first.',
   ruleset_violation: 'That score is not valid for this category\'s rules (check target/max score, deuce, and draw settings).',
   best_of_decided: 'This match is already decided under its best-of format - no further sets can be added.',
   invalid_match_state: 'Scores can only be entered while a match is ongoing, paused, or under review.',
+  stale_transition: 'This match was changed by someone else a moment ago. Refresh and try again.',
+  manual_winner_conflict:
+    'The winner you picked is not the one the entered scores show. Add a short reason in the "Override reason" box to publish it anyway, or correct the scores first.',
   revision_reason_required: 'A reason is required to revise a finished or published result.',
   revision_requires_approval: 'Only an event admin or super admin can revise a finished or published result.',
   invalid_ranking_result: 'Enter either a result value or a DNS/DNF/DSQ status - not both, and not neither.',

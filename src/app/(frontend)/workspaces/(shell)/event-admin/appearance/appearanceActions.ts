@@ -38,7 +38,7 @@ export async function saveAppearanceAction(formData: FormData): Promise<void> {
     const buffer = Buffer.from(await logoFile.arrayBuffer())
     const media = await payload.create({
       collection: 'media',
-      data: { alt: `${event.name} logo` },
+      data: { alt: `${event.name} logo`, event_id: Number(event.id) }, // SEC-06
       file: { data: buffer, mimetype: logoFile.type, name: logoFile.name, size: logoFile.size },
     })
     data.logo = media.id
@@ -55,7 +55,7 @@ export async function saveAppearanceAction(formData: FormData): Promise<void> {
     const buffer = Buffer.from(await file.arrayBuffer())
     const media = await payload.create({
       collection: 'media',
-      data: { alt: `${event.name} hero image` },
+      data: { alt: `${event.name} hero image`, event_id: Number(event.id) }, // SEC-06
       file: { data: buffer, mimetype: file.type, name: file.name, size: file.size },
     })
     data.banner_image = media.id

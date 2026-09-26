@@ -289,6 +289,15 @@ export default async function LiveScorePage({
                 <option value="b">{participantBName}</option>
               </select>
             </label>
+            {/* SKD-07: required only when the picked winner contradicts the entered score. */}
+            <label className="mt-2 grid gap-1 font-bold text-ink">
+              Override reason (only if winner &ne; score)
+              <input
+                name="winnerOverrideReason"
+                placeholder="e.g. opponent retired injured"
+                className="h-11 rounded-[10px] border border-line bg-paper px-3 text-sm font-semibold"
+              />
+            </label>
           </details>
           <ConfirmSubmitButton
             formId="publish-result-form"
@@ -304,6 +313,20 @@ export default async function LiveScorePage({
           Finish the match before publishing the final result.
         </p>
       )}
+      {/* MATCH-06: Send for Review / Mark Disputed only live on the full Match Details page, which
+          the live-score kiosk otherwise doesn't point to prominently. */}
+      {['finished', 'result_published', 'under_review'].includes(match.status) ? (
+        <p className="mt-3 text-xs text-ink-soft">
+          Need to dispute or send this result for review?{' '}
+          <Link
+            href={`/workspaces/matches/${match.match_number}`}
+            className="font-semibold text-ink underline underline-offset-2"
+          >
+            Open Match Details
+          </Link>
+          .
+        </p>
+      ) : null}
     </section>
   )
 

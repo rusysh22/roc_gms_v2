@@ -23,7 +23,15 @@ export const DoubleEliminationBracketSections = ({
           order: 0,
           matches: [
             grandFinal,
-            ...(grandFinalReset && grandFinalReset.status !== 'cancelled' ? [grandFinalReset] : []),
+            // AUDIT_TOURNAMENT_STANDARDS BRK-03: the reset match is created up front as 'draft' -
+            // it only actually happens if the losers-bracket finalist wins the grand final. Show it
+            // only once it's a real fixture (a participant filled in / it has been played), so the
+            // bracket doesn't imply a second game is certain when it's conditional.
+            ...(grandFinalReset &&
+            grandFinalReset.status !== 'cancelled' &&
+            grandFinalReset.status !== 'draft'
+              ? [grandFinalReset]
+              : []),
           ],
         },
       ]

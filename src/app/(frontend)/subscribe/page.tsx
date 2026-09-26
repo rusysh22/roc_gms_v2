@@ -6,6 +6,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { getBerlangganPricingConfig } from '@/lib/berlanggan/config'
 import { sanitizeRedirect } from '@/lib/auth/googleSso'
 import { getCurrentPublicUser } from '../getCurrentPublicUser'
 import { ActivateLicenseForm } from './ActivateLicenseForm'
@@ -25,13 +26,20 @@ const REASON_COPY: Record<string, { title: string; description: string }> = {
   no_license: {
     title: 'Activate your subscription',
     description:
-      "Event Management needs an active InTourney subscription. Paste the license key you received after checking out on Berlanggan below.",
+      'Event Management needs an active InTourney subscription. If you just checked out on Berlanggan, activation happens automatically within a minute or two - refresh this page. Used a different email at checkout? Enter your license key manually below.',
   },
   blocked: {
     title: 'Your subscription needs attention',
     description:
       'Your license is not currently active. Check its status below, or visit Pricing to renew or buy a new plan.',
   },
+}
+
+const formatValidUntil = (value: string | null | undefined) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 export default async function SubscribePage({
@@ -56,6 +64,7 @@ export default async function SubscribePage({
     where: { user_id: { equals: user.id } },
   })
   const license = existing.docs[0]
+  const berlangganBaseUrl = getBerlangganPricingConfig()?.baseUrl ?? 'https://berlanggan.web.id'
 
   const copy = REASON_COPY[reason || ''] ?? REASON_COPY.no_license
 
@@ -73,6 +82,13 @@ export default async function SubscribePage({
               <CardDescription className="mt-1 capitalize">
                 {license.effective_status.replaceAll('_', ' ')}
               </CardDescription>
+              {formatValidUntil(license.license_expires_at) ? (
+                <p className="mt-1 text-sm text-ink-soft">
+                  Active until {formatValidUntil(license.license_expires_at)}
+                </p>
+              ) : license.effective_status === 'active' ? (
+                <p className="mt-1 text-sm text-ink-soft">No expiry - this is a one-time license.</p>
+              ) : null}
               {license.last_error ? (
                 <p className="mt-2 text-xs text-ink-soft">Last billing note: {license.last_error}</p>
               ) : null}
@@ -80,15 +96,25 @@ export default async function SubscribePage({
           ) : null}
 
           <Card className="mt-6">
-            <CardTitle as="h2" className="mb-3">
+            <CardTitle as="h2" className="mb-1">
               Enter your license key
             </CardTitle>
+            <p className="mb-3 text-xs text-ink-soft">
+              Only needed if automatic activation didn&apos;t reach this account. Your key is in your
+              Berlanggan dashboard and confirmation email/WhatsApp.
+            </p>
             <ActivateLicenseForm redirectTo={returnTo} />
           </Card>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <Button asChild variant="secondary" size="sm">
               <Link href="/pricing">View plans</Link>
+            </Button>
+            {/* BILL-02: checkout, invoices, payment method and cancellation all live on Berlanggan. */}
+            <Button asChild variant="secondary" size="sm">
+              <a href={berlangganBaseUrl} target="_blank" rel="noreferrer noopener">
+                Manage billing on Berlanggan
+              </a>
             </Button>
           </div>
 

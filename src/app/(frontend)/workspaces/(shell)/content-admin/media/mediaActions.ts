@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { canAccessEvent, getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
+import { getActiveEvent } from '../../../activeEvent'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 
 const page = '/workspaces/content-admin/media'
@@ -26,10 +28,17 @@ export async function uploadMediaAction(formData: FormData): Promise<void> {
     redirect(`${page}?mediaError=invalid_image`)
   }
 
+  // SEC-06: stamp the active event so this asset is scoped to it (Media.ts access rules).
+  const activeEvent = await getActiveEvent(payload)
+
   const buffer = Buffer.from(await file.arrayBuffer())
   const media = await payload.create({
     collection: 'media',
-    data: { alt, caption: text(formData, 'caption') || undefined },
+    data: {
+      alt,
+      caption: text(formData, 'caption') || undefined,
+      event_id: activeEvent ? Number(activeEvent.id) : undefined,
+    },
     file: { data: buffer, mimetype: file.type, name: file.name, size: file.size },
   })
   await recordAuditLog({
@@ -55,7 +64,12 @@ export async function deleteMediaAction(formData: FormData): Promise<void> {
     redirect(page)
   }
 
-  const before = await payload.findByID({ collection: 'media', id, depth: 0 })
+  const before = await payload.findByID({ collection: 'media', id, depth: 0 }).catch(() => null)
+  // SEC-06: a content_admin may delete media their event owns, or unowned (null-event) assets.
+  const mediaEventId = getRelationId(before?.event_id)
+  if (!before || (mediaEventId && !(await canAccessEvent(payload, user, mediaEventId)))) {
+    redirect(`${page}?mediaError=invalid_upload`)
+  }
   await payload.delete({ collection: 'media', id })
   await recordAuditLog({
     payload,

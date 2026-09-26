@@ -1,9 +1,25 @@
 import path from 'path'
-import type { CollectionBeforeOperationHook, CollectionConfig } from 'payload'
+import type { Access, CollectionBeforeOperationHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
+import { getAccessibleEventIds } from '@/access/eventMembership'
 import { canManageContent } from '@/access/roles'
 import { validateImageBuffer, validateUploadSize } from '@/lib/uploadValidation'
+
+// AUDIT_TOURNAMENT_STANDARDS SEC-06: Media had no event scoping, so any content_admin could
+// overwrite or delete another organizer's banners/logos/article images via REST/GraphQL/Admin.
+// Uploads through the workspace now stamp the active event (mediaActions.ts); this narrows
+// mutation to media the caller's events own. `read` stays public (images are served on the public
+// site). Media with a null event_id - legacy rows, or shared assets - stays editable by any
+// content_admin so this doesn't strand anything; a backfill isn't required.
+const scopedMediaMutation: Access = async (args) => {
+  if (!(await canManageContent(args))) return false
+  const { req } = args
+  if (!req.user) return false
+  const ids = await getAccessibleEventIds(req.payload, req.user)
+  if (ids === 'all') return true
+  return { or: [{ event_id: { in: ids } }, { event_id: { exists: false } }] }
+}
 
 // AUDIT_E2E CNT-04: the only prior check was a client-supplied `File.type.startsWith('image/')`
 // string comparison in the calling Server Actions - trivially spoofed, not enforced at the
@@ -37,9 +53,9 @@ export const Media: CollectionConfig = {
   },
   access: {
     create: canManageContent,
-    delete: canManageContent,
+    delete: scopedMediaMutation,
     read: () => true,
-    update: canManageContent,
+    update: scopedMediaMutation,
   },
   hooks: {
     beforeOperation: [validateMediaUpload],
@@ -56,6 +72,15 @@ export const Media: CollectionConfig = {
     ],
   },
   fields: [
+    {
+      name: 'event_id',
+      type: 'relationship',
+      relationTo: 'events',
+      index: true,
+      admin: {
+        description: 'Owning event - set when uploaded through the Content Desk. Null for shared/legacy assets.',
+      },
+    },
     {
       name: 'alt',
       type: 'text',

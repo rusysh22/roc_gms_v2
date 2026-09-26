@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getPayload, type Payload } from 'payload'
 
 import config from '@payload-config'
+import { canAccessEvent } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { ACTIVE_EVENT_COOKIE } from '../../../activeEvent'
 import {
@@ -204,6 +205,13 @@ export const assertWizardActionAccess = async (
   })
   if (access.mode === 'user' && eventId && access.user) {
     await claimDraftIfPending(access.payload, eventId, access.user)
+    // AUDIT_TOURNAMENT_STANDARDS SEC-01: the guard above only checks global event-admin
+    // capability. A signed-in caller passing someone else's eventId who isn't a member (and
+    // couldn't just-claim it as a pending draft) must not proceed - this covers the step actions
+    // that do their own events findByID (e.g. updateEventAction) rather than getWizardEvent.
+    if (!(await canAccessEvent(access.payload, access.user, eventId))) {
+      redirect('/workspaces?workspaceError=unauthorized')
+    }
   }
   return access
 }

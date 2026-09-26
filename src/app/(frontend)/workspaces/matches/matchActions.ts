@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import type { Payload } from 'payload'
 import { Forbidden } from 'payload'
 
+import { canAccessEvent } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { recalculateSingleEliminationBracket } from '@/lib/brackets'
 import { attemptDoubleEliminationAdvancement, recalculateDoubleEliminationBracket } from '@/lib/doubleElimination'
@@ -21,13 +22,14 @@ import {
   deriveMatchOutcome,
   deriveSetWinnerSide,
   formatScoreSummary,
+  isLevelDraw,
   type MatchOutcome,
   type OutcomeSet,
 } from '@/lib/matchResult'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import {
   attemptSingleEliminationWinnerAdvancement,
-  retractSingleEliminationAdvancement,
+  retractBracketAdvancement,
 } from '@/lib/winnerAdvancement'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 import {
@@ -67,6 +69,7 @@ type MinimalMatchSet = {
   participant_b_score?: number | null
   winner_entry_id?: string | number | null
   notes?: string | null
+  updatedAt?: string | null
 }
 
 const toStringField = (value: FormDataEntryValue | null) =>
@@ -91,7 +94,17 @@ const getSafeReturnTo = (formData: FormData, fallback: string) => {
   return returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : fallback
 }
 
-const findMatchByNumber = async (payload: Payload, matchNumber: string) => {
+// AUDIT_TOURNAMENT_STANDARDS SEC-02: match_number is unique platform-wide, and
+// assertWorkspaceActionAccess only checks the caller's *global* role - so without this a
+// match_officer/scheduler who belongs to Event A could pass a match_number from Event B and drive
+// its transitions/scores through the normal UI. A caller who isn't a member of the match's event
+// gets the same `undefined` a genuinely missing number returns (callers already redirect to
+// not_found / return {error:'not_found'}), which also avoids confirming the number exists.
+const findMatchByNumber = async (
+  payload: Payload,
+  matchNumber: string,
+  user: { id: string | number; roles?: readonly string[] | null },
+) => {
   const matches = await payload.find({
     collection: 'matches',
     depth: 0,
@@ -99,7 +112,12 @@ const findMatchByNumber = async (payload: Payload, matchNumber: string) => {
     where: { match_number: { equals: matchNumber } },
   })
 
-  return { payload, match: matches.docs[0] as MinimalMatch | undefined }
+  const match = matches.docs[0] as MinimalMatch | undefined
+  if (match?.event_id && !(await canAccessEvent(payload, user, match.event_id))) {
+    return { payload, match: undefined }
+  }
+
+  return { payload, match }
 }
 
 const revalidateMatch = (matchNumber: string) => {
@@ -508,7 +526,12 @@ async function performMatchTransition(
   match: MinimalMatch,
   matchNumber: string,
   targetStatus: string,
-  opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {},
+  opts: {
+    winnerEntryId?: string | number | null
+    scoreSummary?: string | null
+    isDraw?: boolean
+    overrideReason?: string
+  } = {},
 ): Promise<{ ok: true; match: MinimalMatch } | { ok: false; error: string }> {
   if (!isValidTransition(match.status, targetStatus)) {
     return { ok: false, error: 'invalid_transition' }
@@ -530,6 +553,12 @@ async function performMatchTransition(
     opts.winnerEntryId
   ) {
     updateData.winner_entry_id = opts.winnerEntryId
+    if (!match.actual_end_at) updateData.actual_end_at = new Date().toISOString()
+  }
+  // MATCH-01: a permitted draw publishes with no winner - still stamp the end time and clear any
+  // stale winner from an earlier (wrong) result.
+  if (opts.isDraw && (targetStatus === 'result_published' || targetStatus === 'finished')) {
+    updateData.winner_entry_id = null
     if (!match.actual_end_at) updateData.actual_end_at = new Date().toISOString()
   }
   if (opts.scoreSummary !== undefined) {
@@ -554,11 +583,11 @@ async function performMatchTransition(
           | null)
       : null
     const stageType = stage?.stage_type ?? ''
-    if (stageType === 'double_elimination') {
-      return { ok: false, error: 'reopen_not_supported' }
-    }
-    if (stageType === 'single_elimination') {
-      const retraction = await retractSingleEliminationAdvancement(payload, match.id)
+    // MATCH-02: double-elimination uses the same next_match_id/next_loser_match_id graph as
+    // single-elim, so the same retraction works - allowed before the advanced participant plays
+    // again, blocked (with the offending match named) once they have.
+    if (stageType === 'single_elimination' || stageType === 'double_elimination') {
+      const retraction = await retractBracketAdvancement(payload, match.id)
       if (!retraction.retracted && retraction.blockedBy) {
         return { ok: false, error: 'reopen_blocked_downstream' }
       }
@@ -578,7 +607,7 @@ async function performMatchTransition(
   const transition = MATCH_TRANSITIONS.find(
     (candidate) => candidate.from.includes(match.status) && candidate.to === targetStatus,
   )
-  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id) {
+  if (transition?.requiresWinnerSelection && !updateData.winner_entry_id && !opts.isDraw) {
     return { ok: false, error: 'winner_required' }
   }
 
@@ -595,8 +624,19 @@ async function performMatchTransition(
   // off a finished/result_published/walkover/disputed match throws Forbidden for every role. A
   // match_officer hitting a locked-status transition (reopen/restore/publish) gets a clean message
   // instead of a 500.
+  // AUDIT_TOURNAMENT_STANDARDS MATCH-08: optimistic lock. Updating by (id AND still-expected
+  // status) means a concurrent transition that already moved this match makes our write match zero
+  // rows - we bail cleanly instead of silently clobbering the other officer's change.
   try {
-    await payload.update({ collection: 'matches', id: match.id, data: updateData, user })
+    const updated = await payload.update({
+      collection: 'matches',
+      where: { and: [{ id: { equals: match.id } }, { status: { equals: match.status } }] },
+      data: updateData,
+      user,
+    })
+    if (updated.docs.length === 0) {
+      return { ok: false, error: 'stale_transition' }
+    }
   } catch (error) {
     if (error instanceof Forbidden) {
       return { ok: false, error: 'transition_forbidden' }
@@ -612,7 +652,12 @@ async function performMatchTransition(
     entityType: 'matches',
     entityId: match.id,
     before: beforeSnapshot,
-    after: { ...beforeSnapshot, ...updateData },
+    after: {
+      ...beforeSnapshot,
+      ...updateData,
+      // SKD-07: only present when the officer overrode the score-derived winner.
+      ...(opts.overrideReason ? { manual_winner_override_reason: opts.overrideReason } : {}),
+    },
     actorUserId,
   })
 
@@ -652,7 +697,12 @@ const resolvePublishResult = async (
   payload: Payload,
   match: MinimalMatch,
   manualWinnerSide: 'a' | 'b' | null,
-): Promise<{ winnerEntryId: string | number | null; scoreSummary: string | null; outcome: MatchOutcome }> => {
+): Promise<{
+  winnerEntryId: string | number | null
+  scoreSummary: string | null
+  outcome: MatchOutcome
+  isDraw: boolean
+}> => {
   const ruleset = await loadRulesetForMatch(payload, {
     categoryId: match.category_id,
     stageId: match.stage_id,
@@ -667,10 +717,14 @@ const resolvePublishResult = async (
   }
   const winnerEntryId = winnerSide ? sideEntryId(match, winnerSide) ?? null : null
 
+  // MATCH-01: only a draw when nobody picked or derived a winner AND the ruleset + scores say it's
+  // a genuine tie (not an unfinished match).
+  const isDraw = !winnerSide && isLevelDraw(ruleset, outcomeSets, outcome)
+
   const labels = await loadParticipantLabels(payload, match)
   const scoreSummary = formatScoreSummary(labels.a, labels.b, outcomeSets, outcome) || null
 
-  return { winnerEntryId, scoreSummary, outcome }
+  return { winnerEntryId, scoreSummary, outcome, isDraw }
 }
 
 export async function transitionMatchStatusAction(formData: FormData): Promise<void> {
@@ -691,16 +745,37 @@ export async function transitionMatchStatusAction(formData: FormData): Promise<v
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
   }
 
-  let opts: { winnerEntryId?: string | number | null; scoreSummary?: string | null } = {}
+  const overrideReason = toStringField(formData.get('winnerOverrideReason'))
+  let opts: {
+    winnerEntryId?: string | number | null
+    scoreSummary?: string | null
+    isDraw?: boolean
+    overrideReason?: string
+  } = {}
   if (targetStatus === 'result_published') {
     const resolved = await resolvePublishResult(payload, match, winnerSide)
-    opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+
+    // SKD-07: a manually-picked winner that contradicts what the entered scores + ruleset say
+    // must not publish silently - standings would then credit a win to the side whose score_for
+    // is the lower number. Require an explicit reason; it's recorded on the audit log.
+    const derivedSide = resolved.outcome.decided ? resolved.outcome.winnerSide : null
+    const contradictsScore = Boolean(winnerSide && derivedSide && winnerSide !== derivedSide)
+    if (contradictsScore && overrideReason.length < 3) {
+      redirect(`${returnTo}?matchError=manual_winner_conflict`)
+    }
+
+    opts = {
+      winnerEntryId: resolved.winnerEntryId,
+      scoreSummary: resolved.scoreSummary,
+      isDraw: resolved.isDraw,
+      overrideReason: contradictsScore ? overrideReason : undefined,
+    }
   } else if (targetStatus === 'walkover' && winnerSide) {
     opts = { winnerEntryId: sideEntryId(match, winnerSide) ?? null }
   }
@@ -734,18 +809,22 @@ export async function finishAndPublishMatchAction(formData: FormData): Promise<v
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
   }
 
   const resolved = await resolvePublishResult(payload, match, null)
-  if (!resolved.outcome.decided || !resolved.winnerEntryId) {
+  if (!resolved.isDraw && (!resolved.outcome.decided || !resolved.winnerEntryId)) {
     redirect(`${returnTo}?matchError=match_not_decided`)
   }
 
-  const opts = { winnerEntryId: resolved.winnerEntryId, scoreSummary: resolved.scoreSummary }
+  const opts = {
+    winnerEntryId: resolved.winnerEntryId,
+    scoreSummary: resolved.scoreSummary,
+    isDraw: resolved.isDraw,
+  }
 
   let current = match
   if (current.status === 'ongoing' || current.status === 'paused') {
@@ -772,6 +851,7 @@ export async function finishAndPublishMatchAction(formData: FormData): Promise<v
 export async function updateMatchSetScoreAction(formData: FormData): Promise<void> {
   const matchNumber = toStringField(formData.get('matchNumber'))
   const matchSetId = toStringField(formData.get('matchSetId'))
+  const expectedUpdatedAt = toStringField(formData.get('expectedUpdatedAt'))
   const winnerSide = toStringField(formData.get('winnerSide'))
   // The set winner is normally derived from the score + ruleset. `manualWinnerOverride=1` is the
   // hidden "Correct manually" path for retirement / DQ / a score the rules can't resolve.
@@ -798,7 +878,7 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -812,6 +892,13 @@ export async function updateMatchSetScoreAction(formData: FormData): Promise<voi
 
   if (String(existingSet.match_id || '') !== String(match.id)) {
     redirect(`${returnTo}?matchError=invalid_request`)
+  }
+
+  // MATCH-07: reject an absolute-value score edit if another officer changed this set between the
+  // form being rendered and submitted (the "+1" tap path already has atomic SQL). Older cached
+  // pages that don't send the token are not blocked.
+  if (expectedUpdatedAt && existingSet.updatedAt && existingSet.updatedAt !== expectedUpdatedAt) {
+    redirect(`${returnTo}?matchError=stale_transition`)
   }
 
   // AUDIT_E2E RULE-01: the ruleset's target_score/max_score/deuce_enabled/allow_draw were
@@ -922,7 +1009,7 @@ export async function addMatchSetAction(formData: FormData): Promise<void> {
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1009,7 +1096,7 @@ export async function deleteMatchSetAction(formData: FormData): Promise<void> {
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1100,7 +1187,7 @@ export async function recordRankingResultAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.matchOfficer,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1197,7 +1284,7 @@ export async function assignMatchOfficersAction(formData: FormData): Promise<voi
     allowedRoles: WORKSPACE_ROLES.scheduler,
     returnTo,
   })
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     redirect(`${returnTo}?matchError=not_found`)
@@ -1267,7 +1354,7 @@ export async function applyLiveScorePoint({
   user: { id: string | number; roles?: string[] | null }
 }): Promise<ApplyLiveScorePointResult> {
   const actorUserId = user.id
-  const { match } = await findMatchByNumber(payload, matchNumber)
+  const { match } = await findMatchByNumber(payload, matchNumber, user)
 
   if (!match) {
     return { ok: false, error: 'not_found' }

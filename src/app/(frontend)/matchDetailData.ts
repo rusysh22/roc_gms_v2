@@ -59,6 +59,7 @@ export type MatchSetDetail = {
   participant_b_score?: number | null
   winner_entry_id?: EntryDoc | string | number | null
   notes?: string | null
+  updatedAt?: string | null
 }
 
 export type DocumentationAssetDetail = {

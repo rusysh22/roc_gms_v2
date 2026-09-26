@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { retractSingleEliminationAdvancement } from './winnerAdvancement'
+import { retractBracketAdvancement, retractSingleEliminationAdvancement } from './winnerAdvancement'
 
 // Minimal in-memory Payload stub - only findByID + update on `matches` are exercised.
 type Match = Record<string, unknown> & { id: number }
@@ -111,11 +111,57 @@ describe('retractSingleEliminationAdvancement', () => {
     expect(payload._get(2).participant_a_entry_id).toEqual({ id: 999 })
   })
 
-  it('is a no-op for a non-single-elimination stage', async () => {
+  it('is a no-op for a non-elimination stage', async () => {
     const payload = makePayload([
       { id: 1, match_number: 'RR1', status: 'result_published', stage_id: { id: 5, stage_type: 'round_robin' }, winner_entry_id: { id: 100 } },
     ])
     const result = await retractSingleEliminationAdvancement(payload as never, 1)
     expect(result.retracted).toBe(false)
+  })
+
+  // MATCH-02
+  it('also retracts a double-elimination result (winner + loser routing) when nothing has progressed', async () => {
+    const payload = makePayload([
+      {
+        id: 1,
+        match_number: 'WB1',
+        status: 'result_published',
+        stage_id: { id: 7, stage_type: 'double_elimination' },
+        participant_a_entry_id: { id: 100 },
+        participant_b_entry_id: { id: 200 },
+        winner_entry_id: { id: 100 },
+        next_match_id: { id: 2 },
+        next_match_slot: 'a',
+        next_loser_match_id: { id: 3 },
+        next_loser_match_slot: 'b',
+      },
+      { id: 2, match_number: 'WB-FINAL', status: 'scheduled', participant_a_entry_id: { id: 100 }, participant_b_entry_id: null },
+      { id: 3, match_number: 'LB1', status: 'scheduled', participant_a_entry_id: null, participant_b_entry_id: { id: 200 } },
+    ])
+    const result = await retractBracketAdvancement(payload as never, 1)
+    expect(result.retracted).toBe(true)
+    expect(result.clearedFrom.sort()).toEqual(['LB1', 'WB-FINAL'])
+    expect(payload._get(2).participant_a_entry_id).toBeNull()
+    expect(payload._get(3).participant_b_entry_id).toBeNull()
+  })
+
+  it('blocks a double-elimination retraction once the loser has already played again', async () => {
+    const payload = makePayload([
+      {
+        id: 1,
+        match_number: 'WB1',
+        status: 'result_published',
+        stage_id: { id: 7, stage_type: 'double_elimination' },
+        participant_a_entry_id: { id: 100 },
+        participant_b_entry_id: { id: 200 },
+        winner_entry_id: { id: 100 },
+        next_loser_match_id: { id: 3 },
+        next_loser_match_slot: 'b',
+      },
+      { id: 3, match_number: 'LB1', status: 'ongoing', participant_a_entry_id: { id: 400 }, participant_b_entry_id: { id: 200 } },
+    ])
+    const result = await retractBracketAdvancement(payload as never, 1)
+    expect(result.retracted).toBe(false)
+    expect(result.blockedBy).toBe('LB1')
   })
 })

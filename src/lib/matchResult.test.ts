@@ -4,6 +4,7 @@ import {
   deriveMatchOutcome,
   deriveSetWinnerSide,
   formatScoreSummary,
+  isLevelDraw,
   isSetDecidedByRules,
   type MatchRuleset,
 } from './matchResult'
@@ -98,6 +99,44 @@ describe('deriveMatchOutcome', () => {
       { participant_a_score: 0, participant_b_score: 0, winner_side: 'b' },
     ])
     expect(outcome).toMatchObject({ decided: true, winnerSide: 'b', setsWonB: 2 })
+  })
+})
+
+describe('isLevelDraw (MATCH-01)', () => {
+  const football: MatchRuleset = { set_based: false, allow_draw: true }
+  const draw = (rs: MatchRuleset, sets: Parameters<typeof deriveMatchOutcome>[1]) =>
+    isLevelDraw(rs, sets, deriveMatchOutcome(rs, sets))
+
+  it('is a draw for a permitted level result (football 1-1, even 0-0)', () => {
+    expect(draw(football, [{ participant_a_score: 1, participant_b_score: 1 }])).toBe(true)
+    expect(draw(football, [{ participant_a_score: 0, participant_b_score: 0 }])).toBe(true)
+  })
+
+  it('is not a draw when the ruleset forbids one', () => {
+    expect(draw({ set_based: false, allow_draw: false }, [{ participant_a_score: 1, participant_b_score: 1 }])).toBe(false)
+  })
+
+  it('is not a draw when a side actually leads or won', () => {
+    expect(draw(football, [{ participant_a_score: 2, participant_b_score: 1 }])).toBe(false)
+    expect(
+      draw({ set_based: true, best_of: 3, target_score: 21, allow_draw: true }, [
+        { participant_a_score: 21, participant_b_score: 10 },
+      ]),
+    ).toBe(false)
+  })
+
+  it('is not a draw with no set rows (finished without scoring)', () => {
+    expect(draw(football, [])).toBe(false)
+  })
+
+  it('is a draw when the set tally is level (1-1 in a best-of-3 that allows draws)', () => {
+    const rs: MatchRuleset = { set_based: true, best_of: 3, target_score: 21, allow_draw: true }
+    expect(
+      draw(rs, [
+        { participant_a_score: 21, participant_b_score: 15 },
+        { participant_a_score: 18, participant_b_score: 21 },
+      ]),
+    ).toBe(true)
   })
 })
 

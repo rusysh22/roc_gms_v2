@@ -59,6 +59,14 @@ type MatchDoc = {
 }
 
 const RESULT_STATUSES = new Set(['result_published', 'walkover'])
+// AUDIT_TOURNAMENT_STANDARDS SKD-08: a legitimately cancelled match (weather, a bye pairing that
+// was voided) never reaches result_published/walkover, so the "every match decided" gate below
+// would block medal derivation for that category forever - only a manual override could ever award
+// them, with no signal why. A cancelled match is simply excluded from the check, the same way a
+// bye already is.
+const IGNORED_FOR_COMPLETION = new Set(['cancelled'])
+const isDecidedOrIgnorable = (status: string) =>
+  RESULT_STATUSES.has(status) || IGNORED_FOR_COMPLETION.has(status)
 
 // MSG-01/MSG-02: mirrors src/lib/brackets.ts's getRoundOrder closely enough for the two names this
 // module actually looks for ("final" and "bronze") - kept separate rather than imported so this
@@ -156,7 +164,10 @@ const deriveFromStandingsRank = async (
   ])
 
   const allMatches = matchesResult.docs as unknown as MatchDoc[]
-  if (allMatches.length === 0 || !allMatches.every((match) => RESULT_STATUSES.has(match.status))) {
+  if (
+    !allMatches.some((match) => RESULT_STATUSES.has(match.status)) ||
+    !allMatches.every((match) => isDecidedOrIgnorable(match.status))
+  ) {
     return { finished: false, medals: [], blockedByTie: false }
   }
 
@@ -207,7 +218,10 @@ const deriveFromRankingResult = async (
     where: { stage_id: { equals: stageId } },
   })
   const allMatches = matchesResult.docs as unknown as MatchDoc[]
-  if (allMatches.length === 0 || !allMatches.every((match) => RESULT_STATUSES.has(match.status))) {
+  if (
+    !allMatches.some((match) => RESULT_STATUSES.has(match.status)) ||
+    !allMatches.every((match) => isDecidedOrIgnorable(match.status))
+  ) {
     return { finished: false, medals: [], blockedByTie: false }
   }
 

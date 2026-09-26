@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { canAccessEvent, getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../workspaceAuth'
 
@@ -50,8 +51,11 @@ export async function addMatchCommentAction(formData: FormData): Promise<void> {
     where: { match_number: { equals: matchNumber } },
   })
   const match = matches.docs[0]
+  const matchEventId = getRelationId(match?.event_id)
 
-  if (!match) {
+  // AUDIT_TOURNAMENT_STANDARDS SEC-02: match_number is global; only commenting on a match in an
+  // event the caller is actually a member of.
+  if (!match || (matchEventId && !(await canAccessEvent(payload, user, matchEventId)))) {
     redirect(`${returnTo}?commentError=not_found`)
   }
 
@@ -118,6 +122,16 @@ export async function deleteMatchCommentAction(formData: FormData): Promise<void
 
   const comment = await payload.findByID({ collection: 'comments', id: commentId, depth: 0 }).catch(() => null)
   if (!comment || comment.entity_type !== 'matches') {
+    redirect(`${returnTo}?commentError=not_found`)
+  }
+
+  // AUDIT_TOURNAMENT_STANDARDS SEC-02: Comments carry no event_id (SEC-04), so scope via the
+  // parent match - an event_admin/match_officer must not delete notes on another event's match.
+  const parentMatch = await payload
+    .findByID({ collection: 'matches', id: comment!.entity_id, depth: 0 })
+    .catch(() => null)
+  const parentEventId = getRelationId(parentMatch?.event_id)
+  if (parentEventId && !(await canAccessEvent(payload, user, parentEventId))) {
     redirect(`${returnTo}?commentError=not_found`)
   }
 

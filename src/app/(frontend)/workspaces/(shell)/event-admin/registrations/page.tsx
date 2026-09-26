@@ -12,7 +12,13 @@ import { getActiveEvent } from '../../../activeEvent'
 import { NoActiveEventNotice, PageHero, StatBlock, StatGrid, getRelationshipLabel } from '../../../workspaceComponents'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { ConfirmSubmitButton } from '../../../matches/ConfirmSubmitButton'
-import { approveRegistrationSubmissionAction, rejectRegistrationSubmissionAction } from './registrationActions'
+import {
+  approveRegistrationSubmissionAction,
+  promoteWaitlistedEntryAction,
+  rejectRegistrationSubmissionAction,
+} from './registrationActions'
+
+const PENDING_PAGE_SIZE = 100
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +26,9 @@ const registrationErrorMessages: Record<string, string> = {
   invalid_request: 'That submission could not be found.',
   not_pending: 'This submission was already reviewed by someone else.',
   reason_required: 'A reason is required to reject a submission.',
+  duplicate_registration: 'This person is already an approved entry in that category.',
+  not_waitlisted: 'That entry is not on the waitlist.',
+  category_full: 'This category is still at capacity - free a confirmed slot first.',
 }
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
@@ -72,18 +81,32 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   const registrationUpdated = get(params, 'registrationUpdated')
   const eventWhere = { event_id: { equals: activeEvent.id } }
 
-  const [pendingResult, approvedCount, rejectedCount] = await Promise.all([
+  const [pendingResult, approvedCount, rejectedCount, waitlistedResult] = await Promise.all([
     access.payload.find({
       collection: 'registration-submissions',
       depth: 1,
-      limit: 100,
+      limit: PENDING_PAGE_SIZE,
       sort: 'createdAt',
       where: { and: [eventWhere, { status: { equals: 'pending' } }] },
     }),
     access.payload.count({ collection: 'registration-submissions', where: { and: [eventWhere, { status: { equals: 'approved' } }] } }),
     access.payload.count({ collection: 'registration-submissions', where: { and: [eventWhere, { status: { equals: 'rejected' } }] } }),
+    access.payload.find({
+      collection: 'competition-entries',
+      depth: 1,
+      limit: 200,
+      sort: 'createdAt',
+      where: { and: [eventWhere, { status: { equals: 'waitlisted' } }] },
+    }),
   ])
   const submissions = pendingResult.docs as WorkspaceSubmission[]
+  // REG-09: the pending queue is capped - a viral registration can push submissions past the page.
+  const pendingNotShown = Math.max(0, pendingResult.totalDocs - submissions.length)
+  const waitlistedEntries = waitlistedResult.docs as {
+    id: string | number
+    display_name: string
+    category_id: Parameters<typeof getRelationshipLabel>[0]
+  }[]
 
   return (
     <>
@@ -113,12 +136,56 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           Submission rejected.
         </AlertBanner>
       ) : null}
+      {registrationUpdated === 'waitlisted' ? (
+        <AlertBanner tone="success" className="mb-4">
+          Submission approved - the category is at capacity, so this entry was added to the waitlist.
+        </AlertBanner>
+      ) : null}
+      {registrationUpdated === 'promoted' ? (
+        <AlertBanner tone="success" className="mb-4">
+          Waitlisted entry promoted to confirmed.
+        </AlertBanner>
+      ) : null}
 
       <StatGrid>
         <StatBlock label="Pending review" value={pendingResult.totalDocs} tone={pendingResult.totalDocs > 0 ? 'warn' : 'default'} />
         <StatBlock label="Approved" value={approvedCount.totalDocs} tone="good" />
         <StatBlock label="Rejected" value={rejectedCount.totalDocs} />
       </StatGrid>
+
+      {waitlistedEntries.length > 0 ? (
+        <Card className="mb-4 flex flex-col gap-3">
+          <CardTitle>Waitlist ({waitlistedEntries.length})</CardTitle>
+          <p className="text-sm text-ink-soft">
+            These entries were approved after their category filled up. Promote one when a confirmed entry withdraws
+            or you raise the category&apos;s max entries.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {waitlistedEntries.map((entry) => {
+              const formId = `promote-${entry.id}`
+              return (
+                <li key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-mist px-3 py-2">
+                  <span className="text-sm font-semibold text-ink">
+                    {entry.display_name}
+                    <span className="ml-2 font-normal text-ink-soft">{getRelationshipLabel(entry.category_id)}</span>
+                  </span>
+                  <form id={formId} action={promoteWaitlistedEntryAction}>
+                    <input type="hidden" name="entryId" value={entry.id} />
+                    <SubmitButton size="sm" variant="secondary">Promote</SubmitButton>
+                  </form>
+                </li>
+              )
+            })}
+          </ul>
+        </Card>
+      ) : null}
+
+      {pendingNotShown > 0 ? (
+        <AlertBanner tone="warning" className="mb-4">
+          Showing the {PENDING_PAGE_SIZE} oldest pending submissions - {pendingNotShown} more are not shown. Work
+          through these and refresh.
+        </AlertBanner>
+      ) : null}
 
       {submissions.length === 0 ? (
         <EmptyState>No submissions waiting for review.</EmptyState>

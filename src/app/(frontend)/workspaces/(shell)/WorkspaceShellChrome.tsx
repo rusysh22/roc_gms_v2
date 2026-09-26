@@ -383,16 +383,19 @@ export function WorkspaceShellChrome({
   email,
   events,
   activeEventId,
+  subscriptionGrace = false,
   children,
 }: {
   roles: UserRole[] | null | undefined
   email?: string | null
   events: ActiveEventDoc[]
   activeEventId?: string | number
+  subscriptionGrace?: boolean
   children: React.ReactNode
 }) {
   const pathname = usePathname()
   const [open, setOpen] = React.useState(false)
+  const [graceDismissed, setGraceDismissed] = React.useState(false)
 
   return (
     <div className="flex min-h-svh bg-mist font-sans text-ink">
@@ -452,6 +455,27 @@ export function WorkspaceShellChrome({
             <span className="text-ink">{sectionLabel(pathname)}</span>
           </p>
         </header>
+
+        {subscriptionGrace && !graceDismissed ? (
+          <div className="flex items-center gap-3 border-b border-gold/40 bg-gold/10 px-4 py-2 text-sm text-ink sm:px-6 lg:px-8">
+            <Shield className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
+            <p className="flex-1">
+              Your subscription payment is overdue - you&apos;re in a short grace period. Renew on{' '}
+              <Link href="/subscribe" className="font-semibold underline underline-offset-2">
+                the subscription page
+              </Link>{' '}
+              to avoid losing access.
+            </p>
+            <button
+              type="button"
+              onClick={() => setGraceDismissed(true)}
+              aria-label="Dismiss"
+              className="rounded-full p-1 text-ink-soft transition-colors hover:bg-gold/20"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>

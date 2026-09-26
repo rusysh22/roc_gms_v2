@@ -39,10 +39,11 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
   const rulesetId = text(formData, 'rulesetId')
   const minRoster = text(formData, 'minRosterSize')
   const maxRoster = text(formData, 'maxRosterSize')
+  const maxEntries = text(formData, 'maxEntries')
   const thirdPlacePolicyRaw = text(formData, 'thirdPlacePolicy')
   const thirdPlacePolicy = thirdPlacePolicies.has(thirdPlacePolicyRaw) ? thirdPlacePolicyRaw : 'none'
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -104,6 +105,7 @@ export async function addCategoryAction(formData: FormData): Promise<void> {
     roster_required: text(formData, 'rosterRequired') === 'on',
     min_roster_size: minRoster ? Number(minRoster) : 0,
     max_roster_size: maxRoster ? Number(maxRoster) : undefined,
+    max_entries: maxEntries ? Number(maxEntries) : undefined,
     ruleset_id: rulesetId ? Number(rulesetId) : undefined,
     format_type: formatType as
       | 'single_elimination'
@@ -197,7 +199,7 @@ export async function updateCategoryStatusAction(formData: FormData): Promise<vo
     actorUserId: user?.id ?? null,
   })
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   revalidatePath(wizardPage)
   if (event?.slug) {
     revalidatePath(`/events/${event.slug}/sports`)
@@ -220,6 +222,7 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
   const rulesetId = text(formData, 'rulesetId')
   const minRoster = text(formData, 'minRosterSize')
   const maxRoster = text(formData, 'maxRosterSize')
+  const maxEntries = text(formData, 'maxEntries')
   const thirdPlacePolicyRaw = text(formData, 'thirdPlacePolicy')
   const thirdPlacePolicy = thirdPlacePolicies.has(thirdPlacePolicyRaw) ? thirdPlacePolicyRaw : 'none'
 
@@ -258,6 +261,7 @@ export async function updateCategoryAction(formData: FormData): Promise<void> {
     roster_required: text(formData, 'rosterRequired') === 'on',
     min_roster_size: minRoster ? Number(minRoster) : 0,
     max_roster_size: maxRoster ? Number(maxRoster) : undefined,
+    max_entries: maxEntries ? Number(maxEntries) : undefined,
     ruleset_id: rulesetId ? Number(rulesetId) : undefined,
     format_type: formatType as
       | 'single_elimination'
@@ -339,6 +343,7 @@ export async function duplicateCategoryAction(formData: FormData): Promise<void>
     roster_required: source!.roster_required ?? false,
     min_roster_size: source!.min_roster_size ?? 0,
     max_roster_size: source!.max_roster_size ?? undefined,
+    max_entries: source!.max_entries ?? undefined,
     ruleset_id: source!.ruleset_id ?? undefined,
     format_type: source!.format_type,
     third_place_policy: source!.third_place_policy ?? 'none',

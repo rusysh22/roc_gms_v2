@@ -16,6 +16,14 @@ export type PlanDto = {
   sort_order: number
   entitlements: Record<string, unknown>
   checkout_url: string
+  // Optional, richer fields Berlanggan may include on the catalog response (its Plan.features /
+  // Plan.sale_price and the product/plan description). /pricing renders whatever is present and
+  // ignores what isn't - see PlanCard in src/app/(frontend)/pricing/page.tsx. `features` follows
+  // Berlanggan's own storefront convention: {label: "true"} shows the label alone, {label: value}
+  // shows "label: value"; a plain string[] is also accepted.
+  description?: string | null
+  features?: Record<string, unknown> | string[] | null
+  sale_price?: number | string | null
 }
 
 export type FetchPlansResult = { ok: true; plans: PlanDto[] } | { ok: false; error: 'unreachable' }

@@ -42,7 +42,7 @@ export async function saveSponsorAction(formData: FormData): Promise<void> {
     const buffer = Buffer.from(await file.arrayBuffer())
     const media = await payload.create({
       collection: 'media',
-      data: { alt: `${name} logo` },
+      data: { alt: `${name} logo`, event_id: Number(event.id) }, // SEC-06
       file: { data: buffer, mimetype: file.type, name: file.name, size: file.size },
     })
     logo = media.id

@@ -1,13 +1,14 @@
 import type { Payload } from 'payload'
 
-import type { UserRole } from './roles'
-
 type MembershipUser = {
   id: string | number
-  roles?: UserRole[] | null
+  // Widened to `readonly string[]` (not `UserRole[]`) so callers holding a loosely-typed session
+  // user - e.g. the JSON live-score route - can pass it straight through; only 'super_admin' is
+  // ever read from it here.
+  roles?: readonly string[] | null
 }
 
-const getRelationId = (value: unknown): string | number | undefined => {
+export const getRelationId = (value: unknown): string | number | undefined => {
   if (typeof value === 'string' || typeof value === 'number') {
     return value
   }

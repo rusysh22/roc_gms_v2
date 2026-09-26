@@ -10,7 +10,7 @@ import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
 import { getMatchStatusTone, StatusBadge } from '@/components/ui/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { resolveEventTimezone } from '@/lib/timezone'
+import { eventTimezoneLabel, resolveEventTimezone } from '@/lib/timezone'
 import { collectEntryClubLabels, getRelationshipId } from '@/lib/brackets'
 import { getActiveEvent } from '../../activeEvent'
 import {
@@ -115,6 +115,7 @@ export default async function SchedulerWorkspacePage({
   const payload = access.payload
   const activeEvent = await getActiveEvent(payload)
   const timezone = resolveEventTimezone(activeEvent?.timezone)
+  const timezoneLabel = eventTimezoneLabel(activeEvent?.timezone)
   if (!activeEvent) {
     return (
       <>
@@ -260,7 +261,7 @@ export default async function SchedulerWorkspacePage({
               <TableCell>
                 <div className="flex items-center gap-1">
                   {RESCHEDULABLE_STATUSES.has(match.status) ? (
-                    <RescheduleMatchDialog match={match} venues={venueOptions} courts={courtOptions} />
+                    <RescheduleMatchDialog match={match} venues={venueOptions} courts={courtOptions} timezone={timezone} timezoneLabel={timezoneLabel} />
                   ) : null}
                   {match.generation_source === 'manual' && DELETABLE_MATCH_STATUSES.has(match.status) ? (
                     <>
@@ -302,6 +303,7 @@ export default async function SchedulerWorkspacePage({
               entries={toOptions(entries.docs)}
               venues={venueOptions}
               courts={courtOptions}
+              timezoneLabel={timezoneLabel}
             />
             <Button asChild variant="secondary">
               <Link href={`/events/${activeEvent.slug}/schedule`}>Public Schedule</Link>

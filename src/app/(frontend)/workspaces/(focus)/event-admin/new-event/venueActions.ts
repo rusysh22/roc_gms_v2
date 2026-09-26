@@ -22,7 +22,7 @@ export async function addVenueAction(formData: FormData): Promise<void> {
   const name = text(formData, 'name')
   const isVirtual = text(formData, 'isVirtual') === 'on'
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -107,7 +107,7 @@ export async function addCourtAction(formData: FormData): Promise<void> {
   const sportId = text(formData, 'sportId')
   const capacityRaw = text(formData, 'capacity')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

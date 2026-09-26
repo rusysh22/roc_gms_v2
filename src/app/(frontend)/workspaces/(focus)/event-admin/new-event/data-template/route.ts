@@ -6,13 +6,13 @@ import { getWizardEvent, wizardPage } from '../wizardShared'
 // template for this event"): the blank template lives at ../participants-template; this one is
 // pre-filled from the event whose id is in the query string.
 export async function GET(request: Request) {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
 
   const eventId = new URL(request.url).searchParams.get('eventId') || ''
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     return new Response('Event not found', { status: 404 })
   }

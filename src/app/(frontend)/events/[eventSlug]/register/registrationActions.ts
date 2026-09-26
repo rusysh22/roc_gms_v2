@@ -84,12 +84,30 @@ export async function submitRegistrationAction(formData: FormData): Promise<void
   const displayName = text(formData, 'displayName')
   const clubName = text(formData, 'clubName')
   const contactName = text(formData, 'contactName')
-  const contactEmail = text(formData, 'contactEmail')
+  const contactEmail = text(formData, 'contactEmail').toLowerCase()
   const contactPhone = text(formData, 'contactPhone')
   const notes = text(formData, 'notes')
 
   if (!displayName || !contactName || !contactEmail || !emailValid(contactEmail)) {
     redirect(`${returnTo}&error=invalid_submission`)
+  }
+
+  // REG-02: block a repeat submission for the same category from the same email or an identical
+  // display name while an earlier one is still pending or already approved.
+  const existingSubmission = await payload.find({
+    collection: 'registration-submissions',
+    depth: 0,
+    limit: 1,
+    where: {
+      and: [
+        { category_id: { equals: Number(categoryId) } },
+        { status: { in: ['pending', 'approved'] } },
+        { or: [{ contact_email: { equals: contactEmail } }, { display_name: { equals: displayName } }] },
+      ],
+    },
+  })
+  if (existingSubmission.totalDocs > 0) {
+    redirect(`${returnTo}&error=already_registered`)
   }
 
   // Individual mode has no roster fieldset on the form - the top-level displayName field IS that

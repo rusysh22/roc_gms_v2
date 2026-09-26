@@ -58,7 +58,7 @@ const findGroupStage = async (
 }
 
 export async function createGroupsAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
@@ -67,7 +67,7 @@ export async function createGroupsAction(formData: FormData): Promise<void> {
   const categoryId = text(formData, 'categoryId')
   const groupCount = Number(text(formData, 'groupCount'))
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -312,7 +312,7 @@ export async function setGroupQualifyCountAction(formData: FormData): Promise<vo
 }
 
 export async function generateGroupMatchesAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
@@ -320,7 +320,7 @@ export async function generateGroupMatchesAction(formData: FormData): Promise<vo
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -688,7 +688,7 @@ export async function promoteToKnockoutAction(formData: FormData): Promise<void>
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

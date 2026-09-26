@@ -19,13 +19,14 @@ import {
 } from '@/lib/matchGeneration'
 import { advanceCategoryStatus } from '@/lib/categoryLifecycle'
 import { recordAuditLog } from '@/lib/audit'
+import { findUnderRosteredEntries } from '@/lib/rosterValidation'
 import { recalculateRankingStandingsForScope, recalculateStandingsForScope } from '@/lib/standings'
 import { categoryHasStartedMatch, clearCategoryGeneratedData } from '@/lib/cascadeDelete'
 import { WORKSPACE_ROLES, assertWorkspaceActionAccess } from '../../../workspaceAuth'
 import { AUTO_GENERATE_FORMATS as supportedFormats, getWizardEvent, text, wizardPage } from './wizardShared'
 
 export async function generateMatchesAction(formData: FormData): Promise<void> {
-  const { payload } = await assertWorkspaceActionAccess({
+  const { payload, user } = await assertWorkspaceActionAccess({
     allowedRoles: WORKSPACE_ROLES.eventAdmin,
     returnTo: wizardPage,
   })
@@ -33,7 +34,7 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
   const eventId = text(formData, 'eventId')
   const categoryId = text(formData, 'categoryId')
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -75,6 +76,13 @@ export async function generateMatchesAction(formData: FormData): Promise<void> {
 
   if (schedulableEntries.length < 2) {
     redirect(`${wizardPage}?eventId=${eventId}&step=generate&wizardError=not_enough_entries`)
+  }
+
+  // REG-05: a hard gate on roster completeness, not just a readiness-dashboard warning - a bracket
+  // must not be generated with team entries that have no registered players.
+  const underRostered = await findUnderRosteredEntries(payload, categoryId)
+  if (underRostered.length > 0) {
+    redirect(`${wizardPage}?eventId=${eventId}&step=generate&categoryId=${categoryId}&wizardError=roster_incomplete`)
   }
   if (formatType === 'double_elimination' && !isExactPowerOfTwo(schedulableEntries.length)) {
     // ADMIN_EVENT_CREATION_NUSANTARA_GRAND_GAMES_2026.md F-14 scope decision (see

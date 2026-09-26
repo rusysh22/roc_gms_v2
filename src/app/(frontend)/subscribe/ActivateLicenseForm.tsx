@@ -18,6 +18,7 @@ const ERROR_MESSAGES: Record<Exclude<ActivateLicenseResult, { ok: true }>['reaso
   revoked: 'That license key has been revoked. Contact support if you believe this is a mistake.',
   suspended: 'That license key is currently suspended - most likely a payment issue on your Berlanggan account.',
   unreachable: 'Could not reach the billing service right now. Please try again in a moment.',
+  rate_limited: 'Too many activation attempts. Please wait a few minutes and try again.',
 }
 
 export function ActivateLicenseForm({ redirectTo = '/workspaces' }: { redirectTo?: string }) {

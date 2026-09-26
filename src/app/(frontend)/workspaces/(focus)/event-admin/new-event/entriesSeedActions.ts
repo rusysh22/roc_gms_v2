@@ -52,7 +52,7 @@ export async function addEntriesAction(formData: FormData): Promise<void> {
   const categoryId = text(formData, 'categoryId')
   const sourceIds = formData.getAll('sourceIds').map(String).filter(Boolean)
 
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }
@@ -168,7 +168,7 @@ export async function addBulkCategoryAssignmentsAction(formData: FormData): Prom
   })
 
   const eventId = text(formData, 'eventId')
-  const event = await getWizardEvent(payload, eventId)
+  const event = await getWizardEvent(payload, eventId, user)
   if (!event) {
     redirect(`${wizardPage}?step=event&wizardError=missing_event`)
   }

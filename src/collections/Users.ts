@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
-import { canReadAdminField, isAuthenticated, isSuperAdmin } from '@/access/roles'
+import { canReadAdminField, isSuperAdmin } from '@/access/roles'
+import type { UserRole } from '@/access/roles'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -29,7 +30,16 @@ export const Users: CollectionConfig = {
     // events they created/were added to - so this never grants reach into anyone else's event.
     create: () => true,
     delete: isSuperAdmin,
-    read: isAuthenticated,
+    // AUDIT_TOURNAMENT_STANDARDS SEC-07: `read` used to be "any authenticated user", so with open
+    // self-registration anyone could make a free account and enumerate every user's name + email
+    // via /api/users or GraphQL - cross-tenant PII disclosure. A non-super_admin now only reads
+    // their own row. The custom workspace UI is unaffected (it reads users through the Local API
+    // server-side); only direct REST/GraphQL/Admin access to *other* people's rows is closed.
+    read: ({ req }) => {
+      if (!req.user) return false
+      if ((req.user as { roles?: UserRole[] | null }).roles?.includes('super_admin')) return true
+      return { id: { equals: req.user.id } }
+    },
     update: isSuperAdmin,
   },
   fields: [

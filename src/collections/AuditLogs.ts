@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { scopedToUserEvents } from '@/access/eventScope'
 import { canReadEventBackoffice, isSuperAdmin } from '@/access/roles'
 
 export const AuditLogs: CollectionConfig = {
@@ -12,10 +13,24 @@ export const AuditLogs: CollectionConfig = {
   access: {
     create: () => false,
     delete: isSuperAdmin,
-    read: canReadEventBackoffice,
+    // AUDIT_TOURNAMENT_STANDARDS SEC-05: before/after snapshots can contain another organizer's
+    // match/schedule/participant data, and read was a bare global-role check. Now scoped to the
+    // caller's events via the event_id recordAuditLog denormalises from the entity (src/lib/
+    // audit.ts). Entries that resolved to a null event_id stay super_admin-only.
+    read: scopedToUserEvents(canReadEventBackoffice),
     update: () => false,
   },
   fields: [
+    {
+      name: 'event_id',
+      type: 'relationship',
+      relationTo: 'events',
+      index: true,
+      admin: {
+        readOnly: true,
+        description: 'Denormalised from the audited entity on write - for per-event access scoping.',
+      },
+    },
     {
       name: 'actor_user_id',
       type: 'relationship',

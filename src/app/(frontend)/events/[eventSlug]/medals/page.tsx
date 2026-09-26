@@ -43,14 +43,22 @@ export default async function EventMedalsPage({
   })
   const records = recordsResult.docs as unknown as MedalRecordDoc[]
 
-  const tallyRecords: MedalTallyRecord[] = records
-    .filter((record) => record.club_id)
-    .map((record) => ({
-      clubId: getRelationshipId(record.club_id as RelationshipDoc),
-      clubLabel: getRelationshipLabel(record.club_id as RelationshipDoc, 'Unknown'),
+  // AUDIT_TOURNAMENT_STANDARDS SKD-09: individual/pair entries with no club link used to be
+  // dropped from the public tally entirely - a real gold medal just vanished from the "official"
+  // count. They now roll up under a single "Unaffiliated" contingent instead.
+  const UNAFFILIATED = '__unaffiliated__'
+  const tallyRecords: MedalTallyRecord[] = records.map((record) => {
+    const clubId = record.club_id ? getRelationshipId(record.club_id as RelationshipDoc) : undefined
+    return {
+      clubId: clubId ?? UNAFFILIATED,
+      clubLabel: clubId
+        ? getRelationshipLabel(record.club_id as RelationshipDoc, 'Unknown')
+        : 'Unaffiliated',
       medal: record.medal,
       weight: 1,
-    }))
+    }
+  })
+  const hasUnaffiliated = tallyRecords.some((r) => r.clubId === UNAFFILIATED)
 
   const method = event.medal_ranking_method || 'gold_first'
   const tally = buildMedalTally(tallyRecords, {
@@ -82,6 +90,9 @@ export default async function EventMedalsPage({
         <p className="mt-1 text-sm text-ink-soft">
           Overall standings across every category, ranked{' '}
           {method === 'weighted_points' ? 'by weighted points' : 'gold-first, Olympic-style'}.
+          {hasUnaffiliated
+            ? ' Medals won by athletes with no club/contingent link are grouped under "Unaffiliated".'
+            : ''}
         </p>
       </div>
 

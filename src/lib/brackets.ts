@@ -262,6 +262,18 @@ export const detectSingleEliminationChampion = (
     }
   }
 
+  // AUDIT_TOURNAMENT_STANDARDS BRK-04: round order is parsed from the round *name*, so renaming an
+  // earlier round to something unrecognised ("Last Four") sorts it last and it would be read as
+  // the final. A genuine single-elim final round has exactly one match - if the "last" round has
+  // more, the ordering is wrong; don't guess a champion from it.
+  if (lastRound.matches.length > 1) {
+    return {
+      status: 'pending',
+      round_name: lastRound.name,
+      reason: 'Could not identify the final match - check the round names in this bracket.',
+    }
+  }
+
   if (finalMatch.status !== 'result_published') {
     return {
       status: 'pending',

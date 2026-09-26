@@ -322,7 +322,7 @@ export async function updateEventAction(formData: FormData): Promise<void> {
     const buffer = Buffer.from(await logoFile.arrayBuffer())
     const media = await payload.create({
       collection: 'media',
-      data: { alt: `${name} logo` },
+      data: { alt: `${name} logo`, event_id: Number(eventId) }, // SEC-06
       file: { data: buffer, mimetype: logoFile.type, name: logoFile.name, size: logoFile.size },
     })
     logoId = Number(media.id)

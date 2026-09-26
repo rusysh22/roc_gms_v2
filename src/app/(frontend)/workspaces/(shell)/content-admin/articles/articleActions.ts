@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import type { Payload } from 'payload'
 
 import type { Article } from '@/generated/payload-types'
+import { getRelationId } from '@/access/eventMembership'
 import { recordAuditLog } from '@/lib/audit'
 import { markdownLiteToLexicalContent } from '../../../../contentData'
 import { getActiveEvent } from '../../../activeEvent'
@@ -26,7 +27,12 @@ const slugify = (value: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 96)
 
-async function uploadCoverImage(payload: Payload, formData: FormData, altFallback: string) {
+async function uploadCoverImage(
+  payload: Payload,
+  formData: FormData,
+  altFallback: string,
+  eventId: number | undefined,
+) {
   const file = formData.get('coverImage')
   if (!(file instanceof File) || file.size === 0) {
     return { id: undefined, invalid: false }
@@ -37,7 +43,7 @@ async function uploadCoverImage(payload: Payload, formData: FormData, altFallbac
   const buffer = Buffer.from(await file.arrayBuffer())
   const media = await payload.create({
     collection: 'media',
-    data: { alt: altFallback },
+    data: { alt: altFallback, event_id: eventId }, // SEC-06: scope the cover image to its event
     file: { data: buffer, mimetype: file.type, name: file.name, size: file.size },
   })
   return { id: media.id, invalid: false }
@@ -71,7 +77,7 @@ export async function createArticleAction(formData: FormData): Promise<void> {
     redirect(`${newPage}?articleError=duplicate_slug`)
   }
 
-  const cover = await uploadCoverImage(payload, formData, title)
+  const cover = await uploadCoverImage(payload, formData, title, Number(event!.id))
   if (cover.invalid) {
     redirect(`${newPage}?articleError=invalid_cover_image`)
   }
@@ -138,7 +144,7 @@ export async function updateArticleAction(formData: FormData): Promise<void> {
     redirect(`${editPage}?articleError=duplicate_slug`)
   }
 
-  const cover = await uploadCoverImage(payload, formData, title)
+  const cover = await uploadCoverImage(payload, formData, title, Number(getRelationId(before.event_id)) || undefined)
   if (cover.invalid) {
     redirect(`${editPage}?articleError=invalid_cover_image`)
   }

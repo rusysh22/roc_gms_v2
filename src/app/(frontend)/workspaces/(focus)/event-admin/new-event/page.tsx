@@ -49,6 +49,7 @@ import {
   type AuditLogSummary,
   type RelationshipDoc,
 } from '../../../workspaceComponents'
+import { canAccessEvent } from '@/access/eventMembership'
 import { WORKSPACE_ROLES, WorkspaceUnauthorized, requireWorkspaceAccess } from '../../../workspaceAuth'
 import { buildWizardReturnTo, resolveWizardAccess } from './wizardAccess'
 import { WizardDraftClaim } from './WizardDraftClaim'
@@ -176,6 +177,8 @@ const errorMessages: Record<string, string> = {
   import_failed:
     'The import could not be completed - the file may have an unexpected cell value or format. Re-download the template for this event, re-enter your rows, and try again. If it keeps failing, the team has been notified.',
   not_enough_entries: 'Add at least two confirmed entries before generating matches.',
+  roster_incomplete:
+    'One or more teams have fewer active roster players than this category requires. Complete the rosters in the Participants step (or lower the minimum roster size) before generating matches.',
   duplicate_seed: 'Two entries had the same seed number. Give each entry a unique seed and save again.',
   invalid_group_count: 'Choose between 2 and 12 groups.',
   missing_groups: 'Create groups first.',
@@ -357,6 +360,7 @@ export default async function NewEventWizardPage({
   // `firstIncompleteStep` lands on a walled step.
   const preliminaryStep = requestedStep || (eventId ? 'sports' : 'setup')
   let payload: Awaited<ReturnType<typeof requireWorkspaceAccess>>['payload']
+  let signedInUser: { id: string | number; roles?: readonly string[] | null } | null = null
   let isAnon = false
   if (AUTH_ONLY_STEPS.has(preliminaryStep)) {
     const access = await requireWorkspaceAccess({
@@ -373,6 +377,7 @@ export default async function NewEventWizardPage({
       )
     }
     payload = access.payload
+    signedInUser = access.user
   } else {
     const access = await resolveWizardAccess({
       step: preliminaryStep,
@@ -380,12 +385,17 @@ export default async function NewEventWizardPage({
       returnTo: buildWizardReturnTo(preliminaryStep, eventId),
     })
     payload = access.payload
+    signedInUser = access.user
     isAnon = access.mode === 'anon'
   }
 
-  const event = eventId
-    ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
-    : null
+  // AUDIT_TOURNAMENT_STANDARDS SEC-01: the wizard guards only check global event-admin
+  // capability - a signed-in caller must additionally be a member of the event they pass in the
+  // URL (anon drafts are gated by resolveWizardAccess/verifyAnonDraft instead).
+  const event =
+    eventId && (!signedInUser || (await canAccessEvent(payload, signedInUser, eventId)))
+      ? await payload.findByID({ collection: 'events', id: eventId, depth: 1 }).catch(() => null)
+      : null
   if (eventId && !event) {
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
@@ -2007,6 +2017,9 @@ const CategoriesStep = async ({
             <Field label="Max roster size">
               <Input name="maxRosterSize" type="number" min="0" />
             </Field>
+            <Field label="Max entries (0 = unlimited)">
+              <Input name="maxEntries" type="number" min="0" />
+            </Field>
             <div className="sm:col-span-2">
               <SubmitButton>Add category</SubmitButton>
             </div>
@@ -2135,6 +2148,9 @@ const CategoriesStep = async ({
                         </Field>
                         <Field label="Max roster size">
                           <Input name="maxRosterSize" type="number" min="0" defaultValue={category.max_roster_size ?? ''} />
+                        </Field>
+                        <Field label="Max entries (0 = unlimited)">
+                          <Input name="maxEntries" type="number" min="0" defaultValue={category.max_entries ?? ''} />
                         </Field>
                         <div className="sm:col-span-2">
                           <SubmitButton>Save category</SubmitButton>

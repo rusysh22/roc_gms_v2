@@ -86,6 +86,20 @@ describe('planMenuImport', () => {
     expect(plan.rows.find((r) => r.action === 'error')?.reason).toMatch(/name is required/i)
   })
 
+  it('SEC-03: ignores an `id` cell that points at another event, never targeting it for update', async () => {
+    const { payload } = makePayload({
+      // id 1 belongs to event 42, not the event 9 this import runs against.
+      clubs: [{ id: 1, event_id: 42, name: 'Rival Club', slug: 'rival-club' }],
+    })
+    const buffer = bookOf({ Clubs: [{ id: 1, name: 'Hijacked Name', slug: 'rival-club' }] })
+    const parsed = parseMenuWorkbook(buffer, MENU_IO_SPECS.clubs)
+    const plan = await planMenuImport(payload, '9', MENU_IO_SPECS.clubs, parsed)
+
+    // Falls through to the upsert-key path (slug), which also finds nothing in event 9 -> create,
+    // never an update against the foreign row.
+    expect(plan.rows[0].action).not.toBe('update')
+  })
+
   it('flags an unknown relation label as a per-row error', async () => {
     const { payload } = makePayload({ sports: [{ id: 1, event_id: 9, name: 'Badminton', slug: 'badminton' }] })
     const buffer = bookOf({ Rulesets: [{ name: 'Standard', sport: 'Chess' }] })
@@ -115,6 +129,21 @@ describe('applyMenuImport', () => {
     expect(store.rulesets.find((r) => r.slug === 'old-rules')?.points_win).toBe(3)
     const created = store.rulesets.find((r) => r.slug === 'cup-rules')
     expect(created).toMatchObject({ sport_id: 1, event_id: 9 })
+  })
+
+  it('REG-10: a blank optional cell on re-import leaves an existing value unchanged', async () => {
+    const { payload, store } = makePayload({
+      clubs: [{ id: 1, event_id: 9, name: 'Menteng AC', slug: 'menteng-ac', contact_person: 'Budi', contact_email: 'budi@example.com' }],
+    })
+    // Re-import the row with contact_person filled but contact_email left blank.
+    const buffer = bookOf({ Clubs: [{ name: 'Menteng AC', slug: 'menteng-ac', contact_person: 'Sri' }] })
+    const parsed = parseMenuWorkbook(buffer, MENU_IO_SPECS.clubs)
+    const summary = await applyMenuImport(payload, '9', 1, MENU_IO_SPECS.clubs, parsed)
+
+    expect(summary).toMatchObject({ updated: 1, created: 0 })
+    const club = store.clubs.find((c) => c.slug === 'menteng-ac')!
+    expect(club.contact_person).toBe('Sri') // changed
+    expect(club.contact_email).toBe('budi@example.com') // untouched, not cleared
   })
 
   it('rebuilds the relation index between sheets so a later sheet can reference a new row', async () => {
