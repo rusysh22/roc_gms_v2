@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Flag, Maximize, Minimize, Pause, Play, Plus, Trash2, Trophy } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Flag, Maximize, Minimize, Pause, Play, Plus, Trash2, Trophy } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { SubmitButton } from '@/components/ui/submit-button'
@@ -20,7 +20,8 @@ import {
   getRelationshipLabel,
 } from '../../../../workspaceComponents'
 import { loadRulesetForMatch } from '@/lib/ruleValidation'
-import { deriveMatchOutcome, type OutcomeSet } from '@/lib/matchResult'
+import { deriveMatchOutcome, setWinnerSide, type OutcomeSet } from '@/lib/matchResult'
+import { cn } from '@/lib/utils'
 import { ConfirmSubmitButton } from '../../../../matches/ConfirmSubmitButton'
 import { addMatchCommentAction } from '../../../../matches/commentActions'
 import {
@@ -133,6 +134,7 @@ export default async function LiveScorePage({
     (transition) => !transition.reverse && ['ongoing', 'paused', 'finished'].includes(transition.to),
   )
   const publishTransition = allowedTransitions.find((transition) => transition.to === 'result_published')
+  const startTransition = quickTransitions.find((transition) => transition.to === 'ongoing')
   const stageType =
     match.stage_id && typeof match.stage_id === 'object'
       ? (match.stage_id as { stage_type?: string }).stage_type
@@ -170,11 +172,15 @@ export default async function LiveScorePage({
     (role) => role === 'super_admin' || role === 'event_admin',
   )
 
+  const scoreable = isScoreableStatus(match.status)
+  const sideDotClass = { a: 'bg-green', b: 'bg-blue' } as const
+
   const banners = (
     <>
       {matchUpdated ? (
-        <p className="mb-3 rounded-card border border-green/30 bg-paper px-3 py-2 text-sm font-bold text-green">
-          Score saved.
+        <p className="mb-3 inline-flex items-center gap-2 self-start rounded-full border border-green/30 bg-green/[0.06] px-3 py-1 text-xs font-bold text-green">
+          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+          Saved
         </p>
       ) : null}
       {matchError ? (
@@ -194,24 +200,48 @@ export default async function LiveScorePage({
       participantBName={participantBName}
       participantAScore={currentSet.participant_a_score ?? 0}
       participantBScore={currentSet.participant_b_score ?? 0}
-      scoreable={isScoreableStatus(match.status)}
+      scoreable={scoreable}
       matchStatusLabel={formatStatus(match.status)}
-      matchOutcome={{
-        decided: matchOutcome.decided,
-        winnerSide: matchOutcome.winnerSide,
-        setsWonA: matchOutcome.setsWonA,
-        setsWonB: matchOutcome.setsWonB,
-      }}
+      notScoreableAction={
+        startTransition ? (
+          <form action={transitionMatchStatusAction}>
+            <input type="hidden" name="matchNumber" value={match.match_number} />
+            <input type="hidden" name="targetStatus" value={startTransition.to} />
+            <SubmitButton className="w-full justify-center sm:w-auto">
+              {lifecycleIcon(startTransition.to)}
+              {startTransition.label}
+            </SubmitButton>
+          </form>
+        ) : null
+      }
+      ruleset={
+        outcomeRuleset
+          ? {
+              best_of: outcomeRuleset.best_of ?? null,
+              target_score: outcomeRuleset.target_score ?? null,
+              max_score: outcomeRuleset.max_score ?? null,
+              deuce_enabled: outcomeRuleset.deuce_enabled ?? null,
+            }
+          : null
+      }
+      priorSets={matchSets.slice(0, -1).map((set, index) => ({
+        setNumber: set.set_number,
+        a: set.participant_a_score ?? 0,
+        b: set.participant_b_score ?? 0,
+        winnerSide: outcomeSets[index].winner_side ?? null,
+      }))}
       canPublish={canPublishResult}
       returnTo={returnTo}
     />
   ) : (
     <div className="grid flex-1 place-items-center text-center">
       <div className="max-w-sm">
-        <p className="text-sm font-bold uppercase tracking-wide text-ink-soft">No set yet</p>
-        <h2 className="mt-2 text-3xl font-extrabold">Create the first set</h2>
-        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-          Live scoring needs one match set before point controls appear.
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-mist text-green">
+          <Plus className="h-6 w-6" aria-hidden="true" />
+        </span>
+        <h2 className="mt-4 text-2xl font-extrabold text-ink">Ready to score</h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+          {participantAName} vs {participantBName}. Add the first set to open the scoreboard.
         </p>
         <form action={addMatchSetAction} className="mt-5">
           <input type="hidden" name="matchNumber" value={match.match_number} />
@@ -225,27 +255,31 @@ export default async function LiveScorePage({
     </div>
   )
 
-  const matchFlowSection = (
+  const matchControlSection = (
     <section className="rounded-panel border border-line bg-paper p-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Match flow</p>
-      <div className="mt-3 grid gap-2">
-        {quickTransitions.length === 0 ? (
-          <p className="rounded-card border border-line bg-mist p-3 text-sm font-semibold text-ink-soft">
-            No quick lifecycle actions for this status.
-          </p>
-        ) : (
-          quickTransitions.map((transition) => (
+      <h2 className="text-sm font-extrabold text-ink">Match control</h2>
+      {quickTransitions.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-soft">
+          No match-flow actions while the match is {formatStatus(match.status).toLowerCase()}.
+        </p>
+      ) : (
+        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2">
+          {quickTransitions.map((transition) => (
             <form key={transition.to} action={transitionMatchStatusAction}>
               <input type="hidden" name="matchNumber" value={match.match_number} />
               <input type="hidden" name="targetStatus" value={transition.to} />
-              <SubmitButton className="w-full justify-center">
+              <SubmitButton
+                variant={transition.to === 'ongoing' ? 'primary' : 'secondary'}
+                size="sm"
+                className="w-full justify-center"
+              >
                 {lifecycleIcon(transition.to)}
                 {transition.label}
               </SubmitButton>
             </form>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 
@@ -256,21 +290,28 @@ export default async function LiveScorePage({
         ? participantBName
         : null
 
-  const publishSection = (
+  // Only shown once there's something to do with the result - before that, the scoreboard's own
+  // "Finish & publish" prompt covers the happy path and an empty placeholder card is just noise.
+  const showResultSection =
+    Boolean(publishTransition) || ['finished', 'result_published', 'under_review'].includes(match.status)
+
+  const resultSection = showResultSection ? (
     <section className="rounded-panel border border-line bg-paper p-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Finish result</p>
+      <h2 className="text-sm font-extrabold text-ink">Result</h2>
       {publishTransition ? (
         <form id="publish-result-form" action={transitionMatchStatusAction} className="mt-3 grid gap-3">
           <input type="hidden" name="matchNumber" value={match.match_number} />
           <input type="hidden" name="targetStatus" value={publishTransition.to} />
           <input type="hidden" name="returnTo" value={returnTo} />
           {derivedWinnerName ? (
-            <p className="text-sm font-bold text-ink">
-              Winner: {derivedWinnerName}{' '}
-              <span className="font-semibold text-ink-soft">(from the score)</span>
+            <p className="flex items-center gap-2 rounded-card bg-green/[0.06] px-3 py-2 text-sm font-bold text-ink">
+              <Trophy className="h-4 w-4 shrink-0 text-green" aria-hidden="true" />
+              <span className="min-w-0">
+                {derivedWinnerName} <span className="font-semibold text-ink-soft">wins (from the score)</span>
+              </span>
             </p>
           ) : (
-            <p className="rounded-card border border-gold/40 bg-mist px-3 py-2 text-sm font-semibold text-ink-soft">
+            <p className="rounded-card border border-gold/40 bg-gold/[0.06] px-3 py-2 text-sm font-semibold text-ink-soft">
               The score doesn&apos;t show a winner yet. Enter the deciding set, or set it under
               &ldquo;Correct manually&rdquo;.
             </p>
@@ -302,17 +343,14 @@ export default async function LiveScorePage({
           <ConfirmSubmitButton
             formId="publish-result-form"
             tone="default"
+            className="w-full justify-center"
             confirmMessage={`${getPublishResultConfirmMessage(stageType)} This also makes it visible on the public match page.`}
           >
             <Trophy className="h-4 w-4" aria-hidden="true" />
             Publish result
           </ConfirmSubmitButton>
         </form>
-      ) : (
-        <p className="mt-3 rounded-card border border-line bg-mist p-3 text-sm font-semibold text-ink-soft">
-          Finish the match before publishing the final result.
-        </p>
-      )}
+      ) : null}
       {/* MATCH-06: Send for Review / Mark Disputed only live on the full Match Details page, which
           the live-score kiosk otherwise doesn't point to prominently. */}
       {['finished', 'result_published', 'under_review'].includes(match.status) ? (
@@ -328,36 +366,177 @@ export default async function LiveScorePage({
         </p>
       ) : null}
     </section>
+  ) : null
+
+  const setsSection = (
+    <section className="rounded-panel border border-line bg-paper p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-extrabold text-ink">Sets</h2>
+        {matchOutcome.neededWins > 1 ? (
+          <span className="text-xs font-bold tabular-nums text-ink-soft">
+            {matchOutcome.setsWonA}–{matchOutcome.setsWonB} in sets
+          </span>
+        ) : null}
+      </div>
+      {/* The client score queue (useOfflineScoreSync.ts) refreshes this list once a burst of taps
+          has fully synced, so it tracks the big display within a few seconds rather than only on a
+          manual reload. */}
+      {matchSets.length > 0 ? (
+        <ol className="mt-3 divide-y divide-line overflow-hidden rounded-card border border-line">
+          {matchSets.map((set, index) => {
+            const winnerSide = setWinnerSide(outcomeRuleset, outcomeSets[index])
+            const isCurrent = index === matchSets.length - 1 && scoreable
+            return (
+              <li key={set.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <span className="flex items-center gap-2 font-bold text-ink">
+                  Set {set.set_number}
+                  {isCurrent ? (
+                    <span className="rounded-full bg-green/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-green">
+                      Live
+                    </span>
+                  ) : null}
+                </span>
+                <span className="flex items-center gap-2 font-bold tabular-nums text-ink">
+                  {set.participant_a_score ?? 0}–{set.participant_b_score ?? 0}
+                  <span
+                    className={cn('h-2 w-2 rounded-full', winnerSide ? sideDotClass[winnerSide] : 'bg-transparent')}
+                    aria-label={winnerSide ? `Won by ${winnerSide === 'a' ? participantAName : participantBName}` : undefined}
+                  />
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      ) : (
+        <p className="mt-2 text-sm text-ink-soft">No sets yet.</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <form action={addMatchSetAction} className="flex-1">
+          <input type="hidden" name="matchNumber" value={match.match_number} />
+          <input type="hidden" name="returnTo" value={returnTo} />
+          <SubmitButton variant="secondary" size="sm" className="w-full">
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Add Set {matchSets.length + 1}
+          </SubmitButton>
+        </form>
+        {matchSets.length > 0 && canDeleteSets ? (
+          <form id="delete-last-set-form" action={deleteMatchSetAction}>
+            <input type="hidden" name="matchNumber" value={match.match_number} />
+            <input type="hidden" name="matchSetId" value={String(matchSets[matchSets.length - 1].id)} />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <ConfirmSubmitButton
+              formId="delete-last-set-form"
+              tone="destructive"
+              variant="ghost"
+              size="sm"
+              className="text-danger"
+              confirmMessage={`Delete Set ${lastSetNumber}? Its scores will be removed.`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Delete Set {lastSetNumber}
+            </ConfirmSubmitButton>
+          </form>
+        ) : null}
+      </div>
+    </section>
+  )
+
+  const detailRows: Array<{ label: string; value: string }> = [
+    { label: 'Starts', value: formatDateTime(match.scheduled_start_at, timezone) },
+    {
+      label: 'Venue',
+      value: `${getRelationshipLabel(match.venue_id)} / ${getRelationshipLabel(match.court_id)}`,
+    },
+  ]
+  if (ruleset?.best_of) detailRows.push({ label: 'Best of', value: String(ruleset.best_of) })
+  if (ruleset?.target_score) {
+    detailRows.push({
+      label: 'Target',
+      value: `${ruleset.target_score}${ruleset.max_score ? ` (max ${ruleset.max_score})` : ''}`,
+    })
+  }
+  if (ruleset) detailRows.push({ label: 'Deuce', value: ruleset.deuce_enabled ? 'Win by 2' : 'Off' })
+  if (ruleset?.timer_enabled) {
+    detailRows.push({
+      label: 'Periods',
+      value: `${ruleset.period_count || '—'}${ruleset.period_duration ? ` × ${ruleset.period_duration}min` : ''}`,
+    })
+  }
+
+  // NOVICE_ADMIN_FLOW_UX_REDESIGN.md section 15.2: "aturan target/deuce/timer terlihat
+  // kontekstual" - venue, time and the category's rules in one glanceable card.
+  const detailsSection = (
+    <section className="rounded-panel border border-line bg-paper p-4">
+      <h2 className="text-sm font-extrabold text-ink">Details</h2>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+        {detailRows.map((row) => (
+          <div key={row.label} className={row.label === 'Venue' || row.label === 'Starts' ? 'col-span-2' : undefined}>
+            <dt className="text-[11px] font-bold uppercase tracking-wide text-ink-soft">{row.label}</dt>
+            <dd className="font-semibold text-ink">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+
+  const incidentSection = (
+    <details className="group rounded-panel border border-line bg-paper p-4" open={commentUpdated}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 select-none [&::-webkit-details-marker]:hidden">
+        <span className="text-sm font-extrabold text-ink">Incident note</span>
+        <ChevronDown className="h-4 w-4 text-ink-soft transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <p className="mt-2 text-xs text-ink-soft">
+        Logged internally for the event admin - not shown on the public match page. For photo
+        evidence, use Documentation on the full match details page.
+      </p>
+      {commentUpdated ? <p className="mt-2 text-xs font-bold text-green">Incident note logged.</p> : null}
+      <form action={addMatchCommentAction} className="mt-3 flex flex-col gap-2">
+        <input type="hidden" name="matchNumber" value={match.match_number} />
+        <input type="hidden" name="commentType" value="official_note" />
+        <input type="hidden" name="returnTo" value={returnTo} />
+        <Textarea name="body" required placeholder="What happened, and when." rows={3} />
+        <SubmitButton variant="secondary" size="sm">
+          Log incident note
+        </SubmitButton>
+      </form>
+    </details>
+  )
+
+  const scoreboardCard = (
+    <div className="flex min-h-[calc(100svh-140px)] flex-col rounded-panel border border-line bg-paper p-3 shadow-sm sm:p-5">
+      {banners}
+      {scoreArea}
+    </div>
   )
 
   if (kioskMode) {
     return (
-      <main className="flex min-h-svh flex-col bg-paper">
+      <main className="flex min-h-svh flex-col bg-mist">
         <KioskWakeLock />
-        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <header className="flex items-center justify-between gap-3 border-b border-line bg-paper px-4 py-3">
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-extrabold text-ink">{match.match_number}</h1>
-            <p className="text-sm font-semibold text-ink-soft">{participantAName} vs {participantBName}</p>
+            <h1 className="truncate text-lg font-extrabold text-ink sm:text-xl">
+              {participantAName} <span className="font-semibold text-ink-soft">vs</span> {participantBName}
+            </h1>
+            <p className="text-xs font-semibold text-ink-soft">{match.match_number}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
             <Button asChild variant="secondary" size="sm">
-              <Link href={returnTo}>
+              <Link href={returnTo} aria-label="Exit kiosk mode">
                 <Minimize className="h-3.5 w-3.5" aria-hidden="true" />
-                Exit kiosk mode
+                <span className="hidden sm:inline">Exit kiosk</span>
               </Link>
             </Button>
           </div>
         </header>
 
-        <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="flex min-h-[calc(100svh-170px)] flex-col rounded-panel border border-line bg-paper p-4 shadow-sm">
-            {banners}
-            {scoreArea}
-          </div>
+        <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {scoreboardCard}
           <aside className="grid content-start gap-4">
-            {matchFlowSection}
-            {publishSection}
+            {matchControlSection}
+            {resultSection}
+            {setsSection}
           </aside>
         </section>
       </main>
@@ -365,12 +544,24 @@ export default async function LiveScorePage({
   }
 
   return (
-    <main className="flex min-h-svh flex-col">
+    <main className="flex min-h-svh flex-col bg-mist">
       <FocusHeader
+        maxWidthClassName="max-w-6xl"
         backHref={`/workspaces/matches/${match.match_number}`}
         backLabel="Match details"
-        title={match.match_number}
-        subtitle={`${getRelationshipLabel(match.sport_id)} / ${getRelationshipLabel(match.category_id)} / ${match.round_name || 'Match'}`}
+        title={
+          <>
+            {participantAName} <span className="font-semibold text-ink-soft">vs</span> {participantBName}
+          </>
+        }
+        subtitle={[
+          match.match_number,
+          getRelationshipLabel(match.sport_id),
+          getRelationshipLabel(match.category_id),
+          match.round_name,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
         right={
           <>
             <StatusBadge tone={getMatchStatusTone(match.status)}>{formatStatus(match.status)}</StatusBadge>
@@ -380,147 +571,21 @@ export default async function LiveScorePage({
                 Kiosk mode
               </Link>
             </Button>
-            <Button asChild variant="secondary" size="sm">
+            <Button asChild variant="ghost" size="sm">
               <Link href="/workspaces/match-officer">Officer list</Link>
             </Button>
           </>
         }
       />
 
-      <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="flex min-h-[calc(100svh-170px)] flex-col rounded-panel border border-line bg-paper p-4 shadow-sm">
-          {banners}
-          {scoreArea}
-        </div>
-
+      <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {scoreboardCard}
         <aside className="grid content-start gap-4">
-          {matchFlowSection}
-
-          <section className="rounded-panel border border-line bg-paper p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Sets</p>
-            {/* The client score queue (useOfflineScoreSync.ts) refreshes this list once a burst of
-                taps has fully synced, so it tracks the big display within a few seconds rather than
-                only on a manual reload. */}
-            <div className="mt-3 grid gap-2">
-              {matchSets.map((set) => (
-                <div
-                  key={set.id}
-                  className="rounded-card border border-line bg-mist px-3 py-2 text-sm font-bold"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Set {set.set_number}</span>
-                    <span className="tabular-nums">
-                      {set.participant_a_score ?? 0}-{set.participant_b_score ?? 0}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              <form action={addMatchSetAction}>
-                <input type="hidden" name="matchNumber" value={match.match_number} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-                <SubmitButton variant="secondary" className="w-full">
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Add Set {matchSets.length + 1}
-                </SubmitButton>
-              </form>
-              {matchSets.length > 0 && canDeleteSets ? (
-                <form id="delete-last-set-form" action={deleteMatchSetAction}>
-                  <input type="hidden" name="matchNumber" value={match.match_number} />
-                  <input
-                    type="hidden"
-                    name="matchSetId"
-                    value={String(matchSets[matchSets.length - 1].id)}
-                  />
-                  <input type="hidden" name="returnTo" value={returnTo} />
-                  <ConfirmSubmitButton
-                    formId="delete-last-set-form"
-                    tone="destructive"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-danger"
-                    confirmMessage={`Delete Set ${lastSetNumber}? Its scores will be removed.`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Delete Set {lastSetNumber}
-                  </ConfirmSubmitButton>
-                </form>
-              ) : null}
-            </div>
-          </section>
-
-          {publishSection}
-
-          <section className="rounded-panel border border-line bg-paper p-4 text-sm text-ink-soft">
-            <p className="font-bold text-ink">Match context</p>
-            <dl className="mt-3 grid gap-2">
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide">Starts</dt>
-                <dd className="font-semibold text-ink">{formatDateTime(match.scheduled_start_at, timezone)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold uppercase tracking-wide">Venue</dt>
-                <dd className="font-semibold text-ink">
-                  {getRelationshipLabel(match.venue_id)} / {getRelationshipLabel(match.court_id)}
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          {ruleset ? (
-            <section className="rounded-panel border border-line bg-paper p-4 text-sm text-ink-soft">
-              <p className="font-bold text-ink">Rules</p>
-              <dl className="mt-3 grid grid-cols-2 gap-2">
-                {ruleset.best_of ? (
-                  <div>
-                    <dt className="text-xs font-bold uppercase tracking-wide">Best of</dt>
-                    <dd className="font-semibold text-ink">{ruleset.best_of}</dd>
-                  </div>
-                ) : null}
-                {ruleset.target_score ? (
-                  <div>
-                    <dt className="text-xs font-bold uppercase tracking-wide">Target</dt>
-                    <dd className="font-semibold text-ink">
-                      {ruleset.target_score}
-                      {ruleset.max_score ? ` (max ${ruleset.max_score})` : ''}
-                    </dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt className="text-xs font-bold uppercase tracking-wide">Deuce</dt>
-                  <dd className="font-semibold text-ink">{ruleset.deuce_enabled ? 'Enabled' : 'Off'}</dd>
-                </div>
-                {ruleset.timer_enabled ? (
-                  <div>
-                    <dt className="text-xs font-bold uppercase tracking-wide">Periods</dt>
-                    <dd className="font-semibold text-ink">
-                      {ruleset.period_count || '—'}
-                      {ruleset.period_duration ? ` × ${ruleset.period_duration}min` : ''}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            </section>
-          ) : null}
-
-          <section className="rounded-panel border border-line bg-paper p-4">
-            <p className="text-sm font-bold text-ink">Incident note</p>
-            <p className="mt-1 text-xs text-ink-soft">
-              Logged internally for the event admin - not shown on the public match page. For
-              photo evidence, use Documentation on the full match details page.
-            </p>
-            {commentUpdated ? (
-              <p className="mt-2 text-xs font-bold text-green">Incident note logged.</p>
-            ) : null}
-            <form action={addMatchCommentAction} className="mt-3 flex flex-col gap-2">
-              <input type="hidden" name="matchNumber" value={match.match_number} />
-              <input type="hidden" name="commentType" value="official_note" />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <Textarea name="body" required placeholder="What happened, and when." rows={3} />
-              <SubmitButton variant="secondary" size="sm">
-                Log incident note
-              </SubmitButton>
-            </form>
-          </section>
+          {matchControlSection}
+          {resultSection}
+          {setsSection}
+          {detailsSection}
+          {incidentSection}
         </aside>
       </section>
     </main>
