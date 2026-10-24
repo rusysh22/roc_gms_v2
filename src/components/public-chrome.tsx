@@ -62,6 +62,7 @@ const buildNavItems = (eventSlug: string | null): NavItem[] => {
       { label: 'Home', href: '/' },
       { label: 'Features', href: '/#features' },
       { label: 'How it works', href: '/#how-it-works' },
+      { label: 'Pricing', href: '/pricing' },
       // The user/organizer handbook - a separate Starlight site at its own subdomain.
       { label: 'Docs', href: 'https://docs.intourney.id' },
     ]
